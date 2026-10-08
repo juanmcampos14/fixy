@@ -66,6 +66,6 @@ export async function requirePlatformAdmin(): Promise<Actor> {
 export async function requireProviderMembership(providerId?: string) {
   const a = await requireActor("/proveedor");
   const m = providerId ? a.providers.find((p) => p.id === providerId) : a.providers[0];
-  if (!m) redirect("/ofrece-tus-servicios");
+  if (!m) redirect("/sumate");
   return { actor: a, membership: m };
 }

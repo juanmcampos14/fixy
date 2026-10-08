@@ -246,14 +246,14 @@ export async function getEarnings(userId: string, providerId: string) {
     const rows = await tx<{
       job_id: string; code: string; title: string; job_status: string; charged_gross: number; charged_fee: number; refunded: number; any_test: boolean;
       payout_id: string | null; payout_status: string | null; gross_minor: number | null; fee_minor: number | null; adjustments_minor: number | null;
-      amount_minor: number | null; on_hold: boolean | null; hold_reason: string | null; paid_at: Date | null; payout_test: boolean | null;
+      amount_minor: number | null; on_hold: boolean | null; hold_reason: string | null; paid_at: Date | null; payout_test: boolean | null; awaiting_review: boolean | null;
     }[]>`
       select j.id as job_id, j.code, r.title, j.status as job_status,
         coalesce((select sum(c.provider_net_minor + c.provider_fee_minor) from charges c where c.job_id = j.id and c.status in ('approved','partially_refunded','refunded')), 0)::bigint as charged_gross,
         coalesce((select sum(c.provider_fee_minor) from charges c where c.job_id = j.id and c.status in ('approved','partially_refunded','refunded')), 0)::bigint as charged_fee,
         coalesce((select sum(c.refunded_minor) from charges c where c.job_id = j.id), 0)::bigint as refunded,
         coalesce((select bool_or(c.is_test) from charges c where c.job_id = j.id), false) as any_test,
-        p.id as payout_id, p.status as payout_status, p.gross_minor, p.fee_minor, p.adjustments_minor, p.amount_minor, p.on_hold, p.hold_reason, p.paid_at, p.is_test as payout_test
+        p.id as payout_id, p.status as payout_status, p.gross_minor, p.fee_minor, p.adjustments_minor, p.amount_minor, p.on_hold, p.hold_reason, p.paid_at, p.is_test as payout_test, p.awaiting_review
       from jobs j join service_requests r on r.id = j.request_id left join payouts p on p.job_id = j.id
       where j.provider_id = ${providerId}
         and (p.id is not null or exists (select 1 from charges c where c.job_id = j.id and c.status in ('approved','partially_refunded','refunded')))
@@ -264,12 +264,12 @@ export async function getEarnings(userId: string, providerId: string) {
 
 // ───────────────────────── Reseñas ─────────────────────────
 
+/** Reseñas publicadas del proveedor: sin cliente, sin trabajo y sin fecha exacta (solo el mes). */
 export async function listReviews(userId: string, providerId: string) {
   return asUser(userId, (tx) =>
-    tx<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; created_at: Date; code: string; job_id: string; client_name: string | null }[]>`
-      select rv.id, rv.rating, rv.comment, rv.provider_reply, rv.is_demo, rv.created_at, j.code, j.id as job_id, u.full_name as client_name
-      from reviews rv join jobs j on j.id = rv.job_id left join user_names u on u.id = rv.client_user_id
-      where rv.provider_id = ${providerId} order by rv.created_at desc`,
+    tx<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; published_month: string }[]>`
+      select id, rating, comment, provider_reply, is_demo, published_month
+      from reviews_published where provider_id = ${providerId} order by published_month desc, sort_key`,
   );
 }
 
@@ -312,15 +312,14 @@ export async function getPublicProfile(slug: string) {
     db<{ name: string; expires_on: string | null }[]>`
       select ct.name, cp.expires_on from provider_credentials_public cp join credential_types ct on ct.id = cp.credential_type_id
       where cp.provider_id = ${p.id} order by ct.name`,
-    db<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; created_at: Date }[]>`
-      select rv.id, rv.rating, rv.comment, rv.provider_reply, rv.is_demo, rv.created_at
-      from reviews rv join jobs j on j.id = rv.job_id
-      where rv.provider_id = ${p.id} and rv.hidden_at is null and j.status = 'completed'
-      order by rv.created_at desc limit 30`,
+    db<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; published_month: string }[]>`
+      select id, rating, comment, provider_reply, is_demo, published_month
+      from reviews_published where provider_id = ${p.id}
+      order by published_month desc, sort_key limit 30`,
   ]);
   const [{ avg, n }] = await db<{ avg: string | null; n: number }[]>`
-    select round(avg(rv.rating)::numeric, 1)::text as avg, count(*)::int as n
-    from reviews rv join jobs j on j.id = rv.job_id where rv.provider_id = ${p.id} and rv.hidden_at is null and j.status = 'completed'`;
+    select round(avg(rating)::numeric, 1)::text as avg, count(*)::int as n
+    from reviews_published where provider_id = ${p.id}`;
   return {
     provider: p, categories, zones, credentials, reviews,
     portfolio: portfolio.map((x) => ({ id: x.id, caption: x.caption, url: publicFileUrl(x.file_id) })),

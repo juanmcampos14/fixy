@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/empty";
 import { ConfirmAction } from "@/components/ui/form";
 import { DataTable, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import { executePayoutAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction } from "../actions";
+import { executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction } from "../actions";
 
 export const metadata = { title: "Finanzas" };
 
@@ -132,9 +132,11 @@ async function Payouts({ userId }: { userId: string }) {
                     <div className="flex flex-wrap gap-1">
                       <StatusBadge status={p.status} labels={payoutStatusLabel} />
                       {p.on_hold && <Badge tone="danger">Retenida</Badge>}
+                      {p.awaiting_review && open && <Badge tone="warn">Esperando reseña</Badge>}
                       {p.is_test && <TestModeBadge />}
                     </div>
                     {p.hold_reason && <div className="mt-1 text-xs text-muted">{p.hold_reason}</div>}
+                    {p.review_override_reason && <div className="mt-1 text-xs text-muted">Liberada sin reseña: {p.review_override_reason}</div>}
                     {p.paid_at && <div className="mt-1 text-xs text-muted">Pagada {formatDateTime(p.paid_at)}</div>}
                     {p.scheduled_for && !p.paid_at && <div className="mt-1 text-xs text-muted">Programada {formatDate(p.scheduled_for)}</div>}
                   </Td>
@@ -145,7 +147,20 @@ async function Payouts({ userId }: { userId: string }) {
                   <Td>
                     {open ? (
                       <div className="flex flex-wrap gap-2">
-                        {!p.on_hold && (
+                        {p.awaiting_review && (
+                          <ConfirmAction
+                            action={releaseWithoutReviewAction}
+                            label="Liberar sin reseña"
+                            size="sm"
+                            variant="secondary"
+                            title={`Excepción: liberar sin reseña · ${p.job_code}`}
+                            description="Regla: sin reseña del cliente no se libera la liquidación. Usá esta excepción solo en casos justificados (por ejemplo, cliente que no responde tras los recordatorios). Queda auditada. Solo administradores."
+                            confirmLabel="Liberar sin reseña"
+                            hidden={{ payoutId: p.id }}
+                            requireReason
+                          />
+                        )}
+                        {!p.on_hold && !p.awaiting_review && (
                           <ConfirmAction
                             action={executePayoutAction}
                             label="Ejecutar (simulada)"

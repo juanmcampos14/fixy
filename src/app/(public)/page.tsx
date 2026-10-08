@@ -137,7 +137,7 @@ export default async function Landing() {
           <Building2 className="h-8 w-8 text-fixy-200" aria-hidden />
           <h2 className="mt-4 text-2xl font-extrabold text-white">Oficinas y empresas</h2>
           <p className="mt-2 text-white/80">Organizá sedes y equipo, asigná responsables, consultá gastos por sede, período, proveedor y categoría, y exportá a CSV.</p>
-          <ButtonLink href="/registro?tipo=organizacion" className="mt-6 bg-white text-ink hover:bg-cream">Crear cuenta para mi organización</ButtonLink>
+          <ButtonLink href="/registro?tipo=organizacion" variant="secondary" className="mt-6">Crear cuenta para mi organización</ButtonLink>
         </article>
       </section>
 
@@ -147,7 +147,7 @@ export default async function Landing() {
           <div>
             <h2 id="pro-title" className="text-2xl font-extrabold sm:text-4xl">Tu oficio, más oportunidades.</h2>
             <p className="mt-3 max-w-xl text-ink-2">Profesionales independientes y empresas de servicios pueden registrarse, cargar su perfil y documentación, y recibir solicitudes de su zona con condiciones claras.</p>
-            <ButtonLink href="/ofrece-tus-servicios" size="lg" className="mt-6">Ofrecé tus servicios <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>
+            <ButtonLink href="/sumate" size="lg" className="mt-6">Ofrecé tus servicios <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>
           </div>
           <Mascot pose="celebrate" className="mx-auto hidden h-52 w-auto md:block" />
         </div>

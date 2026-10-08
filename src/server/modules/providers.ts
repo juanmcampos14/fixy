@@ -46,19 +46,20 @@ function slugify(s: string) {
 }
 
 /** Paso 1-3 del alta: crea el proveedor con el usuario como administrador. */
-export async function createProvider(actor: Actor, input: ProviderProfileInput) {
+export async function createProvider(actor: Actor, input: ProviderProfileInput, origin: { source?: string | null; referrerSlug?: string | null } = {}) {
   const data = providerProfileSchema.parse(input);
   return systemTx(async (tx) => {
     const [existing] = await tx<{ provider_id: string }[]>`
       select provider_id from provider_members where user_id = ${actor.id} and role = 'admin' limit 1`;
     if (existing) return existing.provider_id; // un alta por usuario en el MVP
     const slug = `${slugify(data.displayName)}-${randomUUID().slice(0, 4)}`;
+    const [referrer] = origin.referrerSlug ? await tx<{ id: string }[]>`select id from providers where slug = ${origin.referrerSlug} and status = 'approved'` : [];
     const [p] = await tx<{ id: string }[]>`
       insert into providers (kind, slug, display_name, legal_name, tax_id, responsible_name, contact_email, contact_phone,
-        description, years_experience, billing_info, created_by)
+        description, years_experience, billing_info, created_by, signup_source, referred_by_provider_id)
       values (${data.kind}, ${slug}, ${data.displayName}, ${data.legalName || null}, ${data.taxId?.replace(/-/g, "") || null},
         ${data.responsibleName}, ${data.contactEmail}, ${data.contactPhone}, ${data.description},
-        ${data.yearsExperience ?? null}, ${data.billingInfo || null}, ${actor.id})
+        ${data.yearsExperience ?? null}, ${data.billingInfo || null}, ${actor.id}, ${origin.source?.slice(0, 120) || null}, ${referrer?.id ?? null})
       returning id`;
     await tx`insert into provider_members (provider_id, user_id, role) values (${p.id}, ${actor.id}, 'admin')`;
     await recordEvent(tx, { entityType: "provider", entityId: p.id, action: "created", to: "pending", actorId: actor.id });

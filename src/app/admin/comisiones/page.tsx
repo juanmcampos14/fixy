@@ -9,7 +9,7 @@ import { ActionForm, ConfirmAction, SubmitButton } from "@/components/ui/form";
 import { Field, Input, Select } from "@/components/ui/field";
 import { DataTable, Section, Td, Th } from "@/components/admin/ui";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { removeCategoryRuleAction, replaceCommissionAction, updateSettingsAction } from "../actions";
+import { removeCategoryRuleAction, replaceCommissionAction, updateReviewSettingsAction, updateSettingsAction } from "../actions";
 
 export const metadata = { title: "Comisiones" };
 
@@ -26,6 +26,10 @@ export default async function CommissionsAdmin() {
   const setting = (k: string) => settings.find((s) => s.key === k);
   const inviteLimit = Number(setting("matching.invite_limit")?.value ?? 4);
   const validDays = Number(setting("quotes.default_valid_days")?.value ?? 7);
+  const listOf = (k: string, fb: number[]) => { const v = setting(k)?.value; return (Array.isArray(v) ? v : fb).join(", "); };
+  const reviewDelays = listOf("reviews.publish_delay_hours", [48, 72, 168]);
+  const reviewJitter = Number(setting("reviews.publish_jitter_hours")?.value ?? 12);
+  const reminderDays = listOf("reviews.reminder_days", [1, 3, 7]);
   const example = def ? computeBreakdown({ laborMinor: 10_000_000, materialsMinor: 0, visitMinor: 0 }, { providerRateBps: def.provider_rate_bps, clientRateBps: def.client_rate_bps, clientFeeTaxBps: def.client_fee_tax_bps }) : null;
 
   return (
@@ -130,6 +134,29 @@ export default async function CommissionsAdmin() {
           <ul className="mt-4 space-y-1 text-xs text-muted">
             {settings.map((s) => <li key={s.key}><code>{s.key}</code> · actualizado {formatDateTime(s.updated_at)}{s.updated_by_name && ` por ${s.updated_by_name}`}</li>)}
           </ul>
+        </Section>
+
+        <Section title="Reseñas: publicación anónima y diferida" description="Sin reseña del cliente no se libera la liquidación. Cada reseña se publica tras un plazo elegido al azar entre los que definas, más una variación aleatoria, para que el profesional no pueda saber qué cliente la dejó. Podés cambiar la regla cuando quieras: aplica a las reseñas nuevas.">
+          <ActionForm action={updateReviewSettingsAction}>
+            <fieldset disabled={!canEdit} className="grid gap-4 sm:grid-cols-3">
+              <legend className="sr-only">Regla de reseñas</legend>
+              <Field label="Plazos posibles (horas)" htmlFor="rv-delays" required hint="Separados por coma. Ej.: 48, 72, 168 (2 días, 3 días, 1 semana).">
+                <Input id="rv-delays" name="delays" required defaultValue={reviewDelays} />
+              </Field>
+              <Field label="Variación aleatoria (horas)" htmlFor="rv-jitter" required hint="Se suma al azar entre 0 y este valor.">
+                <Input id="rv-jitter" name="jitterHours" type="number" min={0} max={72} required defaultValue={reviewJitter} />
+              </Field>
+              <Field label="Recordatorios al cliente (días)" htmlFor="rv-rem" required hint="Días después de completado. Ej.: 1, 3, 7.">
+                <Input id="rv-rem" name="reminderDays" required defaultValue={reminderDays} />
+              </Field>
+              {canEdit && (
+                <>
+                  <Field label="Motivo del cambio" htmlFor="rv-reason" required className="sm:col-span-3"><Input id="rv-reason" name="reason" required minLength={5} maxLength={500} /></Field>
+                  <div className="sm:col-span-3"><SubmitButton variant="secondary">Guardar regla de reseñas</SubmitButton></div>
+                </>
+              )}
+            </fieldset>
+          </ActionForm>
         </Section>
 
         <Section title="Historial de reglas" description="Reglas reemplazadas (las más recientes primero).">

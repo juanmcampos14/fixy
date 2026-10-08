@@ -86,6 +86,14 @@ Resoluciones: sin acción, reembolso parcial/total (vinculado a los cobros origi
 | rejected | pending | proveedor (corrige y reenvía) |
 Estados separados: `identity_status` (unverified/pending/verified/rejected), credenciales por documento (`provider_documents.status` + `expires_on`), `payouts_status` (not_started/pending/enabled/disabled). Para recibir oportunidades: aprobado + identidad verificada + cobros habilitados + credenciales requeridas vigentes + acepta trabajos + disponibilidad declarada + categoría y zona.
 
+## Reseñas (regla central)
+- **Sin reseña del cliente no se libera la liquidación** (`payouts.awaiting_review`). Excepción: solo un administrador, con motivo, auditada (`releasePayoutWithoutReview`).
+- El cliente confirma y califica en un mismo paso; si confirma sin calificar (operación), recibe recordatorios (`reviews.reminder_days`, por defecto 1, 3 y 7 días).
+- **Publicación anónima y diferida**: cada reseña se publica tras un plazo elegido al azar entre `reviews.publish_delay_hours` (por defecto 48, 72 o 168 h) + una variación aleatoria de hasta `reviews.publish_jitter_hours` (12 h). La regla se cambia desde `/admin/comisiones` y aplica a las reseñas nuevas.
+- El proveedor y el público solo leen `reviews_published` (sin trabajo, sin cliente, solo el mes de publicación, orden no cronológico dentro del mes). La tabla `reviews` solo la ven el propio cliente y operación (RLS).
+- Aviso agrupado al proveedor cuando se publican reseñas (cron), nunca al momento de recibirlas.
+- Límite conocido: un proveedor con muy pocos trabajos en un período podría inferir el autor por descarte; la demora variable y la liquidación en ciclos reducen ese riesgo.
+
 ## Reglas transversales
 - Aceptar presupuesto es atómico; doble clic/concurrencia → una sola orden.
 - Un cobro aprobado no significa trabajo completado; un trabajo completado no significa liquidación realizada.

@@ -20,7 +20,7 @@ export function PublicFooter() {
         <div>
           <h2 className="text-sm font-bold text-white">Profesionales</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            <li><Link className="hover:underline" href="/ofrece-tus-servicios">Ofrecé tus servicios</Link></li>
+            <li><Link className="hover:underline" href="/sumate">Ofrecé tus servicios</Link></li>
             <li><Link className="hover:underline" href="/proveedor">Panel de proveedores</Link></li>
           </ul>
         </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { listReviews, requireProviderContext } from "@/server/queries/provider";
-import { formatDate } from "@/lib/format";
+import { formatMonth } from "@/lib/format";
+import { Alert } from "@/components/ui/alert";
 import { Card, PageHeader, Stat } from "@/components/ui/card";
 import { DemoBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
@@ -19,6 +19,9 @@ export default async function ReviewsPage() {
   return (
     <>
       <PageHeader title="Reseñas" description="Lo que dicen los clientes de trabajos completados. Podés responder una vez a cada reseña; tu respuesta es pública." />
+      <Alert tone="info" className="mb-6" title="Reseñas anónimas y con publicación diferida">
+        Para que cada cliente pueda opinar con libertad, las reseñas se publican días después de recibirse (el plazo varía) y no indican qué cliente ni qué trabajo las dejó. Solo ves el mes de publicación.
+      </Alert>
       {reviews.length === 0 ? (
         <EmptyState pose="empathy" title="Todavía no tenés reseñas" description="Los clientes pueden calificarte cuando dan conformidad a un trabajo." />
       ) : (
@@ -34,11 +37,10 @@ export default async function ReviewsPage() {
                   <Stars rating={r.rating} />
                   <span className="flex items-center gap-2 text-sm text-muted">
                     {r.is_demo && <DemoBadge />}
-                    <Link href={`/proveedor/trabajos/${r.job_id}`} className="underline">{r.code}</Link> · {formatDate(r.created_at)}
+                    Publicada en {formatMonth(r.published_month)}
                   </span>
                 </div>
                 <p className="mt-2 text-[15px]">{r.comment || <span className="text-muted">Sin comentario.</span>}</p>
-                <p className="mt-1 text-sm text-muted">{r.client_name ?? "Cliente"}</p>
                 {r.provider_reply ? (
                   <div className="mt-3 rounded-2xl bg-cream/70 p-3 text-[15px] ring-1 ring-line">
                     <p className="text-xs font-semibold text-fixy-800">Tu respuesta</p>

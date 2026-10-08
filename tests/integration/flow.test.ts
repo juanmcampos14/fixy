@@ -113,15 +113,19 @@ describe("recorrido principal de punta a punta", () => {
     expect(payout.status).toBe("pending"); // completado no implica liquidado
     expect(payout.amount_minor).toBe(16_200_000);
 
-    // 8. Liquidación simulada (solo operación)
+    // 8. Sin reseña no se libera la liquidación
+    await expect(executePayout(operador, payout.id, "Liquidación de prueba")).rejects.toThrow(/reseña/);
+
+    // 9. Cliente califica (una sola vez): se publica después, de forma anónima
+    await disputes.createReview(cliente, accepted.jobId, { rating: 5, comment: "Excelente" });
+    await expect(disputes.createReview(cliente, accepted.jobId, { rating: 4, comment: "otra" })).rejects.toThrow(/Ya calificaste/);
+    expect(await asUser(uid, (tx) => tx`select id from reviews_published where provider_id = ${pid}`)).toHaveLength(0);
+
+    // 10. Liquidación simulada (solo operación)
     await expect(executePayout(cliente, payout.id, "x")).rejects.toThrow(/permiso/);
     await executePayout(operador, payout.id, "Liquidación de prueba");
     const [p2] = await sql()<{ status: string }[]>`select status from payouts where id = ${payout.id}`;
     expect(p2.status).toBe("paid");
-
-    // 9. Cliente califica (una sola vez)
-    await disputes.createReview(cliente, accepted.jobId, { rating: 5, comment: "Excelente" });
-    await expect(disputes.createReview(cliente, accepted.jobId, { rating: 4, comment: "otra" })).rejects.toThrow(/Ya calificaste/);
 
     // Historial de la propiedad e invariantes financieras
     const history = await asUser(cliente.id, (tx) => tx`select id from jobs where property_id = ${propId}`);

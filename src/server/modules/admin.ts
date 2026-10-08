@@ -311,3 +311,41 @@ export async function updatePlatformSettings(actor: Actor, input: z.input<typeof
     });
   });
 }
+
+// ───────────────────────── Regla de publicación de reseñas ─────────────────────────
+
+const hoursList = z
+  .string()
+  .transform((s) => s.split(/[,;\s]+/).filter(Boolean).map(Number))
+  .refine((a) => a.length >= 1 && a.length <= 10 && a.every((n) => Number.isInteger(n) && n >= 24 && n <= 24 * 30), "Indicá entre 1 y 10 plazos en horas, cada uno entre 24 y 720.");
+
+export const reviewSettingsSchema = z.object({
+  delays: hoursList,
+  jitterHours: z.coerce.number().int().min(0).max(72),
+  reminderDays: z
+    .string()
+    .transform((s) => s.split(/[,;\s]+/).filter(Boolean).map(Number))
+    .refine((a) => a.length >= 1 && a.length <= 6 && a.every((n) => Number.isInteger(n) && n >= 0 && n <= 60), "Indicá entre 1 y 6 días de recordatorio (0 a 60)."),
+});
+
+/**
+ * Cada reseña se publica tras un plazo elegido al azar entre `delays` + una variación aleatoria de hasta `jitterHours`.
+ * Cambiar la regla no afecta reseñas ya programadas.
+ */
+export async function updateReviewSettings(actor: Actor, input: z.input<typeof reviewSettingsSchema>, reason: string) {
+  assertAdmin(actor);
+  const why = cleanReason(reason);
+  const d = reviewSettingsSchema.parse(input);
+  return systemTx(async (tx) => {
+    const values: Record<string, unknown> = {
+      "reviews.publish_delay_hours": d.delays,
+      "reviews.publish_jitter_hours": d.jitterHours,
+      "reviews.reminder_days": [...new Set(d.reminderDays)].sort((a, b) => a - b),
+    };
+    for (const [key, value] of Object.entries(values)) {
+      await tx`insert into platform_settings (key, value, updated_by, updated_at) values (${key}, ${tx.json(value as never)}, ${actor.id}, now())
+        on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now()`;
+    }
+    await audit(tx, actor, "settings.reviews_update", "platform_settings", null, why, values);
+  });
+}

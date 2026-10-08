@@ -48,6 +48,12 @@ Apps nativas, suscripciones y mantenimiento recurrente, aprobaciones empresarial
 ## Recorrido principal (verificado por prueba automatizada)
 Profesional se registra → operador lo aprueba → cliente describe un problema → el matching invita al proveedor → cotiza → cliente acepta y paga (modo de prueba) → proveedor ejecuta y registra evidencias → cliente confirma → liquidación simulada → cliente califica. Ver `tests/integration/flow.test.ts`.
 
+## Asistente de pedidos
+Reglas locales (palabras clave + detección de riesgos) y, en producción, **Claude** (`ASSISTANT_PROVIDER=claude`, modelo `claude-opus-5-5`) para sugerir oficio, título y urgencia. La orientación de seguridad siempre la deciden las reglas; ante falla o demora > 8 s se usan las reglas. No se envían emails ni teléfonos.
+
+## Captación de profesionales
+Landing `/sumate` y variantes por oficio (`/sumate/electricistas`, `/sumate/gasistas`, …) con imagen para compartir, botón de WhatsApp y registro del origen del alta (`providers.signup_source`, `referred_by_provider_id` cuando un profesional aprobado comparte su enlace).
+
 ## Principios de confianza
 - No se muestran verificaciones sin proceso real: solo "Identidad verificada" (documento aprobado por operación) y "<credencial> vigente" (documento aprobado y no vencido).
 - No se inventan testimonios, cifras, disponibilidad 24/7, tiempos de llegada ni garantías. Perfiles, reseñas y pagos de demostración están marcados.

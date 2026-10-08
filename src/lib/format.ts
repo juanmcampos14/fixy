@@ -55,3 +55,11 @@ export function todayInBuenosAires(): string {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   return parts; // YYYY-MM-DD
 }
+
+const monthFmt = new Intl.DateTimeFormat("es-AR", { timeZone: "UTC", month: "long", year: "numeric" });
+/** "octubre de 2026" (para fechas aproximadas, ej. publicación de reseñas). */
+export function formatMonth(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(`${d.slice(0, 10)}T12:00:00Z`) : d;
+  return monthFmt.format(date);
+}

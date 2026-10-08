@@ -50,6 +50,19 @@ export async function approveJobAction(_: ActionState, f: FormData): Promise<Act
   });
 }
 
+/** Conformidad + reseña en un solo paso (la reseña es obligatoria para liberar el pago al profesional). */
+export async function approveAndReviewAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const rating = Number(str(f, "rating"));
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return { error: "Elegí una calificación de 1 a 5 estrellas.", fieldErrors: { rating: ["Elegí una calificación."] } };
+    await jobs.approveJob(actor, str(f, "jobId"));
+    await disputes.createReview(actor, str(f, "jobId"), { rating, comment: str(f, "comment") });
+    revalidatePath(jobPath(f));
+    return { ok: true, message: "¡Gracias! Confirmaste el trabajo y tu reseña quedó registrada." };
+  });
+}
+
 export async function cancelJobAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     await jobs.cancelJob(await requireActor(), str(f, "jobId"), str(f, "reason"));

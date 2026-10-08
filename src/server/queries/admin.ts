@@ -419,9 +419,10 @@ export async function listPayouts(userId: string) {
   return asUser(userId, (tx) => tx<{
     id: string; job_id: string; job_code: string; job_status: string; provider_id: string; provider_name: string; payouts_status: string; status: string; on_hold: boolean;
     hold_reason: string | null; gross_minor: number; fee_minor: number; adjustments_minor: number; amount_minor: number; is_test: boolean; gateway: string;
-    scheduled_for: string | null; paid_at: Date | null; created_at: Date; external_ref: string | null;
+    scheduled_for: string | null; paid_at: Date | null; created_at: Date; external_ref: string | null; awaiting_review: boolean; review_override_reason: string | null;
   }[]>`
     select po.id, po.job_id, j.code as job_code, j.status as job_status, po.provider_id, p.display_name as provider_name, p.payouts_status, po.status, po.on_hold,
+      po.awaiting_review, po.review_override_reason,
       po.hold_reason, po.gross_minor, po.fee_minor, po.adjustments_minor, po.amount_minor, po.is_test, po.gateway, po.scheduled_for, po.paid_at, po.created_at, po.external_ref
     from payouts po join jobs j on j.id = po.job_id join providers p on p.id = po.provider_id
     order by case when po.status in ('pending','scheduled','failed') then 0 else 1 end, po.created_at desc limit 200`);

@@ -400,11 +400,12 @@ export async function createPayoutForJob(tx: Tx, jobId: string) {
   }
   const [{ open }] = await tx<{ open: boolean }[]>`
     select exists (select 1 from disputes where job_id = ${jobId} and status in ('open','in_review','awaiting_response')) as open`;
+  const [{ reviewed }] = await tx<{ reviewed: boolean }[]>`select exists (select 1 from reviews where job_id = ${jobId}) as reviewed`;
   const gw = activeGateway();
   const [p] = await tx<{ id: string }[]>`
-    insert into payouts (provider_id, job_id, gateway, is_test, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason)
+    insert into payouts (provider_id, job_id, gateway, is_test, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason, awaiting_review)
     values (${job.provider_id}, ${jobId}, ${gw.name}, ${gw.isTest}, ${gross}, ${fee}, ${adjustments}, ${gross - fee + adjustments},
-            ${open}, ${open ? "Reclamo abierto" : null})
+            ${open}, ${open ? "Reclamo abierto" : null}, ${!reviewed})
     on conflict (job_id) do nothing returning id`;
   if (p) await recordEvent(tx, { entityType: "payout", entityId: p.id, action: "created", to: "pending" });
   return p?.id ?? null;
@@ -418,10 +419,11 @@ export async function executePayout(actor: Actor, payoutId: string, reason: stri
   if (!isStaff(actor)) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá un motivo o referencia.");
   return systemTx(async (tx) => {
-    const [p] = await tx<{ id: string; status: string; on_hold: boolean; provider_id: string; job_id: string; amount_minor: number; gateway: GatewayName; is_test: boolean }[]>`
+    const [p] = await tx<{ id: string; status: string; on_hold: boolean; awaiting_review: boolean; provider_id: string; job_id: string; amount_minor: number; gateway: GatewayName; is_test: boolean }[]>`
       select * from payouts where id = ${payoutId} for update`;
     if (!p) throw notFound();
     if (p.on_hold) throw invalid("La liquidación está retenida. Liberala antes de ejecutarla.");
+    if (p.awaiting_review) throw invalid("Falta la reseña del cliente: sin reseña no se libera la liquidación.");
     const [prov] = await tx<{ payouts_status: string; payout_account_ref: string | null }[]>`
       select payouts_status, payout_account_ref from providers where id = ${p.provider_id}`;
     if (prov.payouts_status !== "enabled" || !prov.payout_account_ref) throw invalid("El proveedor no tiene habilitada la recepción de pagos.");
@@ -478,6 +480,20 @@ export async function setPayoutHold(actor: Actor, payoutId: string, hold: boolea
     await tx`update payouts set on_hold = ${hold}, hold_reason = ${hold ? reason : null} where id = ${payoutId}`;
     await recordEvent(tx, { entityType: "payout", entityId: payoutId, action: hold ? "hold" : "release", actorId: actor.id, reason });
     await audit(tx, actor, hold ? "payout.hold" : "payout.release", "payout", payoutId, reason);
+  });
+}
+
+/** Excepción: liberar una liquidación sin reseña (ej.: cliente que no responde). Solo administradores, con motivo y auditoría. */
+export async function releasePayoutWithoutReview(actor: Actor, payoutId: string, reason: string) {
+  if (!isPlatformAdmin(actor)) throw forbidden("Solo administración puede liberar una liquidación sin reseña.");
+  if (!reason || reason.trim().length < 10) throw invalid("Explicá el motivo de la excepción (mínimo 10 caracteres).");
+  return systemTx(async (tx) => {
+    const [p] = await tx<{ awaiting_review: boolean; status: string }[]>`select awaiting_review, status from payouts where id = ${payoutId} for update`;
+    if (!p) throw notFound();
+    if (!p.awaiting_review) throw invalid("Esta liquidación no está esperando reseña.");
+    await tx`update payouts set awaiting_review = false, review_override_reason = ${reason} where id = ${payoutId}`;
+    await recordEvent(tx, { entityType: "payout", entityId: payoutId, action: "review_override", actorId: actor.id, actorRole: actor.platformRole, reason });
+    await audit(tx, actor, "payout.release_without_review", "payout", payoutId, reason);
   });
 }
 

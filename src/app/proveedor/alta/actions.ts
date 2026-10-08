@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import type { ZodType } from "zod";
 import { act, bool, files, str, strs } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
@@ -54,7 +55,14 @@ export async function createProviderAction(_: ActionState, f: FormData): Promise
     const actor = await requireActor("/proveedor/alta");
     const v = validate(providerProfileSchema, profileInput(f));
     if ("state" in v) return v.state;
-    await createProvider(actor, v.data);
+    // Origen de campaña / referido guardado por /sumate/registrarme.
+    let origin: { source?: string; referrerSlug?: string } = {};
+    try {
+      const c = JSON.parse((await cookies()).get("fixy_signup")?.value ?? "{}");
+      origin = { source: typeof c.origen === "string" ? c.origen : undefined, referrerSlug: typeof c.ref === "string" && c.ref ? c.ref : undefined };
+    } catch {}
+    await createProvider(actor, v.data, origin);
+    (await cookies()).delete("fixy_signup");
     revalidateProvider();
     return { ok: true };
   });

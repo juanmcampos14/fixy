@@ -67,8 +67,8 @@ export async function getClientRequest(userId: string, requestId: string) {
       credentials: string[] | null; completed_jobs: number;
     }[]>`
       select q.*, pp.display_name as provider_name, pp.slug as provider_slug, pp.kind as provider_kind, pp.identity_status, pp.is_demo as provider_is_demo,
-        (select count(*)::int from reviews v where v.provider_id = q.provider_id and v.hidden_at is null) as reviews,
-        (select round(avg(rating)::numeric, 1)::float from reviews v where v.provider_id = q.provider_id and v.hidden_at is null) as rating,
+        (select count(*)::int from reviews_published v where v.provider_id = q.provider_id) as reviews,
+        (select round(avg(rating)::numeric, 1)::float from reviews_published v where v.provider_id = q.provider_id) as rating,
         (select count(*)::int from jobs jj where jj.provider_id = q.provider_id and jj.status = 'completed') as completed_jobs,
         (select array_agg(ct.name) from provider_credentials_public pc join credential_types ct on ct.id = pc.credential_type_id where pc.provider_id = q.provider_id) as credentials
       from quotes q join provider_public pp on pp.id = q.provider_id

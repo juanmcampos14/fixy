@@ -95,8 +95,8 @@ export async function findCandidates(db: Db, requestId: string, opts: { excludeI
   }[]>`
     select p.id, p.display_name, p.base_zone_id, bz.region as base_region, p.max_active_jobs,
       (select count(*)::int from jobs j where j.provider_id = p.id and j.status in ('pending_confirmation','confirmed','on_the_way','in_progress','pending_approval')) as active_jobs,
-      (select count(*)::int from reviews v where v.provider_id = p.id and v.hidden_at is null) as reviews,
-      (select coalesce(sum(rating), 0)::int from reviews v where v.provider_id = p.id and v.hidden_at is null) as rating_sum,
+      (select count(*)::int from reviews_published v where v.provider_id = p.id) as reviews,
+      (select coalesce(sum(rating), 0)::int from reviews_published v where v.provider_id = p.id) as rating_sum,
       (select count(*)::int from request_invitations i where i.provider_id = p.id and i.created_at > now() - interval '14 days') as recent_invites,
       (select coalesce(json_agg(json_build_object('weekday', a.weekday, 'start_minute', a.start_minute, 'end_minute', a.end_minute)), '[]')
          from provider_availability a where a.provider_id = p.id) as slots

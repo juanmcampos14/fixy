@@ -218,10 +218,10 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await jobs.addEvidence(A.martin, jobA, { kind: "after", note: "Térmica nueva instalada y circuito probado con el horno encendido." }, asset("demo-2.jpg"));
   await jobs.finishJob(A.martin, jobA, "Trabajo terminado y probado.");
   await jobs.approveJob(A.ana, jobA);
+  await disputes.createReview(A.ana, jobA, { rating: 5, comment: "Muy claro con el presupuesto y prolijo. Explicó todo lo que hizo. (Reseña de demostración)" });
+  await db`update reviews set is_demo = true, visible_at = now() - interval '1 day', publish_notified = true where job_id = ${jobA}`;
   const [payoutA] = await db<{ id: string }[]>`select id from payouts where job_id = ${jobA}`;
   await executePayout(A.admin, payoutA.id, "Liquidación semanal simulada (demo)");
-  await disputes.createReview(A.ana, jobA, { rating: 5, comment: "Muy claro con el presupuesto y prolijo. Explicó todo lo que hizo. (Reseña de demostración)" });
-  await db`update reviews set is_demo = true where job_id = ${jobA}`;
 
   // B. Solicitud con presupuestos comparables (Ana, plomería)
   log("· Escenario: presupuestos comparables");
@@ -299,7 +299,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await jobs.finishJob(A.roberto, jobE, "Mecanismo reemplazado.");
   await jobs.approveJob(A.carla, jobE);
   await disputes.createReview(A.carla, jobE, { rating: 4, comment: "Resolvieron rápido. Avisaron con tiempo el horario. (Reseña de demostración)" });
-  await db`update reviews set is_demo = true where job_id = ${jobE}`;
+  await db`update reviews set is_demo = true, visible_at = now() - interval '1 day', publish_notified = true where job_id = ${jobE}`;
 
   // F. Reclamo abierto (Ana, departamento, Martín)
   log("· Escenario: reclamo abierto");

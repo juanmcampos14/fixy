@@ -36,6 +36,7 @@ export default async function EarningsPage() {
   return (
     <>
       <PageHeader title="Cobros" description="Lo que cobraste por Fixy, las comisiones y el estado de cada liquidación." action={test ? <TestModeBadge /> : undefined} />
+      <p className="-mt-3 mb-6 max-w-3xl text-sm text-muted">Cada liquidación se libera cuando el cliente da conformidad <strong>y deja su reseña</strong>. Las reseñas se publican de forma anónima y días después, por eso no vas a ver cuál cliente dejó cada una.</p>
       <div className="space-y-5">
         {test && <Alert tone="warn" title="Modo de prueba">Los pagos y liquidaciones son simulados. No se mueve dinero real.</Alert>}
         <Alert tone="info" title="Tres momentos distintos">
@@ -101,6 +102,7 @@ export default async function EarningsPage() {
                             <span className="flex flex-col items-start gap-1">
                               <StatusBadge status={r.payout_status} labels={payoutStatusLabel} />
                               {r.on_hold && <Badge tone="warn">En pausa{r.hold_reason ? `: ${r.hold_reason}` : ""}</Badge>}
+                              {r.awaiting_review && r.payout_status !== "paid" && <Badge tone="info" icon={false}>Se libera cuando el cliente califique</Badge>}
                               {(r.payout_test ?? r.any_test) && <TestModeBadge />}
                             </span>
                           ) : (

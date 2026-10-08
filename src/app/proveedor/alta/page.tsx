@@ -37,7 +37,7 @@ export default async function AltaPage() {
           />
         </Card>
         <p className="mt-4 text-sm text-muted">
-          ¿Querés saber cómo funciona antes? Leé <Link href="/ofrece-tus-servicios" className="font-semibold text-fixy-800 underline">Ofrecé tus servicios</Link>.
+          ¿Querés saber cómo funciona antes? Leé <Link href="/sumate" className="font-semibold text-fixy-800 underline">Ofrecé tus servicios</Link>.
         </p>
       </>
     );

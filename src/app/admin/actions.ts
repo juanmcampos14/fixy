@@ -10,7 +10,7 @@ import type { JobStatus } from "@/server/domain/state-machines";
 import { reviewDocument, reviewProvider, type ReviewAction } from "@/server/modules/providers";
 import { cancelRequest, operatorInvite, operatorRunMatching, operatorSetCategory } from "@/server/modules/requests";
 import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
-import { executePayout, postManualAdjustment, refundCharge, resyncCharge, setPayoutHold } from "@/server/modules/payments";
+import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, resyncCharge, setPayoutHold } from "@/server/modules/payments";
 import { moveDispute, replyDispute, resolveDispute } from "@/server/modules/disputes";
 import * as admin from "@/server/modules/admin";
 import { sql } from "@/server/db/client";
@@ -384,5 +384,23 @@ export async function updateSettingsAction(_: ActionState, f: FormData): Promise
     await admin.updatePlatformSettings(actor, { inviteLimit: str(f, "inviteLimit"), quoteValidDays: str(f, "quoteValidDays") }, str(f, "reason"));
     refresh();
     return { ok: true, message: "Parámetros actualizados." };
+  });
+}
+
+export async function releaseWithoutReviewAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    await releasePayoutWithoutReview(actor, str(f, "payoutId"), str(f, "reason"));
+    revalidatePath("/admin/finanzas");
+    return { ok: true, message: "Liquidación habilitada sin reseña (auditado)." };
+  });
+}
+
+export async function updateReviewSettingsAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requirePlatformAdmin();
+    await admin.updateReviewSettings(actor, { delays: str(f, "delays"), jitterHours: str(f, "jitterHours"), reminderDays: str(f, "reminderDays") }, str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Regla de reseñas actualizada. Aplica a las reseñas nuevas." };
   });
 }

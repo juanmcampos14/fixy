@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { BadgeCheck, Building2, MapPin, UserRound } from "lucide-react";
 import { getPublicProfile } from "@/server/queries/provider";
-import { formatDate } from "@/lib/format";
+import { formatMonth, formatDate } from "@/lib/format";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge, DemoBadge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/category-icon";
@@ -91,7 +91,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
                   <li key={r.id} className="py-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Stars rating={r.rating} />
-                      <span className="flex items-center gap-2 text-sm text-muted">{r.is_demo && <DemoBadge />}{formatDate(r.created_at)}</span>
+                      <span className="flex items-center gap-2 text-sm text-muted">{r.is_demo && <DemoBadge />}{formatMonth(r.published_month)}</span>
                     </div>
                     {r.comment && <p className="mt-2 text-[15px]">{r.comment}</p>}
                     {r.provider_reply && (

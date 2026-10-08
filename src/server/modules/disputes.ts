@@ -1,6 +1,7 @@
 /** Reclamos y reseñas. */
+import { randomInt } from "node:crypto";
 import { z } from "zod";
-import { systemTx } from "@/server/db/client";
+import { systemTx, type Db } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
 import { isStaff } from "@/server/auth/actor";
 import { audit, recordEvent } from "@/server/audit";
@@ -164,6 +165,23 @@ export const reviewSchema = z.object({
   comment: z.string().trim().max(2000).default(""),
 });
 
+/** Demora de publicación: un plazo elegido al azar entre los configurados + variación aleatoria. */
+export async function computeVisibleAt(db: Db, now = new Date()) {
+  const rows = await db<{ key: string; value: unknown }[]>`
+    select key, value from platform_settings where key in ('reviews.publish_delay_hours', 'reviews.publish_jitter_hours')`;
+  const get = (k: string) => rows.find((r) => r.key === k)?.value;
+  const raw = get("reviews.publish_delay_hours");
+  const delays = (Array.isArray(raw) ? raw : [48, 72, 168]).map(Number).filter((n) => Number.isFinite(n) && n >= 0 && n <= 24 * 60);
+  const jitterHours = Math.min(72, Math.max(0, Number(get("reviews.publish_jitter_hours") ?? 12)));
+  const baseHours = delays.length ? delays[randomInt(delays.length)] : 72;
+  const extraMinutes = randomInt(Math.floor(jitterHours * 60) + 1);
+  return new Date(now.getTime() + baseHours * 3600_000 + extraMinutes * 60_000);
+}
+
+/**
+ * Reseña del cliente: obligatoria para liberar la liquidación. Se publica con demora aleatoria
+ * y sin datos del cliente ni del trabajo, para que el profesional no pueda asociarla.
+ */
 export async function createReview(actor: Actor, jobId: string, input: z.infer<typeof reviewSchema>) {
   const d = reviewSchema.parse(input);
   return systemTx(async (tx) => {
@@ -171,11 +189,16 @@ export async function createReview(actor: Actor, jobId: string, input: z.infer<t
     if (!job) throw notFound();
     if (!(await check(tx, "is_job_client", actor, jobId))) throw forbidden();
     if (job.status !== "completed") throw invalid("Podés calificar cuando el trabajo esté completado.");
-    await tx`insert into reviews (job_id, client_user_id, provider_id, rating, comment) values (${jobId}, ${job.client_user_id}, ${job.provider_id}, ${d.rating}, ${d.comment})`.catch((e) => {
+    const visibleAt = await computeVisibleAt(tx);
+    await tx`insert into reviews (job_id, client_user_id, provider_id, rating, comment, visible_at)
+      values (${jobId}, ${job.client_user_id}, ${job.provider_id}, ${d.rating}, ${d.comment}, ${visibleAt})`.catch((e) => {
       if (e.code === "23505") throw invalid("Ya calificaste este trabajo.");
       throw e;
     });
-    await notify(tx, await providerRecipients(tx, job.provider_id), { type: "review", title: `Recibiste una reseña · ${job.code}`, body: `${d.rating} de 5`, link: "/proveedor/resenas", email: false });
+    // Con la reseña, la liquidación queda en condiciones de liberarse (en el próximo ciclo de liquidaciones).
+    await tx`update payouts set awaiting_review = false where job_id = ${jobId}`;
+    await recordEvent(tx, { entityType: "job", entityId: jobId, action: "review_submitted", actorId: actor.id });
+    // Al proveedor no se le avisa ahora: recibe un aviso agrupado cuando se publiquen sus reseñas.
   });
 }
 
@@ -184,6 +207,8 @@ export async function replyReview(actor: Actor, reviewId: string, reply: string)
     const [r] = await tx<{ provider_id: string; provider_reply: string | null }[]>`select provider_id, provider_reply from reviews where id = ${reviewId}`;
     if (!r) throw notFound();
     if ((await providerRole(tx, actor, r.provider_id)) !== "admin") throw forbidden();
+    const [{ visible }] = await tx<{ visible: boolean }[]>`select exists (select 1 from reviews_published where id = ${reviewId}) as visible`;
+    if (!visible) throw notFound();
     if (r.provider_reply) throw invalid("Ya respondiste esta reseña.");
     await tx`update reviews set provider_reply = ${reply.trim().slice(0, 1000)} where id = ${reviewId}`;
   });
@@ -195,5 +220,48 @@ export async function hideReview(actor: Actor, reviewId: string, reason: string)
   return systemTx(async (tx) => {
     await tx`update reviews set hidden_at = now() where id = ${reviewId}`;
     await audit(tx, actor, "review.hide", "review", reviewId, reason);
+  });
+}
+
+/**
+ * Tarea periódica (cron): avisa a cada proveedor, de forma agrupada, cuando se publican reseñas nuevas,
+ * y recuerda a los clientes que califiquen (necesario para liberar la liquidación).
+ */
+export async function processReviewTasks() {
+  return systemTx(async (tx) => {
+    const published = await tx<{ provider_id: string; n: number }[]>`
+      with done as (
+        update reviews set publish_notified = true where not publish_notified and visible_at <= now() and hidden_at is null
+        returning provider_id)
+      select provider_id, count(*)::int as n from done group by provider_id`;
+    for (const p of published) {
+      await notify(tx, await providerRecipients(tx, p.provider_id), {
+        type: "review",
+        title: p.n === 1 ? "Se publicó una reseña nueva" : `Se publicaron ${p.n} reseñas nuevas`,
+        body: "Las reseñas son anónimas y se publican días después del trabajo.",
+        link: "/proveedor/resenas",
+      });
+    }
+    const [{ value: rawDays } = { value: [1, 3, 7] }] = await tx<{ value: unknown }[]>`select value from platform_settings where key = 'reviews.reminder_days'`;
+    const days = (Array.isArray(rawDays) ? rawDays : [1, 3, 7]).map(Number).filter((n) => Number.isFinite(n) && n >= 0).sort((a, b) => a - b);
+    let reminders = 0;
+    for (const [i, d] of days.entries()) {
+      const due = await tx<{ id: string; code: string; request_id: string }[]>`
+        update jobs set review_reminders = ${i + 1}
+        where status = 'completed' and review_reminders = ${i} and completed_at <= now() - make_interval(days => ${d})
+          and not exists (select 1 from reviews r where r.job_id = jobs.id)
+          and not exists (select 1 from disputes x where x.job_id = jobs.id and x.status in ('open','in_review','awaiting_response'))
+        returning id, code, request_id`;
+      for (const j of due) {
+        await notify(tx, await clientRecipients(tx, j.request_id), {
+          type: "review",
+          title: `¿Cómo te fue con el trabajo ${j.code}?`,
+          body: "Tu reseña es necesaria para liberar el pago al profesional. Se publica sin tu nombre.",
+          link: `/app/trabajos/${j.id}`,
+        });
+        reminders++;
+      }
+    }
+    return { publishedProviders: published.length, reminders };
   });
 }

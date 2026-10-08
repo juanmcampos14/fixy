@@ -16,9 +16,10 @@ import { MessageThread } from "@/components/domain/messages";
 import { Timeline } from "@/components/domain/timeline";
 import { EvidenceGallery } from "@/components/domain/evidence";
 import { formatDate, formatDateTime, formatMoney, todayInBuenosAires } from "@/lib/format";
+import { RatingInput } from "@/components/client/rating-input";
 import { retryChargeAction } from "@/app/pagos/prueba/[ref]/actions";
 import {
-  approveJobAction, cancelJobAction, createReviewAction, decideExtraAction, decideRescheduleAction, openDisputeAction, proposeRescheduleAction,
+  approveAndReviewAction, cancelJobAction, createReviewAction, decideExtraAction, decideRescheduleAction, openDisputeAction, proposeRescheduleAction,
 } from "../../actions";
 
 export const metadata = { title: "Trabajo" };
@@ -115,12 +116,18 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
 
         {job.status === "pending_approval" && !openDispute && (
           <Card className="ring-2 ring-fixy-500/30">
-            <CardHeader title="El profesional informó que terminó" description="Revisá el trabajo y los avances. Confirmá solo si quedó como se acordó." />
-            <div className="flex flex-wrap gap-2">
-              <ConfirmAction action={approveJobAction} label="Confirmar que terminó" title="Confirmar el trabajo terminado" confirmLabel="Confirmar"
-                description="Al confirmar, el trabajo queda completado y se habilita la liquidación al profesional. Después podés calificarlo." hidden={{ jobId: id }} />
-              <a href="#reclamo" className="inline-flex h-11 items-center rounded-full px-5 font-semibold text-ink ring-1 ring-inset ring-line hover:bg-cream-2">Algo no quedó bien</a>
-            </div>
+            <CardHeader title="El profesional informó que terminó" description="Revisá el trabajo y los avances. Si quedó como se acordó, confirmalo y calificalo: tu reseña es necesaria para liberar el pago al profesional." />
+            <ActionForm action={approveAndReviewAction} className="space-y-4">
+              <input type="hidden" name="jobId" value={id} />
+              <RatingInput />
+              <Field label="Comentario" htmlFor="approve-comment" hint="Se publica sin tu nombre, días después, para que puedas opinar con libertad.">
+                <Textarea id="approve-comment" name="comment" maxLength={2000} rows={3} />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <SubmitButton pendingText="Confirmando…">Confirmar y calificar</SubmitButton>
+                <a href="#reclamo" className="inline-flex h-11 items-center rounded-full px-5 font-semibold text-ink ring-1 ring-inset ring-line hover:bg-cream-2">Algo no quedó bien</a>
+              </div>
+            </ActionForm>
           </Card>
         )}
 
@@ -204,11 +211,13 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
                 <div>
                   <p className="flex items-center gap-1" aria-label={`${d.review.rating} de 5`}>{Array.from({ length: 5 }, (_, i) => <Star key={i} className={i < d.review!.rating ? "h-5 w-5 fill-spark text-spark" : "h-5 w-5 text-line"} aria-hidden />)}</p>
                   {d.review.comment && <p className="mt-2">{d.review.comment}</p>}
+                  <p className="mt-2 text-xs text-muted">Tu reseña se publica de forma anónima, en los próximos días. Solo vos la ves con tu nombre.</p>
                   {d.review.provider_reply && <p className="mt-2 rounded-xl bg-cream/60 p-3 text-sm"><span className="font-semibold">Respuesta del profesional:</span> {d.review.provider_reply}</p>}
                 </div>
               ) : (
                 <ActionForm action={createReviewAction} className="space-y-4">
                   <input type="hidden" name="jobId" value={id} />
+                  <Alert tone="warn">Tu reseña es necesaria para liberar el pago al profesional. Se publica sin tu nombre y días después, así podés opinar con libertad.</Alert>
                   <fieldset>
                     <legend className="text-[15px] font-semibold">¿Cómo calificarías el trabajo?</legend>
                     <div className="mt-2 flex flex-row-reverse justify-end gap-1">
