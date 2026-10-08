@@ -12,7 +12,7 @@ OUT=db/supabase-init.sql
   echo "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
   for f in db/migrations/*.sql; do echo; echo "-- ===== $(basename "$f") ====="; cat "$f"; echo; echo "INSERT INTO schema_migrations (name) VALUES ('$(basename "$f")');"; done
   echo; echo "-- ===== Datos base ====="
-  docker exec fixy-db pg_dump -U fixy -d fixy_bundle --data-only --inserts --column-inserts --no-owner \
+  docker exec fixy-db pg_dump -U fixy -d fixy_bundle --data-only --inserts --column-inserts --on-conflict-do-nothing --no-owner \
     -t zones -t credential_types -t categories -t category_required_credentials -t services -t service_questions -t commission_rules -t platform_settings -t policy_documents \
     | grep -vE '^(SET|SELECT pg_catalog|--|\\|$)'
   echo "COMMIT;"
