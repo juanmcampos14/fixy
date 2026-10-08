@@ -17,7 +17,7 @@ Recomendación: dos entornos separados — **producción** en `fixy.solutions` (
 ---
 
 ## 1. Supabase (base de datos y archivos)
-1. Entrá a https://supabase.com → **New project**. Nombre: `fixy-prod`. Región: **South America (São Paulo)**. Guardá la contraseña de la base en un gestor de contraseñas.
+1. Entrá a https://supabase.com → **New project**. Nombre: `fixy-prod`. Región: la más cercana a tus usuarios (el proyecto actual está en **us-east-1**; `vercel.json` usa la región `iad1`, cercana a esa base). Guardá la contraseña de la base en un gestor de contraseñas.
 2. **Project Settings → Database → Connection string**, copiá dos cadenas (reemplazá `[YOUR-PASSWORD]`):
    - **Session pooler** (puerto **5432**): para migraciones desde tu computadora.
    - **Transaction pooler** (puerto **6543**): para la app en Vercel.
@@ -25,7 +25,10 @@ Recomendación: dos entornos separados — **producción** en `fixy.solutions` (
 3. **Storage → New bucket**: nombre `fixy-private`, **Public bucket: desactivado**. No hace falta crear políticas: la app accede con la service role key desde el servidor y entrega archivos con enlaces firmados propios.
 4. **Project Settings → API**: copiá `Project URL` y la **service_role key** (secreta: solo va en Vercel, nunca en el navegador ni en el repo).
 
-## 2. Preparar la base (desde tu computadora)
+## 2. Preparar la base
+**Opción simple (recomendada): SQL Editor.** En Supabase → **SQL Editor → New query**, pegá el contenido completo de `db/supabase-init.sql` y tocá **Run**. Crea todas las tablas, reglas de seguridad y datos base. Al final muestra `categorias 13 · zonas 17 · migraciones 6`. Ejecutalo una sola vez.
+
+**Opción por terminal** (para futuras migraciones):
 Necesitás Node 20.9+ y el código clonado.
 ```bash
 git clone https://github.com/juanmcampos14/fixy.git && cd fixy && npm ci
@@ -37,7 +40,7 @@ DATABASE_URL='postgresql://postgres.xxxx:CLAVE@aws-0-sa-east-1.pooler.supabase.c
 ```bash
 DATABASE_URL='postgresql://postgres.xxxx:CLAVE@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require' DEMO_MODE=false npm run db:seed
 ```
-Creá tu usuario administrador (la contraseña se pide sin mostrarse):
+Creá tu usuario administrador. Lo más simple: después del deploy registrate en el sitio y en el SQL Editor ejecutá `update users set platform_role = 'admin' where email = 'tu@email.com';`. Alternativa por terminal (la contraseña se pide sin mostrarse):
 ```bash
 read -s -p "Contraseña admin: " ADMIN_PASSWORD && export ADMIN_PASSWORD && echo
 ```
