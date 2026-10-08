@@ -5,7 +5,7 @@ import * as requests from "@/server/modules/requests";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
 import { executePayout, releasePayoutWithoutReview } from "@/server/modules/payments";
-import { actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf } from "./helpers";
+import { actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf, visitCode } from "./helpers";
 
 async function completedJob() {
   const [ana, lucia] = await Promise.all([actor("ana"), actor("lucia")]);
@@ -18,7 +18,7 @@ async function completedJob() {
   const { jobId } = await quotes.acceptQuote(ana, q, { totalMinor: await totalOf(q), acceptedTerms: true });
   await payPending(jobId);
   await jobs.confirmJob(lucia, jobId);
-  await jobs.startJob(lucia, jobId);
+  await jobs.startJob(lucia, jobId, await visitCode(jobId));
   await jobs.finishJob(lucia, jobId, "");
   await jobs.approveJob(ana, jobId);
   return { ana, lucia, pid, jobId };

@@ -83,3 +83,19 @@ export async function submitRequestAction(_: ActionState, f: FormData): Promise<
   if (r.error) return r;
   redirect(target);
 }
+
+/** Profesionales elegibles para la categoría y zona (datos públicos). Funciona sin cuenta. */
+export async function bookableProvidersAction(categorySlug: string, zoneId: string, windows: string[]) {
+  const h = await headers();
+  await rateLimit(`bookable:${h.get("x-forwarded-for") ?? "local"}`, 60, 600).catch(() => null);
+  if (!/^[0-9a-f-]{36}$/.test(zoneId)) return [];
+  const [cat] = await sql()<{ id: string }[]>`select id from categories where slug = ${categorySlug} and active and not requires_review`;
+  if (!cat) return [];
+  const { listBookableProviders } = await import("@/server/modules/booking");
+  const list = await listBookableProviders(sql(), { categoryId: cat.id, zoneId, preferredWindows: windows.filter((w) => ["morning", "afternoon", "evening", "weekend"].includes(w)) });
+  return list.map((p) => ({
+    slug: p.slug, displayName: p.displayName, kind: p.kind, isDemo: p.isDemo, description: p.description, yearsExperience: p.yearsExperience,
+    rating: p.rating, reviews: p.reviews, completedJobs: p.completedJobs, identityVerified: p.identityVerified, credentials: p.credentials,
+    visitFeeMinor: p.visitFeeMinor, visitFeeCredited: p.visitFeeCredited, priceRefs: p.priceRefs, availabilityMatch: p.availabilityMatch, sameZone: p.sameZone,
+  }));
+}

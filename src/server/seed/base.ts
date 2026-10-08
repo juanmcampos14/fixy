@@ -4,6 +4,7 @@
  * Los precios de referencia son valores de demostración: deben definirse comercialmente.
  */
 import type { Db } from "@/server/db/client";
+import { ZONE_MATCH_NAMES } from "@/lib/zone-match";
 
 export const ZONES: [code: string, name: string, region: string][] = [
   ["caba-palermo", "Palermo", "CABA"],
@@ -140,8 +141,9 @@ export const SERVICES = [
 
 export async function seedBase(db: Db) {
   for (const [i, [code, name, region]] of ZONES.entries()) {
-    await db`insert into zones (code, name, region, sort) values (${code}, ${name}, ${region}, ${i})
-      on conflict (code) do update set name = excluded.name, region = excluded.region, sort = excluded.sort`;
+    const names = ZONE_MATCH_NAMES[code] ?? [];
+    await db`insert into zones (code, name, region, sort, match_names) values (${code}, ${name}, ${region}, ${i}, ${names})
+      on conflict (code) do update set name = excluded.name, region = excluded.region, sort = excluded.sort, match_names = excluded.match_names`;
   }
   for (const ct of CREDENTIAL_TYPES) {
     await db`insert into credential_types (code, name, description, expires) values (${ct.code}, ${ct.name}, ${ct.description}, ${ct.expires})

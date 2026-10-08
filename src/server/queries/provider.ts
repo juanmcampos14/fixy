@@ -6,6 +6,7 @@
  * Datos públicos (perfil público, landing) usan sql() seleccionando solo columnas públicas.
  */
 import "server-only";
+import type { AccessRequirements } from "@/server/assistant/access-rules";
 import { redirect } from "next/navigation";
 import { asUser, sql, type Tx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
@@ -167,11 +168,11 @@ export async function listInvitations(userId: string, providerId: string) {
 
 export async function getOpportunity(userId: string, providerId: string, invitationId: string) {
   const data = await asUser(userId, async (tx) => {
-    const [inv] = await tx<{ id: string; request_id: string; provider_id: string; status: string; created_at: Date; decline_reason: string | null }[]>`
-      select id, request_id, provider_id, status, created_at, decline_reason from request_invitations where id = ${invitationId} and provider_id = ${providerId}`;
+    const [inv] = await tx<{ id: string; request_id: string; provider_id: string; status: string; created_at: Date; decline_reason: string | null; respond_by: Date | null; source: string }[]>`
+      select id, request_id, provider_id, status, created_at, decline_reason, respond_by, source from request_invitations where id = ${invitationId} and provider_id = ${providerId}`;
     if (!inv) return null;
-    const [request] = await tx<{ id: string; code: string; title: string; description: string; answers: Record<string, string | boolean>; urgency: string; preferred_windows: string[]; status: string; category_id: string | null; service_id: string | null; created_at: Date }[]>`
-      select id, code, title, description, answers, urgency, preferred_windows, status, category_id, service_id, created_at
+    const [request] = await tx<{ id: string; code: string; title: string; description: string; answers: Record<string, string | boolean>; urgency: string; preferred_windows: string[]; status: string; category_id: string | null; service_id: string | null; created_at: Date; request_mode: string }[]>`
+      select id, code, title, description, answers, urgency, preferred_windows, status, category_id, service_id, created_at, request_mode
       from service_requests where id = ${inv.request_id}`;
     if (!request) return null;
     const [category] = request.category_id
@@ -195,7 +196,9 @@ export async function getOpportunity(userId: string, providerId: string, invitat
       : [];
     const [conv] = await tx<{ id: string; job_id: string | null }[]>`select id, job_id from conversations where request_id = ${request.id} and provider_id = ${providerId}`;
     const messages = conv ? await conversationMessages(tx, userId, conv.id) : [];
-    return { inv, request, category: category ?? null, service: service ?? null, questions, photos, quote: quote ?? null, items, conversationId: conv?.id ?? null, jobId: conv?.job_id ?? null, messages };
+    const [access] = await tx<{ gated_requirements: AccessRequirements | null; gated_client_notes: string | null }[]>`
+      select gated_requirements, gated_client_notes from request_access_requirements where request_id = ${request.id}`;
+    return { inv, request, category: category ?? null, service: service ?? null, questions, photos, quote: quote ?? null, items, conversationId: conv?.id ?? null, jobId: conv?.job_id ?? null, messages, access: access ?? null };
   });
   if (!data) return null;
   // Consulta de sistema acotada: solo el nombre de la zona y el tipo de propiedad (sin dirección ni datos de acceso).
@@ -322,10 +325,16 @@ export async function getPublicProfile(slug: string) {
   const [{ avg, n }] = await db<{ avg: string | null; n: number }[]>`
     select round(avg(rating)::numeric, 1)::text as avg, count(*)::int as n
     from reviews_published where provider_id = ${p.id}`;
+  const [visit] = await db<{ visit_fee_minor: number; visit_fee_credited: boolean }[]>`select visit_fee_minor, visit_fee_credited from providers_visit_public where id = ${p.id}`;
+  const priceRefs = await db<{ title: string; from_minor: number; note: string; category: string }[]>`
+    select r.title, r.from_minor, r.note, c.name as category from provider_price_refs r join categories c on c.id = r.category_id
+    where r.provider_id = ${p.id} order by c.sort, r.sort`;
   return {
     provider: p, categories, zones, credentials, reviews,
     portfolio: portfolio.map((x) => ({ id: x.id, caption: x.caption, url: publicFileUrl(x.file_id) })),
     rating: { average: avg ? Number(avg) : null, count: n },
+    visit: visit ?? { visit_fee_minor: 0, visit_fee_credited: false },
+    priceRefs,
   };
 }
 

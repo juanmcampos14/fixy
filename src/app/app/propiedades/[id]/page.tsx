@@ -10,7 +10,14 @@ import { JobRow, RequestRow } from "@/components/client/cards";
 import { PropertyForm } from "@/components/client/property-form";
 import { propertyKindLabel } from "@/server/domain/labels";
 import { formatMoney } from "@/lib/format";
-import { updatePropertyAction } from "../../actions";
+import { saveGatedRulesAction, updatePropertyAction } from "../../actions";
+import { GatedRulesForm } from "@/components/client/gated-rules-form";
+import { AccessRequirementsView } from "@/components/domain/access-requirements";
+import { AddressPrivacyNote } from "@/components/location/privacy-note";
+import { signedFileUrl } from "@/server/storage";
+import { formatDateTime } from "@/lib/format";
+
+export const maxDuration = 120;
 
 export default async function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -35,6 +42,27 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         description={`${p.address_line}${p.address_extra ? `, ${p.address_extra}` : ""} · ${p.zone_name}`}
         action={<ButtonLink href="/solicitar"><Plus className="h-4 w-4" aria-hidden />Nuevo pedido</ButtonLink>}
       />
+      <AddressPrivacyNote className="mb-6" />
+      {p.gated_community && (
+        <Card className="mb-8" id="barrio">
+          <CardHeader
+            title={`Ingreso al barrio${p.gated_name ? ` · ${p.gated_name}` : ""}`}
+            description="Esto es lo que ve el profesional antes de aceptar (sin el nombre del barrio ni la dirección), para llegar con todo lo necesario."
+          />
+          {p.gated_requirements_status === "failed" && <p className="mb-3 text-sm text-warn">No pudimos interpretar el último reglamento. Probá con otro archivo o escribí los requisitos.</p>}
+          <AccessRequirementsView req={p.gated_requirements} notes={p.gated_client_notes} audience="client" />
+          {p.gated_requirements_updated_at && <p className="mt-2 text-xs text-muted">Actualizado {formatDateTime(p.gated_requirements_updated_at)}.{p.gated_rules_file_id && <> <a className="font-semibold text-fixy-800 underline" href={signedFileUrl(p.gated_rules_file_id, 900)} target="_blank" rel="noreferrer">Ver reglamento subido</a></>}</p>}
+          {canManage && (
+            <details className="mt-5 rounded-2xl bg-cream p-4" open={!p.gated_requirements}>
+              <summary className="cursor-pointer font-semibold">{p.gated_requirements ? "Actualizar reglamento" : "Cargar reglamento del barrio"}</summary>
+              <div className="mt-4">
+                <GatedRulesForm action={saveGatedRulesAction} propertyId={id} hasFile={!!p.gated_rules_file_id}
+                  defaults={{ url: p.gated_rules_url ?? "", text: p.gated_rules_text ?? "", notes: p.gated_client_notes ?? "" }} />
+              </div>
+            </details>
+          )}
+        </Card>
+      )}
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <Stat label="Contratado" value={formatMoney(money.contracted)} hint="Total de trabajos no cancelados" />
         <Stat label="Pagado" value={formatMoney(money.paid - money.refunded)} hint="Neto de reembolsos" />

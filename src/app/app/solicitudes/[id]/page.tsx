@@ -17,6 +17,7 @@ import { Timeline } from "@/components/domain/timeline";
 import { formatDate, formatMoney } from "@/lib/format";
 import { acceptQuoteAction, cancelRequestAction, rejectQuoteAction } from "../../actions";
 import { TIME_WINDOWS } from "@/server/modules/requests";
+import { DirectBooking, listOtherProviders } from "./direct-booking";
 
 export const metadata = { title: "Solicitud" };
 
@@ -33,6 +34,10 @@ export default async function RequestDetail({ params, searchParams }: { params: 
   const sent = quotes.filter((q) => q.status === "sent");
   const other = quotes.filter((q) => q.status !== "sent");
   const path = `/app/solicitudes/${id}`;
+  const activeInvite = data.invitationList.find((i) => ["invited", "viewed"].includes(i.status));
+  const others = r.request_mode === "direct" && !activeInvite && open && r.category_id
+    ? await listOtherProviders(r.category_id, r.property_id, id)
+    : [];
 
   return (
     <>
@@ -40,10 +45,16 @@ export default async function RequestDetail({ params, searchParams }: { params: 
         back={<Link href="/app/solicitudes" className="inline-flex items-center gap-1 text-sm font-semibold text-fixy-800 hover:underline"><ArrowLeft className="h-4 w-4" aria-hidden />Solicitudes</Link>}
         eyebrow={`${r.code} · ${r.property_label}`}
         title={r.title}
-        action={<StatusBadge status={r.status} labels={requestStatusLabel} className="text-sm" />}
+        action={<StatusBadge status={r.status} labels={r.request_mode === "direct" ? { ...requestStatusLabel, searching: "Esperando al profesional", with_quotes: "Visita propuesta" } : requestStatusLabel} className="text-sm" />}
       />
 
-      {nueva && <Alert tone="ok" className="mb-6" title="¡Listo! Recibimos tu pedido">Te avisamos por acá y por email cuando lleguen presupuestos.</Alert>}
+      {nueva && <Alert tone="ok" className="mb-6" title="¡Listo! Recibimos tu pedido">{r.request_mode === "direct" ? "Le avisamos al profesional que elegiste. Te avisamos por acá y por email cuando responda." : "Te avisamos por acá y por email cuando lleguen presupuestos."}</Alert>}
+      {r.gated_community && r.gated_status !== "ready" && !job && (
+        <Alert tone="warn" className="mb-6" title="Es un barrio cerrado: cargá el reglamento de ingreso">
+          Así el profesional sabe qué seguros y documentación llevar. Lo interpretamos con IA y no mostramos el nombre del barrio ni tu dirección.{" "}
+          <Link href={`/app/propiedades/${r.property_id}#barrio`}>Cargar reglamento</Link>
+        </Alert>
+      )}
       {job && (
         <Alert tone="ok" className="mb-6" title={`Contrataste este pedido · ${job.code}`}>
           <Link href={`/app/trabajos/${job.id}`}>Ir al trabajo</Link>
@@ -60,7 +71,7 @@ export default async function RequestDetail({ params, searchParams }: { params: 
           </div>
         </Card>
       )}
-      {r.status === "searching" && (
+      {r.status === "searching" && r.request_mode !== "direct" && (
         <Card className="mb-6 flex items-center gap-4">
           <Mascot pose="think" className="h-24 w-auto" />
           <div aria-live="polite">
@@ -88,7 +99,21 @@ export default async function RequestDetail({ params, searchParams }: { params: 
       )}
 
       {/* Comparación de presupuestos */}
-      {sent.length > 0 && (
+      {r.request_mode === "direct" && !job && open && (
+        <DirectBooking requestId={id} r={r} invitations={data.invitationList} visit={sent[0] ?? null} others={others} />
+      )}
+      {r.request_mode === "direct" && !job && (() => {
+        const current = data.invitationList.filter((i) => ["invited", "viewed", "quoted"].includes(i.status)).at(-1);
+        const thread = current && threads.find((t) => t.provider_id === current.provider_id);
+        return thread ? (
+          <Card className="mb-8">
+            <CardHeader title={`Chat con ${thread.provider_name}`} description="Contale lo que necesite saber para la visita. Por tu seguridad, no compartas teléfonos ni datos de pago: todo se coordina acá." />
+            <MessageThread conversationId={thread.id} messages={thread.messages} path={path} disabled={!open} />
+          </Card>
+        ) : null;
+      })()}
+
+      {sent.length > 0 && r.request_mode !== "direct" && (
         <section aria-labelledby="quotes-title" className="mb-10">
           <h2 id="quotes-title" className="text-xl font-bold">Compará los presupuestos</h2>
           <p className="mt-1 text-sm text-muted">Revisá qué incluye cada uno antes de confirmar. El total incluye el cargo de servicio de Fixy.</p>
@@ -203,7 +228,7 @@ export default async function RequestDetail({ params, searchParams }: { params: 
             ...data.questions.filter((qq) => r.answers[qq.key] !== undefined && r.answers[qq.key] !== "").map((qq) => [qq.label, typeof r.answers[qq.key] === "boolean" ? (r.answers[qq.key] ? "Sí" : "No") : String(r.answers[qq.key])] as [string, string]),
             ["Información de acceso", data.accessInfo || "—"],
           ]} />
-          <p className="mt-2 text-xs text-muted">La dirección y la información de acceso solo las ve el profesional que contrates, cuando el pago esté aprobado.</p>
+          <p className="mt-2 text-xs text-muted">La dirección y la información de acceso solo las ve el profesional que elegiste, cuando confirmás la visita.</p>
           {open && (
             <div className="mt-5">
               <ConfirmAction action={cancelRequestAction} variant="danger" size="sm" label="Cancelar pedido" title="¿Cancelar este pedido?" description="Les avisamos a los profesionales invitados y se descartan los presupuestos." confirmLabel="Cancelar pedido" requireReason hidden={{ requestId: id }} />

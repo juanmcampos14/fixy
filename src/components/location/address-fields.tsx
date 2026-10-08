@@ -1,0 +1,219 @@
+"use client";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useId, useRef, useState } from "react";
+import { LoaderCircle, LocateFixed, MapPin, TriangleAlert } from "lucide-react";
+import { matchZone, type AddressComponent, type MatchZone } from "@/lib/zone-match";
+import { loadGoogleMaps, MAPS_KEY } from "./google-maps";
+import { cn } from "@/lib/cn";
+import { AddressPrivacyNote } from "./privacy-note";
+
+export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[] };
+export type AddressValue = { addressLine: string; zoneId: string; lat: string; lng: string; placeId: string; formattedAddress: string };
+
+const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur" };
+const BA_CENTER = { lat: -34.6037, lng: -58.3816 };
+const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
+
+/**
+ * Dirección + zona. Con clave de Google Maps: autocompletado (Places API New, solo Argentina, sesgado a AMBA),
+ * "Usar mi ubicación" (geolocalización del navegador + Geocoding) y zona asignada automáticamente.
+ * Sin clave: carga manual. Siempre renderiza inputs con nombre para usarse dentro de formularios.
+ */
+export function AddressFields({ zones, defaultValue, onChange, required = true }: {
+  zones: ZoneOption[];
+  defaultValue?: Partial<AddressValue>;
+  onChange?: (v: AddressValue) => void;
+  required?: boolean;
+}) {
+  const uid = useId();
+  const [v, setV] = useState<AddressValue>({ addressLine: "", zoneId: "", lat: "", lng: "", placeId: "", formattedAddress: "", ...defaultValue });
+  const [suggestions, setSuggestions] = useState<{ id: string; main: string; secondary: string; prediction: any }[]>([]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [busy, setBusy] = useState<"" | "locating" | "loading">("");
+  const [msg, setMsg] = useState<{ tone: "warn" | "ok"; text: string } | null>(null);
+  const [autoZone, setAutoZone] = useState(false);
+  const token = useRef<any>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enabled = !!MAPS_KEY;
+
+  const update = (patch: Partial<AddressValue>) => {
+    setV((prev) => {
+      const next = { ...prev, ...patch };
+      onChange?.(next);
+      return next;
+    });
+  };
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  function applyComponents(components: AddressComponent[], formatted: string, lat: number, lng: number, placeId: string, streetLine?: string) {
+    const zone = matchZone(components, zones as MatchZone[]);
+    const route = components.find((c) => c.types.includes("route"));
+    const number = components.find((c) => c.types.includes("street_number"));
+    const line = streetLine ?? ([route?.long_name ?? route?.longText, number?.long_name ?? number?.longText].filter(Boolean).join(" ") || formatted.split(",")[0]);
+    update({ addressLine: line, formattedAddress: formatted, lat: lat.toFixed(6), lng: lng.toFixed(6), placeId, ...(zone ? { zoneId: zone.id } : {}) });
+    setAutoZone(!!zone);
+    setMsg(zone
+      ? { tone: "ok", text: `Zona detectada: ${zones.find((z) => z.id === zone.id)?.name}.` }
+      : { tone: "warn", text: "Todavía no llegamos a esa ubicación (cubrimos CABA y GBA). Si es un error, elegí la zona a mano." });
+  }
+
+  async function search(input: string) {
+    const g = await loadGoogleMaps()?.catch(() => null);
+    if (!g || input.trim().length < 3) return setSuggestions([]);
+    const { AutocompleteSessionToken, AutocompleteSuggestion } = await g.maps.importLibrary("places");
+    token.current ??= new AutocompleteSessionToken();
+    try {
+      const { suggestions: res } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input, sessionToken: token.current, includedRegionCodes: ["ar"], language: "es",
+        locationBias: { center: BA_CENTER, radius: 50000 },
+      });
+      setSuggestions(res.filter((s: any) => s.placePrediction).slice(0, 5).map((s: any) => ({
+        id: s.placePrediction.placeId,
+        main: s.placePrediction.mainText?.toString() ?? s.placePrediction.text.toString(),
+        secondary: s.placePrediction.secondaryText?.toString() ?? "",
+        prediction: s.placePrediction,
+      })));
+      setOpen(true);
+      setActive(-1);
+    } catch {
+      setSuggestions([]);
+    }
+  }
+
+  async function choose(i: number) {
+    const s = suggestions[i];
+    if (!s) return;
+    setOpen(false);
+    setBusy("loading");
+    try {
+      const place = s.prediction.toPlace();
+      await place.fetchFields({ fields: ["formattedAddress", "location", "addressComponents"] });
+      token.current = null; // la sesión de autocompletado termina al elegir
+      applyComponents(place.addressComponents as AddressComponent[], place.formattedAddress, place.location.lat(), place.location.lng(), s.id, s.main);
+    } catch {
+      setMsg({ tone: "warn", text: "No pudimos obtener esa dirección. Escribila a mano y elegí la zona." });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function locate() {
+    if (!navigator.geolocation) return setMsg({ tone: "warn", text: "Tu navegador no permite detectar la ubicación." });
+    setBusy("locating");
+    setMsg(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const g = await loadGoogleMaps();
+          const { Geocoder } = await g.maps.importLibrary("geocoding");
+          const { results } = await new Geocoder().geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, language: "es", region: "AR" });
+          const best = results.find((r: any) => r.types.includes("street_address") || r.types.includes("premise")) ?? results[0];
+          if (!best) throw new Error("sin resultados");
+          applyComponents(best.address_components, best.formatted_address, pos.coords.latitude, pos.coords.longitude, best.place_id);
+          setMsg((m) => (m?.tone === "ok" ? { tone: "ok", text: `${m.text} Revisá la altura y completá piso o depto.` } : m));
+        } catch {
+          setMsg({ tone: "warn", text: "No pudimos convertir tu ubicación en una dirección. Escribila a mano." });
+        } finally {
+          setBusy("");
+        }
+      },
+      (err) => {
+        setBusy("");
+        setMsg({ tone: "warn", text: err.code === err.PERMISSION_DENIED ? "No diste permiso para usar tu ubicación. Podés escribir la dirección." : "No pudimos detectar tu ubicación. Escribí la dirección." });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
+
+  const listId = `${uid}-list`;
+  return (
+    <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+      <div className="space-y-1.5 sm:col-span-2">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <label htmlFor={`${uid}-addr`} className="block text-[15px] font-semibold text-ink">Dirección{required && <span className="text-danger" aria-hidden> *</span>}</label>
+          {enabled && (
+            <button type="button" onClick={locate} disabled={!!busy} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-fixy-800 hover:bg-fixy-50 disabled:opacity-60">
+              {busy === "locating" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden /> : <LocateFixed className="h-4 w-4" aria-hidden />}
+              Usar mi ubicación
+            </button>
+          )}
+        </div>
+        <AddressPrivacyNote compact />
+        <div className="relative">
+          <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted" aria-hidden />
+          <input
+            id={`${uid}-addr`}
+            name="addressLine"
+            value={v.addressLine}
+            required={required}
+            minLength={5}
+            maxLength={200}
+            autoComplete={enabled ? "off" : "street-address"}
+            role={enabled ? "combobox" : undefined}
+            aria-autocomplete={enabled ? "list" : undefined}
+            aria-expanded={enabled ? open && suggestions.length > 0 : undefined}
+            aria-controls={enabled ? listId : undefined}
+            aria-activedescendant={enabled && active >= 0 ? `${listId}-${active}` : undefined}
+            placeholder={enabled ? "Empezá a escribir la calle y la altura" : "Calle y altura"}
+            className={cn(control, "h-12 pl-11")}
+            onChange={(e) => {
+              update({ addressLine: e.target.value, lat: "", lng: "", placeId: "", formattedAddress: "" });
+              setAutoZone(false);
+              if (enabled) {
+                if (timer.current) clearTimeout(timer.current);
+                const val = e.target.value;
+                timer.current = setTimeout(() => search(val), 250);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (!open || !suggestions.length) return;
+              if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, suggestions.length - 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+              else if (e.key === "Enter" && active >= 0) { e.preventDefault(); choose(active); }
+              else if (e.key === "Escape") setOpen(false);
+            }}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+          />
+          {busy === "loading" && <LoaderCircle className="absolute right-3.5 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-muted" aria-hidden />}
+          {enabled && open && suggestions.length > 0 && (
+            <ul id={listId} role="listbox" className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-line">
+              {suggestions.map((s, i) => (
+                <li key={s.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}
+                  onMouseDown={(e) => { e.preventDefault(); choose(i); }}
+                  className={cn("cursor-pointer px-4 py-2.5", i === active ? "bg-fixy-50" : "hover:bg-cream")}>
+                  <span className="block font-semibold">{s.main}</span>
+                  {s.secondary && <span className="block text-sm text-muted">{s.secondary}</span>}
+                </li>
+              ))}
+              <li className="px-4 py-1.5 text-right text-[11px] text-muted" aria-hidden>con tecnología de Google</li>
+            </ul>
+          )}
+        </div>
+        {msg && (
+          <p role="status" className={cn("flex items-start gap-1.5 text-sm", msg.tone === "warn" ? "text-warn" : "text-ok")}>
+            {msg.tone === "warn" && <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}{msg.text}
+          </p>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor={`${uid}-zone`} className="block text-[15px] font-semibold text-ink">Zona{required && <span className="text-danger" aria-hidden> *</span>}</label>
+        {autoZone && <p className="text-sm text-muted">Detectada desde la dirección. Podés cambiarla.</p>}
+        <select id={`${uid}-zone`} name="zoneId" value={v.zoneId} required={required} onChange={(e) => { update({ zoneId: e.target.value }); setAutoZone(false); }} className={cn(control, "h-12")}>
+          <option value="" disabled>Elegí la zona</option>
+          {Object.entries(REGION).map(([r, label]) => (
+            <optgroup key={r} label={label}>
+              {zones.filter((z) => z.region === r).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      <input type="hidden" name="lat" value={v.lat} />
+      <input type="hidden" name="lng" value={v.lng} />
+      <input type="hidden" name="placeId" value={v.placeId} />
+      <input type="hidden" name="formattedAddress" value={v.formattedAddress} />
+    </div>
+  );
+}

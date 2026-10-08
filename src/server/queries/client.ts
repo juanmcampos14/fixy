@@ -1,5 +1,6 @@
 /** Lecturas del panel del cliente (particulares y miembros de organizaciones). Todas bajo RLS. */
 import "server-only";
+import type { AccessRequirements } from "@/server/assistant/access-rules";
 import { asUser } from "@/server/db/client";
 import { signedFileUrl } from "@/server/storage";
 import { conversationMessages, timeline } from "./shared";
@@ -47,11 +48,11 @@ export async function getClientRequest(userId: string, requestId: string) {
   return asUser(userId, async (tx) => {
     const [r] = await tx<{
       id: string; code: string; title: string; description: string; status: string; urgency: string; preferred_windows: string[]; answers: Record<string, unknown>;
-      needs_review: boolean; review_reason: string | null; safety_flag: string | null; created_at: Date; submitted_at: Date | null; cancel_reason: string | null;
+      needs_review: boolean; review_reason: string | null; safety_flag: string | null; created_at: Date; submitted_at: Date | null; cancel_reason: string | null; request_mode: string;
       property_id: string; property_label: string; zone_name: string; category_id: string | null; category_name: string | null; organization_id: string | null; is_client: boolean;
-      service_name: string | null; target_provider_id: string | null;
+      service_name: string | null; target_provider_id: string | null; gated_community: boolean; gated_status: string;
     }[]>`
-      select r.*, p.label as property_label, z.name as zone_name, c.name as category_name, s.name as service_name,
+      select r.*, p.label as property_label, p.gated_community, p.gated_requirements_status as gated_status, z.name as zone_name, c.name as category_name, s.name as service_name,
         app.is_request_client(${userId}, r.id) as is_client
       from service_requests r join properties p on p.id = r.property_id join zones z on z.id = p.zone_id
       left join categories c on c.id = r.category_id left join services s on s.id = r.service_id where r.id = ${requestId}`;
@@ -79,12 +80,18 @@ export async function getClientRequest(userId: string, requestId: string) {
       : [];
     const conversations = await tx<{ id: string; provider_id: string; provider_name: string }[]>`
       select c.id, c.provider_id, pp.display_name as provider_name from conversations c join provider_public pp on pp.id = c.provider_id
-      where c.request_id = ${requestId} and exists (select 1 from quotes q where q.request_id = c.request_id and q.provider_id = c.provider_id and q.status <> 'draft')`;
+      where c.request_id = ${requestId} and (
+        exists (select 1 from quotes q where q.request_id = c.request_id and q.provider_id = c.provider_id and q.status <> 'draft')
+        or (${r.request_mode} = 'direct' and exists (select 1 from request_invitations i where i.request_id = c.request_id and i.provider_id = c.provider_id and i.status in ('invited','viewed','quoted'))))`;
+    const invitationList = await tx<{ id: string; status: string; respond_by: Date | null; provider_id: string; provider_name: string; provider_slug: string; visit_fee_minor: number }[]>`
+      select i.id, i.status, i.respond_by, i.provider_id, pp.display_name as provider_name, pp.slug as provider_slug,
+        (select visit_fee_minor from providers_visit_public v where v.id = i.provider_id) as visit_fee_minor
+      from request_invitations i join provider_public pp on pp.id = i.provider_id where i.request_id = ${requestId} order by i.created_at`;
     const threads = await Promise.all(conversations.map(async (c) => ({ ...c, messages: await conversationMessages(tx, userId, c.id) })));
     const [job] = await tx<{ id: string; code: string; status: string }[]>`select id, code, status from jobs where request_id = ${requestId}`;
     const photos = (await tx<{ file_id: string }[]>`select file_id from request_attachments where request_id = ${requestId}`).map((p) => signedFileUrl(p.file_id, 900));
     const events = await timeline(tx, "request", requestId);
-    return { r, accessInfo: priv?.access_info ?? null, questions, invitations, quotes, quoteItems, threads, job: job ?? null, photos, events };
+    return { r, accessInfo: priv?.access_info ?? null, questions, invitations, invitationList, quotes, quoteItems, threads, job: job ?? null, photos, events };
   });
 }
 
@@ -101,7 +108,10 @@ export async function listProperties(userId: string) {
 
 export async function getProperty(userId: string, propertyId: string) {
   return asUser(userId, async (tx) => {
-    const [p] = await tx<{ id: string; label: string; kind: string; address_line: string; address_extra: string | null; zone_id: string; zone_name: string; contact_name: string | null; contact_phone: string | null; access_notes: string | null; organization_id: string | null; owner_user_id: string | null; org_name: string | null }[]>`
+    const [p] = await tx<{ id: string; label: string; kind: string; address_line: string; address_extra: string | null; zone_id: string; zone_name: string; contact_name: string | null; contact_phone: string | null; access_notes: string | null; organization_id: string | null; owner_user_id: string | null; org_name: string | null;
+      lat: number | null; lng: number | null; place_id: string | null; formatted_address: string | null;
+      gated_community: boolean; gated_name: string | null; gated_rules_url: string | null; gated_rules_text: string | null; gated_rules_file_id: string | null;
+      gated_requirements: AccessRequirements | null; gated_requirements_status: string; gated_client_notes: string | null; gated_requirements_updated_at: Date | null }[]>`
       select p.*, z.name as zone_name, o.name as org_name from properties p join zones z on z.id = p.zone_id left join organizations o on o.id = p.organization_id
       where p.id = ${propertyId} and (p.owner_user_id = ${userId} or app.org_role(${userId}, p.organization_id) is not null)`;
     if (!p) return null;

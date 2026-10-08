@@ -15,6 +15,7 @@ import { assertProviderAdmin } from "./authz";
 import { notify, providerRecipients, staffRecipients } from "@/server/notifications";
 import { activeGateway } from "@/server/payments";
 import { storeFile } from "@/server/storage";
+import { profileStrength, type ProfileFacts } from "@/lib/profile-strength";
 
 export const providerProfileSchema = z.object({
   kind: z.enum(["individual", "company"]),
@@ -48,7 +49,11 @@ function slugify(s: string) {
 /** Paso 1-3 del alta: crea el proveedor con el usuario como administrador. */
 export async function createProvider(actor: Actor, input: ProviderProfileInput, origin: { source?: string | null; referrerSlug?: string | null } = {}) {
   const data = providerProfileSchema.parse(input);
-  return systemTx(async (tx) => {
+  return systemTx((tx) => createProviderTx(tx, actor, data, origin));
+}
+
+async function createProviderTx(tx: Tx, actor: Actor, data: z.infer<typeof providerProfileSchema>, origin: { source?: string | null; referrerSlug?: string | null }) {
+  {
     const [existing] = await tx<{ provider_id: string }[]>`
       select provider_id from provider_members where user_id = ${actor.id} and role = 'admin' limit 1`;
     if (existing) return existing.provider_id; // un alta por usuario en el MVP
@@ -64,7 +69,7 @@ export async function createProvider(actor: Actor, input: ProviderProfileInput, 
     await tx`insert into provider_members (provider_id, user_id, role) values (${p.id}, ${actor.id}, 'admin')`;
     await recordEvent(tx, { entityType: "provider", entityId: p.id, action: "created", to: "pending", actorId: actor.id });
     return p.id;
-  });
+  }
 }
 
 export async function updateProviderProfile(actor: Actor, providerId: string, input: ProviderProfileInput) {
@@ -369,5 +374,126 @@ export async function deactivateProviderMember(actor: Actor, providerId: string,
     await tx`update provider_members set active = false where provider_id = ${providerId} and user_id = ${userId}`;
     await tx`update jobs set assigned_user_id = null where provider_id = ${providerId} and assigned_user_id = ${userId} and status not in ('completed','cancelled')`;
     await audit(tx, actor, "provider.member_deactivate", "provider", providerId, null, { userId });
+  });
+}
+
+// ───────── Visita y precios de referencia (modelo "elegí a tu profesional") ─────────
+
+export const visitSettingsSchema = z.object({
+  visitFeeMinor: z.coerce.number().int().min(0).max(100_000_000),
+  visitFeeCredited: z.boolean(),
+});
+
+export async function updateVisitSettings(actor: Actor, providerId: string, input: z.infer<typeof visitSettingsSchema>) {
+  const d = visitSettingsSchema.parse(input);
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    await tx`update providers set visit_fee_minor = ${d.visitFeeMinor}, visit_fee_credited = ${d.visitFeeCredited}, visit_configured_at = now() where id = ${providerId}`;
+  });
+}
+
+export const priceRefSchema = z.object({
+  categoryId: z.string().uuid("Elegí el rubro."),
+  title: z.string().trim().min(3, "Describí el servicio.").max(120),
+  fromMinor: z.coerce.number().int().min(1, "Indicá un precio de referencia."),
+  note: z.string().trim().max(300).default(""),
+});
+
+export async function addPriceRef(actor: Actor, providerId: string, input: z.input<typeof priceRefSchema>) {
+  const d = priceRefSchema.parse(input);
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    const [{ ok }] = await tx<{ ok: boolean }[]>`select exists (select 1 from provider_categories where provider_id = ${providerId} and category_id = ${d.categoryId}) as ok`;
+    if (!ok) throw invalid("Solo podés publicar precios de rubros que ofrecés.");
+    const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from provider_price_refs where provider_id = ${providerId}`;
+    if (n >= 30) throw invalid("Podés publicar hasta 30 precios de referencia.");
+    await tx`insert into provider_price_refs (provider_id, category_id, title, from_minor, note, sort) values (${providerId}, ${d.categoryId}, ${d.title}, ${d.fromMinor}, ${d.note}, ${n})`;
+  });
+}
+
+export async function removePriceRef(actor: Actor, providerId: string, id: string) {
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    await tx`delete from provider_price_refs where id = ${id} and provider_id = ${providerId}`;
+  });
+}
+
+// ───────── Fuerza del perfil ─────────
+
+/** Datos para calcular la fuerza del perfil de varios profesionales en una consulta. */
+export async function profileFacts(db: Db | Tx, providerIds: string[]): Promise<Map<string, ProfileFacts>> {
+  if (!providerIds.length) return new Map();
+  const rows = await db<{
+    id: string; dlen: number; phone: boolean; years: boolean; cats: number; zones: number; base: boolean; slots: number; photos: number;
+    identity_status: string; id_docs: number; creds_missing: number; refs: number; visit: boolean; payouts: boolean;
+  }[]>`
+    select p.id, length(p.description)::int as dlen, coalesce(p.contact_phone, '') <> '' as phone, p.years_experience is not null as years,
+      (select count(*)::int from provider_categories c where c.provider_id = p.id) as cats,
+      (select count(*)::int from provider_zones z where z.provider_id = p.id) as zones,
+      p.base_zone_id is not null as base,
+      (select count(*)::int from provider_availability a where a.provider_id = p.id) as slots,
+      (select count(*)::int from provider_portfolio f where f.provider_id = p.id) as photos,
+      p.identity_status,
+      (select count(*)::int from provider_documents d where d.provider_id = p.id and d.kind = 'identity' and d.status <> 'rejected') as id_docs,
+      (select count(*)::int from provider_categories pc join category_required_credentials rc on rc.category_id = pc.category_id
+        where pc.provider_id = p.id and not exists (select 1 from provider_documents d where d.provider_id = p.id
+          and d.credential_type_id = rc.credential_type_id and d.status <> 'rejected')) as creds_missing,
+      (select count(*)::int from provider_price_refs r where r.provider_id = p.id) as refs,
+      p.visit_configured_at is not null as visit,
+      p.payouts_status = 'enabled' as payouts
+    from providers p where p.id in ${db(providerIds)}`;
+  return new Map(rows.map((r) => [r.id, {
+    descriptionLength: r.dlen, hasPhone: r.phone, hasYears: r.years, categories: r.cats, zones: r.zones, hasBaseZone: r.base,
+    availabilitySlots: r.slots, photos: r.photos,
+    identity: r.identity_status === "verified" ? "verified" : r.id_docs > 0 ? "uploaded" : "none",
+    credentialsComplete: r.cats > 0 && r.creds_missing === 0, priceRefs: r.refs, visitConfigured: r.visit, payoutsEnabled: r.payouts,
+  } satisfies ProfileFacts]));
+}
+
+export async function getProfileStrength(db: Db | Tx, providerId: string) {
+  const facts = (await profileFacts(db, [providerId])).get(providerId);
+  return facts ? profileStrength(facts) : null;
+}
+
+// ───────── Alta rápida (con o sin IA) ─────────
+
+export const quickStartSchema = z.object({
+  kind: z.enum(["individual", "company"]),
+  displayName: z.string().trim().min(2, "Ingresá tu nombre o el de tu negocio.").max(120),
+  contactPhone: z.string().trim().min(6, "Ingresá un celular para avisarte de pedidos.").max(40),
+  description: z.string().trim().min(30, "Contá un poco más sobre tu servicio (mínimo 30 caracteres).").max(2000),
+  yearsExperience: z.coerce.number().int().min(0).max(80).optional(),
+  categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos un rubro."),
+  zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona."),
+  baseZoneId: z.string().uuid().optional().or(z.literal("")),
+  availability: z.array(z.object({ weekday: z.number().int().min(0).max(6), startMinute: z.number().int().min(0).max(1439), endMinute: z.number().int().min(1).max(1440) })).default([]),
+  priceRefs: z.array(z.object({ categoryId: z.string().uuid(), title: z.string().trim().min(3).max(120), fromMinor: z.number().int().min(1) })).max(10).default([]),
+  aiAssisted: z.boolean().default(false),
+});
+
+/** Crea el perfil con rubros, zonas, disponibilidad y precios en una sola operación (todo o nada). */
+export async function quickStartProvider(actor: Actor, input: z.input<typeof quickStartSchema>, origin: { source?: string | null; referrerSlug?: string | null } = {}) {
+  const d = quickStartSchema.parse(input);
+  return systemTx(async (tx) => {
+    const providerId = await createProviderTx(tx, actor, {
+      kind: d.kind, displayName: d.displayName, legalName: "", taxId: "", responsibleName: actor.fullName, contactEmail: actor.email,
+      contactPhone: d.contactPhone, description: d.description, yearsExperience: d.yearsExperience, billingInfo: "",
+    }, origin);
+    const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from provider_categories where provider_id = ${providerId}`;
+    if (n > 0) return providerId; // ya tenía un perfil armado: no pisamos nada
+    const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(d.categoryIds)}`;
+    const validZones = await tx<{ id: string }[]>`select id from zones where active and id in ${tx(d.zoneIds)}`;
+    if (validCats.length !== new Set(d.categoryIds).size || validZones.length !== new Set(d.zoneIds).size) throw invalid("Selección inválida.");
+    for (const c of new Set(d.categoryIds)) await tx`insert into provider_categories values (${providerId}, ${c})`;
+    for (const z of new Set(d.zoneIds)) await tx`insert into provider_zones values (${providerId}, ${z})`;
+    for (const s of d.availability.filter((a) => a.endMinute > a.startMinute))
+      await tx`insert into provider_availability (provider_id, weekday, start_minute, end_minute) values (${providerId}, ${s.weekday}, ${s.startMinute}, ${s.endMinute})`;
+    const base = d.baseZoneId && d.zoneIds.includes(d.baseZoneId) ? d.baseZoneId : null;
+    await tx`update providers set base_zone_id = ${base}, profile_ai_assisted = ${d.aiAssisted} where id = ${providerId}`;
+    let i = 0;
+    for (const r of d.priceRefs.filter((r) => d.categoryIds.includes(r.categoryId)))
+      await tx`insert into provider_price_refs (provider_id, category_id, title, from_minor, note, sort) values (${providerId}, ${r.categoryId}, ${r.title}, ${r.fromMinor}, '', ${i++})`;
+    await audit(tx, actor, "provider.quickstart", "provider", providerId, null, { aiAssisted: d.aiAssisted, categories: d.categoryIds.length, zones: d.zoneIds.length, priceRefs: i });
+    return providerId;
   });
 }

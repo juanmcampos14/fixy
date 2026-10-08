@@ -80,14 +80,24 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
           </Card>
         )}
 
+        {job.visit_code && !(job as { checked_in_at?: Date | null }).checked_in_at && ["confirmed", "on_the_way"].includes(job.status) && (
+          <Card className="flex flex-wrap items-center gap-4 ring-2 ring-fixy-500/30">
+            <div className="grid h-16 min-w-28 place-items-center rounded-2xl bg-ink px-4 font-display text-3xl font-extrabold tracking-[0.25em] text-white" aria-label={`Código de visita ${job.visit_code.split("").join(" ")}`}>{job.visit_code}</div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Tu código de visita</h2>
+              <p className="text-ink-2">Dáselo al profesional cuando llegue: así queda registrado que la visita ocurrió. No lo compartas antes.</p>
+            </div>
+          </Card>
+        )}
+
         {proposedExtras.map((e) => (
           <Card key={e.id} className="ring-2 ring-warn/30">
-            <CardHeader title="El profesional propone un adicional" description="No se cobra nada hasta que lo aceptes. Si lo rechazás, el trabajo sigue según lo contratado." />
+            <CardHeader title={(e as { is_main_quote?: boolean }).is_main_quote ? "Presupuesto del arreglo" : "El profesional propone un adicional"} description={(e as { is_main_quote?: boolean }).is_main_quote ? "El profesional vio el problema y te presupuesta el arreglo. No se hace ni se cobra nada hasta que lo apruebes." : "No se cobra nada hasta que lo aceptes. Si lo rechazás, el trabajo sigue según lo contratado."} />
             <p className="font-semibold">{e.description}</p>
             <p className="mt-1 text-[15px] text-ink-2"><span className="font-semibold">Por qué:</span> {e.reason}</p>
-            <ClientPriceBreakdown className="mt-3" title={null} a={{ laborMinor: e.labor_minor, materialsMinor: e.materials_minor, visitMinor: 0, clientFeeMinor: e.client_fee_minor, clientFeeTaxMinor: e.client_fee_tax_minor, totalMinor: e.total_minor, clientRateBps: snap.amounts.clientRateBps }} />
+            <ClientPriceBreakdown className="mt-3" title={null} discountMinor={(e as { discount_minor?: number }).discount_minor ?? 0} a={{ laborMinor: e.labor_minor, materialsMinor: e.materials_minor, visitMinor: 0, clientFeeMinor: e.client_fee_minor, clientFeeTaxMinor: e.client_fee_tax_minor, totalMinor: e.total_minor, clientRateBps: snap.amounts.clientRateBps }} />
             <div className="mt-4 flex flex-wrap gap-2">
-              <ConfirmAction action={decideExtraAction} label="Aceptar adicional" title="Aceptar el adicional" confirmLabel={`Aceptar y pagar ${formatMoney(e.total_minor)}`}
+              <ConfirmAction action={decideExtraAction} label={(e as { is_main_quote?: boolean }).is_main_quote ? "Aprobar presupuesto" : "Aceptar adicional"} title={(e as { is_main_quote?: boolean }).is_main_quote ? "Aprobar el presupuesto del arreglo" : "Aceptar el adicional"} confirmLabel={e.total_minor > 0 ? `Aprobar y pagar ${formatMoney(e.total_minor)}` : "Aprobar"}
                 description={<>Vas a pagar <strong>{formatMoney(e.total_minor)}</strong> adicionales, en un cobro separado{isTest ? " (modo de prueba)" : ""}.</>}
                 hidden={{ extraId: e.id, jobId: id, decision: "accepted", totalMinor: e.total_minor }} />
               <ConfirmAction action={decideExtraAction} variant="secondary" label="Rechazar" title="Rechazar el adicional" confirmLabel="Rechazar adicional" requireReason reasonLabel="Contale al profesional por qué"

@@ -15,7 +15,7 @@ import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
 import { executePayout } from "@/server/modules/payments";
-import { actor, catId, invitationFor, payPending, zoneId, ledgerBalance } from "./helpers";
+import { actor, catId, invitationFor, payPending, zoneId, ledgerBalance, visitCode } from "./helpers";
 
 const pdf = { data: readFileSync("db/seed-assets/documento-demo.pdf"), name: "dni.pdf" };
 const jpg = { data: readFileSync("db/seed-assets/demo-1.jpg"), name: "foto.jpg" };
@@ -98,7 +98,7 @@ describe("recorrido principal de punta a punta", () => {
     // 6. Ejecución
     await jobs.confirmJob(me, accepted.jobId);
     await jobs.markOnTheWay(me, accepted.jobId);
-    await jobs.startJob(me, accepted.jobId);
+    await jobs.startJob(me, accepted.jobId, await visitCode(accepted.jobId));
     await jobs.addEvidence(me, accepted.jobId, { kind: "after", note: "Living terminado" }, jpg);
     // Cobro aprobado no implica trabajo completado
     const [j1] = await sql()<{ status: string }[]>`select status from jobs where id = ${accepted.jobId}`;

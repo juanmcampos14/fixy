@@ -8,7 +8,7 @@ import { PublicHeader } from "@/components/layout/public-header";
 import { RequestWizard } from "./wizard";
 import type { RequestPayload } from "./actions";
 
-export const metadata: Metadata = { title: "Pedir presupuesto" };
+export const metadata: Metadata = { title: "Pedí un profesional" };
 
 export default async function SolicitarPage({ searchParams }: { searchParams: Promise<{ q?: string; categoria?: string; proveedor?: string; borrador?: string; antecedente?: string }> }) {
   const sp = await searchParams;
@@ -23,8 +23,8 @@ export default async function SolicitarPage({ searchParams }: { searchParams: Pr
   if (actor && token) draft = (await claimDraft(token, actor.id)) as RequestPayload | null;
 
   const properties = actor
-    ? await db<{ id: string; label: string; kind: string; zone_name: string; organization_id: string | null; org_name: string | null }[]>`
-        select p.id, p.label, p.kind, z.name as zone_name, p.organization_id, o.name as org_name
+    ? await db<{ id: string; label: string; kind: string; zone_id: string; zone_name: string; organization_id: string | null; org_name: string | null }[]>`
+        select p.id, p.label, p.kind, p.zone_id, z.name as zone_name, p.organization_id, o.name as org_name
         from properties p join zones z on z.id = p.zone_id left join organizations o on o.id = p.organization_id
         where p.archived_at is null and (p.owner_user_id = ${actor.id} or p.organization_id in (select organization_id from organization_members where user_id = ${actor.id}))
         order by p.organization_id nulls first, p.label`

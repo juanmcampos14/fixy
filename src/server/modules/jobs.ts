@@ -85,7 +85,8 @@ export async function confirmJob(actor: Actor, jobId: string) {
   return systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);
     const side = await requireSide(tx, actor, job, ["provider"]);
-    if (!(await initialChargeApproved(tx, jobId))) throw invalid("Todavía no se registró el pago del cliente. Vas a poder confirmar cuando esté aprobado.");
+    const [{ total }] = await tx<{ total: number }[]>`select total_minor as total from jobs where id = ${jobId}`;
+    if (total > 0 && !(await initialChargeApproved(tx, jobId))) throw invalid("Todavía no se registró el pago del cliente. Vas a poder confirmar cuando esté aprobado.");
     const [{ status }] = await tx<{ status: string }[]>`select status from providers where id = ${job.provider_id}`;
     if (status !== "approved") throw invalid("Tu cuenta no está habilitada para tomar trabajos.");
     await moveJob(tx, job, "confirmed", side, actor);
@@ -117,12 +118,16 @@ export async function markOnTheWay(actor: Actor, jobId: string) {
   });
 }
 
-export async function startJob(actor: Actor, jobId: string) {
+/** Inicio en el lugar. Con código de visita: el cliente se lo dicta al profesional al llegar (registra la visita). */
+export async function startJob(actor: Actor, jobId: string, visitCode?: string) {
   return systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);
     const side = await requireSide(tx, actor, job, ["provider", "technician"]);
+    const [j] = await tx<{ visit_code: string | null }[]>`select visit_code from jobs where id = ${jobId}`;
+    if (j.visit_code && (visitCode ?? "").trim() !== j.visit_code) throw invalid("El código de visita no coincide. Pedíselo al cliente: lo ve en el detalle del trabajo en Fixy.");
     await moveJob(tx, job, "in_progress", side, actor);
-    await notifyBoth(tx, job, "Comenzó el trabajo", "", { provider: false });
+    await tx`update jobs set checked_in_at = coalesce(checked_in_at, now()) where id = ${jobId}`;
+    await notifyBoth(tx, job, "El profesional llegó y comenzó la visita", "", { provider: false });
   });
 }
 
@@ -163,7 +168,7 @@ export async function approveJob(actor: Actor, jobId: string) {
     const [{ open }] = await tx<{ open: number }[]>`select count(*)::int as open from disputes where job_id = ${jobId} and status in ('open','in_review','awaiting_response')`;
     if (open > 0 && side === "client") throw invalid("Hay un reclamo abierto. El equipo de Fixy lo resolverá antes de cerrar el trabajo.");
     const [{ unpaid }] = await tx<{ unpaid: number }[]>`
-      select count(*)::int as unpaid from job_extras e where e.job_id = ${jobId} and e.status = 'accepted'
+      select count(*)::int as unpaid from job_extras e where e.job_id = ${jobId} and e.status = 'accepted' and e.total_minor > 0
       and not exists (select 1 from charges c where c.extra_id = e.id and c.status in ('approved','partially_refunded','refunded'))`;
     if (unpaid > 0) throw invalid("Hay un adicional aceptado pendiente de pago.");
     await moveJob(tx, job, "completed", side, actor);
@@ -216,10 +221,22 @@ export const extraSchema = z.object({
   reason: z.string().trim().min(5, "Explicá por qué es necesario.").max(1000),
   laborMinor: z.coerce.number().int().min(0),
   materialsMinor: z.coerce.number().int().min(0),
+  /** Presupuesto del arreglo tras la visita (descuenta la visita si el profesional lo ofrece). */
+  isMainQuote: z.boolean().optional().default(false),
 });
 
+/** Descuento de la visita aplicable al presupuesto del arreglo (solo una vez, si se pagó y el profesional lo ofrece). */
+export async function visitCreditFor(db: Tx, jobId: string): Promise<number> {
+  const [r] = await db<{ credit: number }[]>`
+    select case when p.visit_fee_credited and j.mode = 'diagnostic'
+        and not exists (select 1 from job_extras e where e.job_id = j.id and e.is_main_quote and e.status in ('proposed','accepted'))
+      then coalesce((j.contract_snapshot->'amounts'->>'subtotalMinor')::bigint, 0) else 0 end as credit
+    from jobs j join providers p on p.id = j.provider_id where j.id = ${jobId}`;
+  return r?.credit ?? 0;
+}
+
 /** El proveedor propone un adicional. Usa las mismas tasas contratadas. Requiere aceptación explícita del cliente. */
-export async function proposeExtra(actor: Actor, jobId: string, input: z.infer<typeof extraSchema>) {
+export async function proposeExtra(actor: Actor, jobId: string, input: z.input<typeof extraSchema>) {
   const d = extraSchema.parse(input);
   if (d.laborMinor + d.materialsMinor <= 0) throw invalid("El importe debe ser mayor a cero.");
   return systemTx(async (tx) => {
@@ -227,20 +244,21 @@ export async function proposeExtra(actor: Actor, jobId: string, input: z.infer<t
     await requireSide(tx, actor, job, ["provider"]);
     if (!["confirmed", "on_the_way", "in_progress"].includes(job.status)) throw invalid("Solo se proponen adicionales en trabajos confirmados y en curso.");
     const a = job.contract_snapshot.amounts;
+    const discount = d.isMainQuote ? Math.min(await visitCreditFor(tx, jobId), d.laborMinor + d.materialsMinor) : 0;
     const b = computeBreakdown(
-      { laborMinor: d.laborMinor, materialsMinor: d.materialsMinor, visitMinor: 0 },
+      { laborMinor: d.laborMinor + d.materialsMinor - discount, materialsMinor: 0, visitMinor: 0 },
       { providerRateBps: a.providerRateBps, clientRateBps: a.clientRateBps, clientFeeTaxBps: a.clientFeeTaxBps },
     );
     const [e] = await tx<{ id: string }[]>`
-      insert into job_extras (job_id, description, reason, labor_minor, materials_minor, subtotal_minor, client_fee_minor, client_fee_tax_minor,
+      insert into job_extras (job_id, description, reason, labor_minor, materials_minor, discount_minor, is_main_quote, subtotal_minor, client_fee_minor, client_fee_tax_minor,
         provider_fee_minor, total_minor, provider_net_minor, proposed_by)
-      values (${jobId}, ${d.description}, ${d.reason}, ${b.laborMinor}, ${b.materialsMinor}, ${b.subtotalMinor}, ${b.clientFeeMinor},
+      values (${jobId}, ${d.description}, ${d.reason}, ${d.laborMinor}, ${d.materialsMinor}, ${discount}, ${d.isMainQuote}, ${b.subtotalMinor}, ${b.clientFeeMinor},
         ${b.clientFeeTaxMinor}, ${b.providerFeeMinor}, ${b.totalMinor}, ${b.providerNetMinor}, ${actor.id})
       returning id`;
     await recordEvent(tx, { entityType: "job", entityId: jobId, action: "extra_proposed", actorId: actor.id, data: { extraId: e.id, totalMinor: b.totalMinor } });
     await notify(tx, await clientRecipients(tx, job.request_id), {
       type: "extra",
-      title: `Adicional para aprobar · ${job.code}`,
+      title: d.isMainQuote ? `Presupuesto del arreglo para aprobar · ${job.code}` : `Adicional para aprobar · ${job.code}`,
       body: `${d.description} — ${formatMoney(b.totalMinor)} en total. No se cobra hasta que lo aceptes.`,
       link: `/app/trabajos/${jobId}`,
     });
@@ -261,7 +279,7 @@ export async function decideExtra(actor: Actor, extraId: string, decision: "acce
     await tx`update job_extras set status = ${decision}, decided_by = ${actor.id}, decided_at = now(), decision_note = ${note || null} where id = ${extraId}`;
     await recordEvent(tx, { entityType: "job", entityId: job.id, action: `extra_${decision}`, actorId: actor.id, reason: note || null, data: { extraId } });
     let checkoutUrl: string | null = null;
-    if (decision === "accepted") {
+    if (decision === "accepted" && e.total_minor > 0) {
       const [prov] = await tx<{ payout_account_ref: string | null }[]>`select payout_account_ref from providers where id = ${job.provider_id}`;
       const c = await createCharge(tx, {
         jobId: job.id,

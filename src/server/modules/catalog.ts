@@ -35,8 +35,8 @@ export async function listQuestions(db: Db, categoryId: string): Promise<Questio
 }
 
 export async function listZones(db: Db) {
-  return db<{ id: string; code: string; name: string; region: string }[]>`
-    select id, code, name, region from zones where active order by sort, name`;
+  return db<{ id: string; code: string; name: string; region: string; match_names: string[] }[]>`
+    select id, code, name, region, match_names from zones where active order by sort, name`;
 }
 
 export async function listServices(db: Db, categoryId?: string) {

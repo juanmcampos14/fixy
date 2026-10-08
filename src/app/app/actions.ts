@@ -9,6 +9,7 @@ import type { ActionState } from "@/lib/action-state";
 import { requireActor } from "@/server/auth/session";
 import * as quotes from "@/server/modules/quotes";
 import * as requests from "@/server/modules/requests";
+import { sql } from "@/server/db/client";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
 import * as props from "@/server/modules/properties";
@@ -134,6 +135,8 @@ function propertyInput(f: FormData) {
   return {
     kind: str(f, "kind") as "home", label: str(f, "label"), addressLine: str(f, "addressLine"), addressExtra: str(f, "addressExtra"),
     zoneId: str(f, "zoneId"), contactName: str(f, "contactName"), contactPhone: str(f, "contactPhone"), accessNotes: str(f, "accessNotes"),
+    lat: str(f, "lat"), lng: str(f, "lng"), placeId: str(f, "placeId"), formattedAddress: str(f, "formattedAddress"),
+    gatedCommunity: str(f, "gatedCommunity"), gatedName: str(f, "gatedName"),
   };
 }
 
@@ -208,5 +211,35 @@ export async function reviewDisputeDecideAction(_: ActionState, f: FormData): Pr
     await clientDecide(await requireActor(), str(f, "disputeId"), choice, choice === "edit" ? { rating: Number(str(f, "rating")), comment: str(f, "comment") } : undefined);
     revalidatePath(`/app/resenas/${str(f, "disputeId")}`);
     return { ok: true, message: choice === "keep" ? "Registramos que mantenés tu reseña." : choice === "edit" ? "Tu reseña quedó corregida." : "Retiraste tu reseña." };
+  });
+}
+
+export async function chooseProviderAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const [p] = await sql()<{ id: string }[]>`select id from providers where slug = ${str(f, "providerSlug")} and status = 'approved'`;
+    if (!p) return { error: "Ese profesional no está disponible." };
+    await requests.chooseProvider(await requireActor(), str(f, "requestId"), p.id);
+    revalidatePath(`/app/solicitudes/${str(f, "requestId")}`);
+    return { ok: true, message: "Le enviamos tu pedido. Te avisamos cuando responda." };
+  });
+}
+
+export async function switchToQuotesAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await requests.switchToQuotes(await requireActor(), str(f, "requestId"));
+    revalidatePath(`/app/solicitudes/${str(f, "requestId")}`);
+    return { ok: true, message: "Listo: invitamos a varios profesionales a presupuestar." };
+  });
+}
+
+export async function saveGatedRulesAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const propertyId = str(f, "propertyId");
+    const [file] = await files(f, "rulesFile");
+    const res = await props.saveGatedRules(await requireActor(), propertyId, { url: str(f, "url"), text: str(f, "text"), notes: str(f, "notes") }, file ?? null);
+    revalidatePath(`/app/propiedades/${propertyId}`);
+    return res.interpreted
+      ? { ok: true, message: `Listo: encontramos ${res.requirements.requirements.length} requisito${res.requirements.requirements.length === 1 ? "" : "s"}. Revisalos abajo.` }
+      : { error: res.reason };
   });
 }

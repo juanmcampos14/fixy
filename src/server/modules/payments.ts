@@ -276,6 +276,12 @@ async function onChargeApproved(tx: Tx, c: ChargeRow) {
     await recordEvent(tx, { entityType: "job", entityId: c.job_id, action: "extra_paid", data: { extraId: c.extra_id } });
   } else {
     await recordEvent(tx, { entityType: "job", entityId: c.job_id, action: "payment_approved", data: { chargeId: c.id } });
+    // Reserva directa: el profesional ya aceptó la visita; con el pago queda confirmada.
+    const auto = await tx<{ id: string }[]>`
+      update jobs j set status = 'confirmed', confirmed_at = now()
+      from service_requests r where r.id = j.request_id and r.request_mode = 'direct' and j.id = ${c.job_id} and j.status = 'pending_confirmation'
+      returning j.id`;
+    if (auto.length) await recordEvent(tx, { entityType: "job", entityId: c.job_id, action: "status", from: "pending_confirmation", to: "confirmed", actorRole: "system", reason: "Visita pagada; el profesional ya había aceptado" });
   }
   const amount = formatMoney(c.amount_minor);
   await notify(tx, await clientRecipients(tx, job.request_id), {

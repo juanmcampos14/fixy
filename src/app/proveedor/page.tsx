@@ -9,6 +9,9 @@ import { DemoBadge, StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
 import { ProviderStatusCard } from "@/components/provider/sections";
+import { StrengthMeter } from "@/components/provider/strength-meter";
+import { getProfileStrength } from "@/server/modules/providers";
+import { sql } from "@/server/db/client";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Inicio" };
@@ -19,6 +22,7 @@ export default async function ProviderHome() {
     getDashboard(actor.id, provider.id, isAdmin),
     isAdmin ? getOnboardingState(actor.id, provider.id) : Promise.resolve(null),
   ]);
+  const strength = isAdmin ? await getProfileStrength(sql(), provider.id) : null;
   const pendingActions = dash.toConfirm.length + dash.extrasWaiting.length + dash.reschedulesToAnswer.length + dash.openDisputes.length;
 
   return (
@@ -36,6 +40,7 @@ export default async function ProviderHome() {
             Revisá lo que falta en <Link href="/proveedor/alta">Alta de proveedor</Link>. Las oportunidades llegan cuando se cumplen los requisitos.
           </Alert>
         )}
+        {strength && strength.score < 100 && <Card><StrengthMeter {...strength} max={3} /></Card>}
         {isAdmin && state && <ProviderStatusCard provider={state.provider} checklist={state.checklist} eligibility={state.eligibility} />}
 
         <div className="grid gap-3 sm:grid-cols-3">

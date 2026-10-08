@@ -11,30 +11,40 @@ import { ButtonLink } from "@/components/ui/button";
 import { DemoBadge } from "@/components/ui/badge";
 import { ProfileForm } from "@/components/provider/profile-form";
 import { CoverageSection, Done, DocumentsSection, PayoutsSection, PortfolioSection, ProviderStatusCard, TermsSection } from "@/components/provider/sections";
-import { createProviderAction, submitForReviewAction, updateProfileAction } from "./actions";
+import { submitForReviewAction, updateProfileAction } from "./actions";
+import { QuickStart } from "@/components/provider/quick-start";
+import { StrengthMeter } from "@/components/provider/strength-meter";
+import { profileAssistantAvailable } from "@/server/assistant/provider-profile";
+import { getProfileStrength } from "@/server/modules/providers";
+import { sql } from "@/server/db/client";
 import { formatDateTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Alta de proveedor" };
 
-export default async function AltaPage() {
+export default async function AltaPage({ searchParams }: { searchParams: Promise<{ bienvenida?: string }> }) {
+  const { bienvenida } = await searchParams;
   const actor = await getActor();
   if (!actor) redirect("/registro?tipo=proveedor");
   const m = activeMembership(actor);
   if (m && m.role !== "admin") redirect("/proveedor");
 
   if (!m) {
+    const [categories, zones] = await Promise.all([
+      sql()<{ id: string; name: string; icon: string }[]>`select id, name, icon from categories where active order by sort, name`,
+      sql()<{ id: string; name: string; region: string }[]>`select id, name, region from zones where active order by sort, name`,
+    ]);
+    const ai = profileAssistantAvailable();
     return (
       <>
         <div className="flex items-end justify-between gap-4">
-          <PageHeader eyebrow="Alta de proveedor · paso 1" title="Contanos sobre tu servicio" description="Con esto creamos tu perfil. Después sumás servicios y zonas, disponibilidad, fotos, documentación y cobros. Podés completarlo de a poco." />
+          <PageHeader eyebrow="Sumate a Fixy · 2 minutos" title="Contanos qué hacés y armamos tu perfil"
+            description={ai
+              ? "Escribilo con tus palabras: nuestra IA lo convierte en un perfil listo para revisar. Después sumás fotos y documentación para empezar a recibir pedidos."
+              : "Tu nombre, tu celular y qué hacés. Después sumás fotos y documentación para empezar a recibir pedidos."} />
           <Mascot pose="wave" className="hidden h-24 w-auto shrink-0 sm:block" />
         </div>
         <Card>
-          <ProfileForm
-            action={createProviderAction}
-            submitLabel="Crear mi perfil"
-            defaults={{ kind: "individual", displayName: "", legalName: "", taxId: "", responsibleName: actor.fullName, contactEmail: actor.email, contactPhone: "", description: "", yearsExperience: "", billingInfo: "" }}
-          />
+          <QuickStart categories={categories} zones={zones} aiAvailable={ai} defaultName={actor.fullName} />
         </Card>
         <p className="mt-4 text-sm text-muted">
           ¿Querés saber cómo funciona antes? Leé <Link href="/sumate" className="font-semibold text-fixy-800 underline">Ofrecé tus servicios</Link>.
@@ -43,7 +53,7 @@ export default async function AltaPage() {
     );
   }
 
-  const [state, setup] = await Promise.all([getOnboardingState(actor.id, m.id), getProviderSetup(actor.id, m.id)]);
+  const [state, setup, strength] = await Promise.all([getOnboardingState(actor.id, m.id), getProviderSetup(actor.id, m.id), getProfileStrength(sql(), m.id)]);
   if (!state) redirect("/proveedor");
   const { provider, checklist, eligibility } = state;
   const credsOk = checklist.requiredCredentials.every((c) => c.uploaded);
@@ -66,11 +76,21 @@ export default async function AltaPage() {
         title={<span className="inline-flex flex-wrap items-center gap-2">{provider.display_name} {provider.is_demo && <DemoBadge />}</span>}
         description="Completá cada sección. Podés guardar y volver cuando quieras. Las oportunidades llegan cuando se cumplen todos los requisitos."
       />
+      {bienvenida && (
+        <Alert tone="ok" className="mb-5" title="¡Tu perfil está creado!">
+          Ahora sumá fotos de trabajos, tu DNI y los datos de cobro. Cada paso sube la fuerza de tu perfil y te muestra más arriba.
+        </Alert>
+      )}
       <div className="space-y-5">
+        {strength && (
+          <Card className="ring-2 ring-fixy-500/20">
+            <StrengthMeter {...strength} />
+          </Card>
+        )}
         <ProviderStatusCard provider={provider} checklist={checklist} eligibility={eligibility} />
 
         <Card>
-          <CardHeader title="Tu progreso" />
+          <CardHeader title="Para empezar a recibir pedidos" description="Lo obligatorio para que el equipo apruebe tu perfil." />
           <ol className="grid gap-2 sm:grid-cols-2">
             {steps.map(([ok, label, href]) => (
               <Done key={label} ok={ok}><a href={href} className="underline-offset-2 hover:underline">{label}</a></Done>

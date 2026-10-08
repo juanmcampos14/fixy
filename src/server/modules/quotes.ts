@@ -1,7 +1,8 @@
 /** Presupuestos: creación por el proveedor, comparación y aceptación atómica por el cliente. */
+import { randomInt } from "node:crypto";
 import { z } from "zod";
 import type { Tx } from "@/server/db/client";
-import { systemTx } from "@/server/db/client";
+import { sql, systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
 import { audit, recordEvent } from "@/server/audit";
 import { DomainError, conflict, forbidden, invalid, notFound } from "@/server/domain/errors";
@@ -54,8 +55,8 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     if (!["invited", "viewed"].includes(inv.status)) throw invalid("Esta oportunidad ya no admite presupuestos.");
     const elig = await providerEligibility(tx, inv.provider_id);
     if (!elig.eligible) throw new DomainError("not_eligible", elig.reasons.join(" "));
-    const [req] = await tx<{ status: RequestStatus; category_id: string | null; code: string; service_id: string | null }[]>`
-      select status, category_id, code, service_id from service_requests where id = ${inv.request_id} for update`;
+    const [req] = await tx<{ status: RequestStatus; category_id: string | null; code: string; service_id: string | null; request_mode: string }[]>`
+      select status, category_id, code, service_id, request_mode from service_requests where id = ${inv.request_id} for update`;
     if (!["searching", "with_quotes"].includes(req.status)) throw invalid("La solicitud ya no recibe presupuestos.");
     if (await check(tx, "is_request_client", actor, inv.request_id)) throw invalid("No podés cotizar una solicitud propia.");
     if (d.mode === "fixed") {
@@ -66,7 +67,7 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     const sum = (k: string) => d.items.filter((i) => i.kind === k).reduce((s, i) => s + i.quantity * i.unitPriceMinor, 0);
     const rule = await commissionRuleFor(tx, req.category_id);
     const b = computeBreakdown({ laborMinor: sum("labor"), materialsMinor: sum("materials"), visitMinor: sum("visit") }, rule);
-    if (b.subtotalMinor <= 0) throw invalid("El total debe ser mayor a cero.");
+    if (b.subtotalMinor <= 0 && d.mode !== "diagnostic") throw invalid("El total debe ser mayor a cero.");
 
     const validUntil = new Date(Date.now() + d.validDays * 86400_000);
     const [q] = await tx<{ id: string }[]>`
@@ -93,10 +94,13 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
       await recordEvent(tx, { entityType: "request", entityId: inv.request_id, action: "status", from: "searching", to: "with_quotes" });
     }
     await recordEvent(tx, { entityType: "request", entityId: inv.request_id, action: "quote_received", data: { quoteId: q.id, providerId: inv.provider_id } });
+    const direct = req.request_mode === "direct";
     await notify(tx, await clientRecipients(tx, inv.request_id), {
       type: "quote_received",
-      title: `Recibiste un presupuesto · ${req.code}`,
-      body: `Total: ${formatMoney(b.totalMinor)}. Revisá qué incluye antes de confirmar.`,
+      title: direct ? `El profesional aceptó tu pedido · ${req.code}` : `Recibiste un presupuesto · ${req.code}`,
+      body: direct
+        ? `Propone visitarte${d.proposedDate ? ` el ${d.proposedDate}` : ""}. ${b.totalMinor > 0 ? `Visita: ${formatMoney(b.totalMinor)}.` : "La visita es sin cargo."} Confirmala en Fixy.`
+        : `Total: ${formatMoney(b.totalMinor)}. Revisá qué incluye antes de confirmar.`,
       link: `/app/solicitudes/${inv.request_id}`,
     });
     return q.id;
@@ -170,8 +174,8 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
   return systemTx(async (tx) => {
     const [qRef] = await tx<{ request_id: string }[]>`select request_id from quotes where id = ${quoteId}`;
     if (!qRef) throw notFound();
-    const [req] = await tx<{ id: string; status: RequestStatus; created_by: string; organization_id: string | null; property_id: string; category_id: string | null; code: string; title: string; description: string }[]>`
-      select id, status, created_by, organization_id, property_id, category_id, code, title, description
+    const [req] = await tx<{ id: string; status: RequestStatus; created_by: string; organization_id: string | null; property_id: string; category_id: string | null; code: string; title: string; description: string; request_mode: string }[]>`
+      select id, status, created_by, organization_id, property_id, category_id, code, title, description, request_mode
       from service_requests where id = ${qRef.request_id} for update`;
     if (!(await check(tx, "is_request_client", actor, req.id))) throw forbidden();
 
@@ -233,15 +237,16 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
       },
       cancellationTerms: q.cancellation_terms,
     };
+    const visitCode = String(randomInt(0, 10000)).padStart(4, "0");
     const [job] = await tx<{ id: string; code: string }[]>`
       insert into jobs (request_id, quote_id, provider_id, client_user_id, organization_id, property_id, category_id, mode,
-        scheduled_date, scheduled_window, contract_snapshot, total_minor, provider_net_minor)
+        scheduled_date, scheduled_window, contract_snapshot, total_minor, provider_net_minor, visit_code)
       values (${req.id}, ${quoteId}, ${q.provider_id}, ${req.created_by}, ${req.organization_id}, ${req.property_id}, ${req.category_id},
-        ${q.mode}, ${q.proposed_date}, ${q.proposed_window}, ${tx.json(snapshot as never)}, ${q.total_minor}, ${q.provider_net_minor})
+        ${q.mode}, ${q.proposed_date}, ${q.proposed_window}, ${tx.json(snapshot as never)}, ${q.total_minor}, ${q.provider_net_minor}, ${visitCode})
       returning id, code`;
     await tx`update conversations set job_id = ${job.id} where request_id = ${req.id} and provider_id = ${q.provider_id}`;
 
-    const charge = await createCharge(tx, {
+    const charge = q.total_minor === 0 ? null : await createCharge(tx, {
       jobId: job.id,
       kind: q.mode === "diagnostic" ? "visit" : "job_total",
       amountMinor: q.total_minor,
@@ -268,6 +273,52 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
       link: `/proveedor/trabajos/${job.id}`,
     });
     await audit(tx, actor, "quote.accept", "job", job.id, null, { quoteId, totalMinor: q.total_minor });
-    return { jobId: job.id, checkoutUrl: charge.checkout_url, alreadyAccepted: false };
+    // Reserva directa con visita sin cargo: el profesional ya aceptó, queda confirmada.
+    if (!charge && req.request_mode === "direct") {
+      await tx`update jobs set status = 'confirmed', confirmed_at = now() where id = ${job.id}`;
+      await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: "pending_confirmation", to: "confirmed", actorRole: "system", reason: "Visita sin cargo confirmada por ambas partes" });
+    }
+    return { jobId: job.id, checkoutUrl: charge?.checkout_url ?? null, alreadyAccepted: false };
+  });
+}
+
+// ───────────────────────── Reserva directa: el profesional acepta ─────────────────────────
+
+export const acceptBookingSchema = z.object({
+  proposedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Proponé una fecha para la visita."),
+  proposedWindow: z.string().trim().min(2, "Indicá una franja horaria.").max(60),
+  note: z.string().trim().max(1000).default(""),
+  accessAcknowledged: z.boolean().optional(),
+});
+
+/**
+ * El profesional elegido acepta la reserva: se genera la propuesta de visita con el precio de su perfil
+ * (puede ser sin cargo). El cliente la confirma (y la paga si tiene costo) y recién ahí se revela la dirección.
+ */
+export async function acceptBooking(actor: Actor, invitationId: string, input: z.infer<typeof acceptBookingSchema>) {
+  const d = acceptBookingSchema.parse(input);
+  const [inv] = await sql()<{ provider_id: string; request_id: string; status: string; request_mode: string }[]>`
+    select i.provider_id, i.request_id, i.status, r.request_mode from request_invitations i join service_requests r on r.id = i.request_id where i.id = ${invitationId}`;
+  if (!inv) throw notFound();
+  if (inv.request_mode !== "direct") throw invalid("Este pedido es de presupuestos: cotizalo con el formulario de presupuesto.");
+  const [gated] = await sql()<{ gated: boolean }[]>`
+    select p.gated_community as gated from service_requests r join properties p on p.id = r.property_id where r.id = ${inv.request_id}`;
+  if (gated?.gated && !d.accessAcknowledged) throw invalid("Es un barrio cerrado: confirmá que tenés lo necesario para entrar.");
+  const [p] = await sql()<{ visit_fee_minor: number; visit_fee_credited: boolean }[]>`select visit_fee_minor, visit_fee_credited from providers where id = ${inv.provider_id}`;
+  const scope = [
+    "Visita para ver el problema en el lugar y presupuestar el arreglo dentro de Fixy.",
+    p.visit_fee_minor > 0 && p.visit_fee_credited ? "Si contratás el arreglo, el costo de la visita se descuenta del presupuesto." : "",
+    d.note,
+  ].filter(Boolean).join("\n");
+  return createQuote(actor, {
+    invitationId,
+    mode: "diagnostic",
+    scope,
+    exclusions: "El arreglo se presupuesta en el lugar y solo se hace si lo aprobás en la app.",
+    materialsIncluded: false,
+    proposedDate: d.proposedDate,
+    proposedWindow: d.proposedWindow,
+    validDays: 2,
+    items: [{ kind: "visit", description: p.visit_fee_minor > 0 ? "Visita y diagnóstico" : "Visita y diagnóstico (sin cargo)", quantity: 1, unitPriceMinor: p.visit_fee_minor }],
   });
 }

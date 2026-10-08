@@ -11,8 +11,11 @@ import type { Actor } from "@/server/auth/actor";
 import { forbidden } from "@/server/domain/errors";
 import {
   acceptProviderTerms, addPortfolioItem, coverageSchema, createProvider, documentSchema, providerProfileSchema, removePortfolioItem,
-  setupPayouts, submitForReview, updateCoverage, updateProviderProfile, uploadProviderDocument,
+  setupPayouts, submitForReview, updateCoverage, updateProviderProfile, uploadProviderDocument, quickStartProvider, quickStartSchema,
 } from "@/server/modules/providers";
+import { AVAILABILITY_PRESETS, draftProviderProfile, type AvailabilityPreset } from "@/server/assistant/provider-profile";
+import { rateLimit } from "@/server/rate-limit";
+import { sql } from "@/server/db/client";
 
 /** El proveedor sobre el que se actúa sale siempre de la sesión (nunca del formulario). */
 function adminProviderId(actor: Actor): string {
@@ -167,4 +170,73 @@ export async function submitForReviewAction(): Promise<ActionState> {
     revalidateProvider();
     return { ok: true, message: "Enviamos tu perfil a revisión. Te avisamos cuando haya novedades." };
   });
+}
+
+// ───────── Alta rápida ─────────
+
+export type QuickDraft = {
+  displayName: string; description: string; yearsExperience: string; categoryIds: string[]; zoneIds: string[]; baseZoneId: string;
+  availability: AvailabilityPreset | ""; priceRefs: { categoryId: string; title: string; fromPesos: string }[]; tips: string[];
+};
+
+/** Borrador con IA a partir del texto libre. Devuelve ids del catálogo; nunca guarda nada. */
+export async function draftProfileWithAi(input: { kind: "individual" | "company"; name: string; text: string }): Promise<{ draft?: QuickDraft; error?: string }> {
+  const actor = await requireActor("/proveedor/alta");
+  if (input.text.trim().length < 20) return { error: "Contanos un poco más (al menos una oración) para que la IA pueda ayudarte." };
+  try {
+    await rateLimit(`profile-ai:${actor.id}`, 8, 3600);
+  } catch {
+    return { error: "Usaste el asistente muchas veces seguidas. Probá en un rato o completalo a mano." };
+  }
+  const cats = await sql()<{ id: string; slug: string; name: string }[]>`select id, slug, name from categories where active order by sort, name`;
+  const zones = await sql()<{ id: string; code: string; name: string; region: string }[]>`select id, code, name, region from zones where active order by sort, name`;
+  const d = await draftProviderProfile(input.text, { kind: input.kind, name: input.name, categories: cats, zones });
+  if (!d) return { error: "El asistente no está disponible ahora. Completá los datos a mano: es rápido." };
+  const catId = (slug: string) => cats.find((c) => c.slug === slug)?.id;
+  const zoneId = (code: string | null) => zones.find((z) => z.code === code)?.id;
+  return {
+    draft: {
+      displayName: input.name.trim() || d.displayName,
+      description: d.description,
+      yearsExperience: d.yearsExperience?.toString() ?? "",
+      categoryIds: d.categorySlugs.map(catId).filter((x): x is string => !!x),
+      zoneIds: d.zoneCodes.map(zoneId).filter((x): x is string => !!x),
+      baseZoneId: zoneId(d.baseZoneCode) ?? "",
+      availability: d.availability ?? "",
+      priceRefs: d.priceRefs.map((p) => ({ categoryId: catId(p.categorySlug) ?? "", title: p.title, fromPesos: String(p.fromPesos) })).filter((p) => p.categoryId),
+      tips: d.tips,
+    },
+  };
+}
+
+export async function quickStartAction(payload: {
+  kind: "individual" | "company"; displayName: string; contactPhone: string; description: string; yearsExperience: string;
+  categoryIds: string[]; zoneIds: string[]; baseZoneId: string; availability: AvailabilityPreset | "";
+  priceRefs: { categoryId: string; title: string; fromPesos: string }[]; aiAssisted: boolean;
+}): Promise<ActionState> {
+  const r = await act(async () => {
+    const actor = await requireActor("/proveedor/alta");
+    const preset = payload.availability ? AVAILABILITY_PRESETS[payload.availability] : null;
+    const v = validate(quickStartSchema, {
+      kind: payload.kind, displayName: payload.displayName, contactPhone: payload.contactPhone, description: payload.description,
+      yearsExperience: payload.yearsExperience === "" ? undefined : payload.yearsExperience,
+      categoryIds: payload.categoryIds, zoneIds: payload.zoneIds, baseZoneId: payload.baseZoneId,
+      availability: preset ? preset.days.map((weekday) => ({ weekday, startMinute: preset.start, endMinute: preset.end })) : [],
+      priceRefs: payload.priceRefs.filter((p) => p.categoryId && p.title.trim() && Number(p.fromPesos) > 0)
+        .map((p) => ({ categoryId: p.categoryId, title: p.title, fromMinor: Math.round(Number(p.fromPesos) * 100) })),
+      aiAssisted: payload.aiAssisted,
+    });
+    if ("state" in v) return v.state;
+    let origin: { source?: string; referrerSlug?: string } = {};
+    try {
+      const c = JSON.parse((await cookies()).get("fixy_signup")?.value ?? "{}");
+      origin = { source: typeof c.origen === "string" ? c.origen : undefined, referrerSlug: typeof c.ref === "string" && c.ref ? c.ref : undefined };
+    } catch {}
+    await quickStartProvider(actor, v.data, origin);
+    (await cookies()).delete("fixy_signup");
+    revalidateProvider();
+    return { ok: true };
+  });
+  if (r.ok) redirect("/proveedor/alta?bienvenida=1");
+  return r;
 }

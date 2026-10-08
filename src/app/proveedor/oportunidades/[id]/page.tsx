@@ -17,6 +17,8 @@ import { ConfirmAction } from "@/components/ui/form";
 import { MessageThread } from "@/components/domain/messages";
 import { ProviderNetBreakdown } from "@/components/domain/price";
 import { QuoteForm } from "@/components/provider/quote-form";
+import { AcceptBookingForm } from "@/components/provider/accept-booking-form";
+import { AccessRequirementsView } from "@/components/domain/access-requirements";
 import { INVITATION_STATUS_LABEL, ITEM_KIND_LABEL, REGION_LABEL } from "@/components/provider/constants";
 import { declineInvitationAction, withdrawQuoteAction } from "../../actions";
 
@@ -42,6 +44,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const answers = Object.entries(request.answers ?? {}).filter(([, v]) => v !== "" && v != null);
   const labelFor = (k: string) => o!.questions.find((q) => q.key === k)?.label ?? k;
   const path = `/proveedor/oportunidades/${id}`;
+  const [visitFee] = await sql()<{ visit_fee_minor: number; visit_fee_credited: boolean }[]>`select visit_fee_minor, visit_fee_credited from providers where id = ${provider.id}`;
 
   return (
     <>
@@ -78,6 +81,13 @@ export default async function OpportunityPage({ params, searchParams }: { params
             )}
           </Card>
 
+          {o.access && (
+            <Card className="ring-2 ring-warn/30">
+              <CardHeader title="Barrio cerrado: requisitos para entrar" description="Revisalos antes de aceptar. La ubicación exacta y el nombre del barrio se comparten cuando el cliente confirma la visita." />
+              <AccessRequirementsView req={o.access.gated_requirements} notes={o.access.gated_client_notes} audience="provider" />
+            </Card>
+          )}
+
           {quote ? (
             <Card>
               <CardHeader title="Tu presupuesto" action={<StatusBadge status={quote.status} labels={quoteStatusLabel} />} />
@@ -106,6 +116,17 @@ export default async function OpportunityPage({ params, searchParams }: { params
                 </div>
               )}
             </Card>
+          ) : invitationOpen && requestOpen && request.request_mode === "direct" ? (
+            eligible ? (
+              <Card className="ring-2 ring-fixy-500/30">
+                <CardHeader title="Este cliente te eligió" description={inv.respond_by ? `Respondé antes del ${formatDateTime(inv.respond_by)}. Si no respondés, el cliente elige a otro profesional.` : "Respondé lo antes posible."} />
+                <AcceptBookingForm invitationId={inv.id} visitFeeMinor={visitFee.visit_fee_minor} visitFeeCredited={visitFee.visit_fee_credited} windows={TIME_WINDOWS.map((w) => w.label)} defaultDate={todayInBuenosAires()} gated={!!o.access} />
+              </Card>
+            ) : (
+              <Alert tone="warn" title="Todavía no podés tomar pedidos">
+                <ul className="list-disc pl-5">{state?.eligibility.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+              </Alert>
+            )
           ) : invitationOpen && requestOpen ? (
             eligible ? (
               <Card>
@@ -125,7 +146,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
 
           {o.conversationId && (
             <Card>
-              <CardHeader title="Mensajes con el cliente" description="Hacé preguntas para cotizar mejor. No pidas ni compartas datos de contacto: la dirección se revela cuando el pago esté aprobado." />
+              <CardHeader title="Mensajes con el cliente" description="Hacé preguntas para cotizar mejor. No pidas ni compartas datos de contacto: la dirección se revela cuando el cliente confirma la visita." />
               <MessageThread conversationId={o.conversationId} messages={o.messages} path={path} disabled={!requestOpen && !o.jobId} />
             </Card>
           )}

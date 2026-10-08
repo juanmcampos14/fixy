@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AccessRequirementsView } from "@/components/domain/access-requirements";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lock, MapPin } from "lucide-react";
 import { getJobDetail, jobMoney } from "@/server/queries/shared";
@@ -19,6 +20,8 @@ import { MessageThread } from "@/components/domain/messages";
 import { EvidenceGallery } from "@/components/domain/evidence";
 import { ProviderNetBreakdown } from "@/components/domain/price";
 import { ExtraForm } from "@/components/provider/extra-form";
+import { systemTx } from "@/server/db/client";
+import { visitCreditFor } from "@/server/modules/jobs";
 import { EVIDENCE_KIND_LABEL, ITEM_KIND_LABEL } from "@/components/provider/constants";
 import {
   addEvidenceAction, assignTechnicianAction, cancelJobAction, confirmJobAction, decideRescheduleAction, jobStepAction, proposeRescheduleAction, withdrawExtraAction,
@@ -44,6 +47,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const status = job.status;
   const paid = d.charges.some((c) => ["visit", "job_total", "deposit"].includes(c.kind) && ["approved", "partially_refunded", "refunded"].includes(c.status));
   const active = ["confirmed", "on_the_way", "in_progress", "pending_approval"].includes(status);
+  const visitCredit = await systemTx((tx) => visitCreditFor(tx, id));
   const closed = status === "completed" || status === "cancelled";
   const pendingReschedule = d.reschedules.find((r) => r.status === "proposed");
   const team = isAdmin ? (await listTeam(actor.id, job.provider_id)).filter((m) => m.active) : [];
@@ -86,10 +90,10 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             {status === "confirmed" && (
               <div className="flex flex-wrap gap-2">
                 <StepButton jobId={id} step="on_the_way" label="Estoy en camino" />
-                <StepButton jobId={id} step="start" label="Empezar trabajo" variant="secondary" />
+                <StartForm jobId={id} variant="secondary" />
               </div>
             )}
-            {status === "on_the_way" && <StepButton jobId={id} step="start" label="Empezar trabajo" />}
+            {status === "on_the_way" && <StartForm jobId={id} />}
             {status === "in_progress" && (
               <ConfirmAction action={jobStepAction} label="Informar que terminé" title="¿Terminaste el trabajo?" confirmLabel="Informar finalización"
                 description="El cliente revisa y da su conformidad. Si hay un adicional pendiente, retiralo o esperá la respuesta antes." hidden={{ jobId: id, step: "finish" }}>
@@ -157,13 +161,13 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           {/* Adicionales */}
           {(isAdmin || d.extras.length > 0) && (
             <Card>
-              <CardHeader title="Adicionales" description="Trabajo extra fuera del alcance acordado. Solo se hace y se cobra si el cliente lo acepta." />
+              <CardHeader title={d.job.mode === "diagnostic" ? "Presupuesto del arreglo y adicionales" : "Adicionales"} description={d.job.mode === "diagnostic" ? "Después de ver el problema, presupuestá el arreglo acá. Solo se hace y se cobra si el cliente lo aprueba en la app." : "Trabajo extra fuera del alcance acordado. Solo se hace y se cobra si el cliente lo acepta."} />
               {d.extras.length > 0 && (
                 <ul className="mb-4 divide-y divide-line">
                   {d.extras.map((e) => (
                     <li key={e.id} className="py-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="font-semibold">{e.description}</p>
+                        <p className="font-semibold">{(e as { is_main_quote?: boolean }).is_main_quote && <span className="mr-1 text-xs font-bold uppercase text-fixy-800">Arreglo ·</span>}{e.description}</p>
                         <Badge tone={EXTRA_TONE[e.status as keyof typeof EXTRA_TONE] ?? "neutral"}>{EXTRA_STATUS[e.status] ?? e.status}</Badge>
                       </div>
                       <p className="text-sm text-muted">{e.reason}</p>
@@ -181,7 +185,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 </ul>
               )}
               {isAdmin && ["confirmed", "on_the_way", "in_progress"].includes(status) ? (
-                <ExtraForm jobId={id} rule={{ providerRateBps: snap.amounts.providerRateBps, clientRateBps: snap.amounts.clientRateBps, clientFeeTaxBps: snap.amounts.clientFeeTaxBps }} />
+                <ExtraForm jobId={id} rule={{ providerRateBps: snap.amounts.providerRateBps, clientRateBps: snap.amounts.clientRateBps, clientFeeTaxBps: snap.amounts.clientFeeTaxBps }}
+                  mainQuote={d.job.mode === "diagnostic" && !d.extras.some((e) => (e as { is_main_quote?: boolean }).is_main_quote && ["proposed", "accepted"].includes(e.status)) ? { creditMinor: visitCredit } : null} />
               ) : isAdmin && d.extras.length === 0 ? (
                 <p className="text-sm text-muted">Los adicionales se proponen con el trabajo confirmado o en curso.</p>
               ) : null}
@@ -284,14 +289,28 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 {(d.property.contact_name || d.property.contact_phone) && <p>Contacto: {[d.property.contact_name, d.property.contact_phone].filter(Boolean).join(" · ")}</p>}
                 {d.property.access_notes && <p>Acceso: {d.property.access_notes}</p>}
                 {d.accessInfo && <p>Indicaciones del pedido: {d.accessInfo}</p>}
+                {d.property.gated_name && <p>Barrio: <strong>{d.property.gated_name}</strong></p>}
+                {(d.rulesFileUrl || d.property.gated_rules_url) && (
+                  <p className="flex flex-wrap gap-x-3">
+                    {d.rulesFileUrl && <a className="font-semibold text-fixy-800 underline" href={d.rulesFileUrl} target="_blank" rel="noreferrer">Reglamento del barrio</a>}
+                    {d.property.gated_rules_url && <a className="font-semibold text-fixy-800 underline" href={d.property.gated_rules_url} target="_blank" rel="noreferrer nofollow">Link del reglamento</a>}
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-2 text-[15px]">
                 <p>{d.zoneName}</p>
-                <p className="flex gap-2 text-sm text-muted"><Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />Se revela cuando el pago esté aprobado.</p>
+                <p className="flex gap-2 text-sm text-muted"><Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />Se revela cuando el cliente confirma la visita.</p>
               </div>
             )}
           </Card>
+
+          {d.access && (
+            <Card>
+              <CardHeader title="Requisitos para entrar al barrio" />
+              <AccessRequirementsView req={d.access.gated_requirements} notes={d.access.gated_client_notes} audience="provider" />
+            </Card>
+          )}
 
           {isAdmin && status !== "completed" && status !== "cancelled" && (
             <Card>
@@ -357,6 +376,23 @@ function StepButton({ jobId, step, label, variant = "primary" }: { jobId: string
       <input type="hidden" name="jobId" value={jobId} />
       <input type="hidden" name="step" value={step} />
       <SubmitButton variant={variant} pendingText="Guardando…">{label}</SubmitButton>
+    </ActionForm>
+  );
+}
+
+/** Al llegar, el cliente le dicta al profesional el código de visita: registra que la visita ocurrió. */
+function StartForm({ jobId, variant = "primary" }: { jobId: string; variant?: "primary" | "secondary" }) {
+  return (
+    <ActionForm action={jobStepAction} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="jobId" value={jobId} />
+      <input type="hidden" name="step" value="start" />
+      <div>
+        <label htmlFor={`code-${jobId}`} className="block text-sm font-semibold">Código de visita</label>
+        <input id={`code-${jobId}`} name="visitCode" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required placeholder="0000"
+          className="mt-1 block h-11 w-28 rounded-xl border border-[#d3dfdc] px-3 text-center text-lg tracking-[0.3em] focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+      </div>
+      <SubmitButton variant={variant} pendingText="Verificando…">Llegué: empezar</SubmitButton>
+      <p className="w-full text-xs text-muted">Pedíselo al cliente al llegar: lo ve en el detalle del trabajo en Fixy.</p>
     </ActionForm>
   );
 }

@@ -140,6 +140,15 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   );
   await approveAll(sin);
   await refresh();
+  // Visita y precios de referencia (modelo "elegí a tu profesional")
+  await providers.updateVisitSettings(A.martin, martin, { visitFeeMinor: 1_500_000, visitFeeCredited: true });
+  await providers.addPriceRef(A.martin, martin, { categoryId: await cat("electricidad"), title: "Instalación de luminaria (punto existente)", fromMinor: 2_800_000 });
+  await providers.addPriceRef(A.martin, martin, { categoryId: await cat("electricidad"), title: "Cambio de térmica o disyuntor", fromMinor: 4_000_000, note: "no incluye el material" });
+  await providers.updateVisitSettings(A.lucia, lucia, { visitFeeMinor: 0, visitFeeCredited: false });
+  await providers.addPriceRef(A.lucia, lucia, { categoryId: await cat("plomeria"), title: "Cambio de cartucho de monocomando", fromMinor: 2_500_000 });
+  await providers.updateVisitSettings(A.roberto, sin, { visitFeeMinor: 2_000_000, visitFeeCredited: true });
+  await providers.addPriceRef(A.roberto, sin, { categoryId: await cat("climatizacion"), title: "Instalación de split hasta 3000 frigorías", fromMinor: 18_000_000, note: "hasta 3 m de cañería; soportes aparte" });
+  await providers.addPriceRef(A.roberto, sin, { categoryId: await cat("plomeria"), title: "Cambio de mecanismo de mochila", fromMinor: 3_000_000 });
   await providers.addProviderMember(A.roberto, sin, demoEmail("jorge"), "technician");
   await providers.addProviderMember(A.roberto, sin, demoEmail("valeria"), "technician");
 
@@ -167,6 +176,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await refresh();
 
   // ── Helpers de flujo ──
+  const visitCode = async (jobId: string) => (await db<{ visit_code: string }[]>`select visit_code from jobs where id = ${jobId}`)[0].visit_code;
   const pay = async (jobId: string, kind?: string) => {
     const [c] = await db<{ external_reference: string }[]>`
       select external_reference from charges where job_id = ${jobId} and status = 'pending' ${kind ? db`and kind = ${kind}` : db``} order by created_at desc limit 1`;
@@ -213,7 +223,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   const jobA = await hire(A.ana, qA);
   await jobs.confirmJob(A.martin, jobA);
   await jobs.markOnTheWay(A.martin, jobA);
-  await jobs.startJob(A.martin, jobA);
+  await jobs.startJob(A.martin, jobA, await visitCode(jobA));
   await jobs.addEvidence(A.martin, jobA, { kind: "before", note: "Térmica original con signos de recalentamiento." }, asset("demo-1.jpg"));
   await jobs.addEvidence(A.martin, jobA, { kind: "after", note: "Térmica nueva instalada y circuito probado con el horno encendido." }, asset("demo-2.jpg"));
   await jobs.finishJob(A.martin, jobA, "Trabajo terminado y probado.");
@@ -255,7 +265,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await jobs.confirmJob(A.roberto, jobC);
   await jobs.assignTechnician(A.roberto, jobC, ids.jorge);
   await refresh();
-  await jobs.startJob(A.jorge, jobC);
+  await jobs.startJob(A.jorge, jobC, await visitCode(jobC));
   await jobs.addEvidence(A.jorge, jobC, { kind: "progress", note: "Puertas ajustadas. Una luminaria tiene el balasto quemado." }, asset("demo-4.jpg"));
   await jobs.proposeExtra(A.roberto, jobC, { description: "Reemplazo de balasto electrónico en luminaria de sala de reuniones", reason: "El balasto está quemado y es la causa del parpadeo.", laborMinor: 1_500_000, materialsMinor: 2_200_000 });
 
@@ -278,7 +288,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await jobs.assignTechnician(A.roberto, jobD, ids.valeria);
   await refresh();
   await jobs.markOnTheWay(A.valeria, jobD);
-  await jobs.startJob(A.valeria, jobD);
+  await jobs.startJob(A.valeria, jobD, await visitCode(jobD));
   await jobs.addEvidence(A.valeria, jobD, { kind: "after", note: "Diagnóstico: falta de gas refrigerante por microfisura en la unidad exterior. Se recomienda reparación y carga." }, asset("demo-5.jpg"));
   await jobs.finishJob(A.valeria, jobD, "Diagnóstico entregado.");
 
@@ -295,7 +305,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   ]);
   const jobE = await hire(A.carla, qE);
   await jobs.confirmJob(A.roberto, jobE);
-  await jobs.startJob(A.roberto, jobE);
+  await jobs.startJob(A.roberto, jobE, await visitCode(jobE));
   await jobs.finishJob(A.roberto, jobE, "Mecanismo reemplazado.");
   await jobs.approveJob(A.carla, jobE);
   await disputes.createReview(A.carla, jobE, { rating: 4, comment: "Resolvieron rápido. Avisaron con tiempo el horario. (Reseña de demostración)" });
@@ -313,7 +323,7 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   });
   const jobF = await hire(A.ana, qF);
   await jobs.confirmJob(A.martin, jobF);
-  await jobs.startJob(A.martin, jobF);
+  await jobs.startJob(A.martin, jobF, await visitCode(jobF));
   await jobs.finishJob(A.martin, jobF, "Lámpara instalada.");
   await disputes.openDispute(A.ana, jobF, { reasonCode: "quality", description: "La lámpara quedó torcida y una de las lamparitas no enciende. Le escribí al profesional pero todavía no respondió." }, asset("demo-6.jpg"));
 

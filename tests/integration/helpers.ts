@@ -39,3 +39,5 @@ export async function totalOf(quoteId: string) {
 }
 
 export const ledgerBalance = async () => (await sql()<{ s: number }[]>`select coalesce(sum(amount_minor),0)::bigint as s from ledger_entries`)[0].s;
+
+export const visitCode = async (jobId: string) => (await sql()<{ visit_code: string }[]>`select visit_code from jobs where id = ${jobId}`)[0].visit_code;

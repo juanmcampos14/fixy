@@ -19,8 +19,9 @@ export type FilePurpose =
   | "request_photo"
   | "job_evidence"
   | "message_attachment"
-  | "dispute_evidence";
-export type FileOwnerType = "provider" | "request" | "job" | "conversation" | "dispute";
+  | "dispute_evidence"
+  | "property_document";
+export type FileOwnerType = "provider" | "request" | "job" | "conversation" | "dispute" | "property";
 
 /** Verifica el tipo real por "magic bytes" (no confiamos en la extensión ni en el MIME del navegador). */
 export function sniffMime(buf: Buffer): string | null {

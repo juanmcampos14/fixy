@@ -6,6 +6,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { ProfileForm } from "@/components/provider/profile-form";
 import { CoverageSection, DocumentsSection, PayoutsSection, PortfolioSection } from "@/components/provider/sections";
 import { updateProfileAction } from "../alta/actions";
+import { VisitPricingSection } from "@/components/provider/visit-pricing";
 
 export const metadata: Metadata = { title: "Perfil" };
 
@@ -37,6 +38,7 @@ export default async function ProfilePage() {
             }}
           />
         </Card>
+        <VisitPricingSection providerId={provider.id} />
         <CoverageSection setup={setup} provider={p} />
         <PortfolioSection setup={setup} />
         <DocumentsSection setup={setup} checklist={state.checklist} />

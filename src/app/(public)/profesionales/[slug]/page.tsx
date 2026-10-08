@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { BadgeCheck, Building2, MapPin, UserRound } from "lucide-react";
 import { getPublicProfile } from "@/server/queries/provider";
-import { formatMonth, formatDate } from "@/lib/format";
+import { formatMoney, formatMonth, formatDate } from "@/lib/format";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge, DemoBadge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/category-icon";
@@ -27,6 +27,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
   const d = await load(slug);
   if (!d) notFound();
   const { provider: p, categories, zones, credentials, reviews, portfolio, rating } = d;
+  const data = d;
   const verifications = [
     ...(p.identity_status === "verified" ? ["Identidad verificada"] : []),
     ...credentials.map((c) => `${c.name} vigente (revisada por Fixy)${c.expires_on ? ` · vence ${formatDate(c.expires_on)}` : ""}`),
@@ -57,13 +58,32 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
           <p className="mt-4 whitespace-pre-line text-[16px] leading-relaxed text-ink-2">{p.description}</p>
         </div>
         <div className="md:w-56">
-          <ButtonLink href={cta} size="lg" className="w-full">Solicitar presupuesto</ButtonLink>
-          <p className="mt-2 text-center text-sm text-muted">Pedir presupuesto es gratis.</p>
+          <div className="mb-3 rounded-2xl bg-white p-4 text-center ring-1 ring-line">
+            <p className="text-xs text-muted">Visita</p>
+            <p className="tabular font-display text-2xl font-extrabold">{data.visit.visit_fee_minor > 0 ? formatMoney(data.visit.visit_fee_minor) : "Sin cargo"}</p>
+            {data.visit.visit_fee_minor > 0 && data.visit.visit_fee_credited && <p className="text-xs text-ok">Se descuenta si contratás el arreglo</p>}
+          </div>
+          <ButtonLink href={cta} size="lg" className="w-full">Pedir una visita</ButtonLink>
+          <p className="mt-2 text-center text-sm text-muted">Ve el problema y te presupuesta en la app.</p>
         </div>
       </header>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_300px]">
         <div className="min-w-0 space-y-6">
+          {data.priceRefs.length > 0 && (
+            <section aria-labelledby="pr-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+              <h2 id="pr-t" className="text-lg font-bold">Precios de referencia</h2>
+              <p className="mt-0.5 text-sm text-muted">Orientativos: el precio final se confirma después de ver el trabajo y lo aprobás en la app.</p>
+              <ul className="mt-3 divide-y divide-line">
+                {data.priceRefs.map((r) => (
+                  <li key={r.title} className="flex flex-wrap justify-between gap-3 py-2.5 text-[15px]">
+                    <span><span className="font-semibold">{r.title}</span> <span className="text-sm text-muted">· {r.category}{r.note ? ` · ${r.note}` : ""}</span></span>
+                    <span className="tabular whitespace-nowrap font-semibold">desde {formatMoney(r.from_minor)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {portfolio.length > 0 && (
             <section aria-labelledby="pf-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
               <h2 id="pf-t" className="text-lg font-bold">Trabajos realizados</h2>

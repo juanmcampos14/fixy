@@ -43,14 +43,16 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
   const exampleFee = applyBps(exampleGross, rate);
 
   const steps = [
-    { icon: Search, title: "Recibís pedidos de tu zona", text: "Cuando un cliente describe su problema, invitamos a un grupo acotado de profesionales que cubren esa zona y ese oficio. No es una subasta con 50 personas." },
-    { icon: Banknote, title: "Cotizás con tu precio", text: "Armás el presupuesto con mano de obra, materiales y visita. Antes de enviarlo ves exactamente cuánto te queda neto." },
-    { icon: CalendarCheck, title: "El cliente paga dentro de Fixy", text: "Confirmás el trabajo cuando el pago está acreditado. Recién ahí ves la dirección y los datos de acceso." },
-    { icon: Star, title: "Terminás, el cliente califica y cobrás", text: "Cuando el cliente confirma y deja su reseña, se libera tu liquidación. Todo queda registrado: mensajes, fotos, adicionales." },
+    { icon: Search, title: "Te eligen por tu perfil", text: "Los clientes de tu zona ven tus reseñas, verificaciones, el precio de tu visita y tus precios de referencia, y te eligen. Sin subastas con 50 personas." },
+    { icon: CalendarCheck, title: "Aceptás y coordinás la visita", text: "Tenés unas horas para aceptar y proponer día y horario por el chat. La dirección se te comparte cuando el cliente confirma." },
+    { icon: Banknote, title: "Presupuestás en el lugar", text: "Ves el problema y armás el presupuesto del arreglo desde la app, con tu precio. Antes de enviarlo ves cuánto te queda neto." },
+    { icon: Star, title: "El cliente aprueba, paga y califica", text: "Todo pasa por Fixy: aprobación, pago, extras y conformidad. Con la reseña del cliente, se libera tu liquidación." },
   ];
   const faqs: [string, string][] = [
     ["¿Cuánto cuesta sumarme?", `Nada. El alta no tiene costo ni abono mensual. Fixy cobra una comisión del ${rate / 100} % sobre cada trabajo que hacés, descontada de lo que cobrás.`],
     ["¿Qué necesito para empezar?", `Tu DNI, una descripción de tu trabajo, las zonas y horarios en los que trabajás, fotos de trabajos anteriores (recomendado) y una cuenta para recibir los cobros.${credentials.length ? ` Para este oficio también: ${credentials.map((c) => c.name.toLowerCase()).join(", ")} vigente.` : ""} Nuestro equipo revisa la documentación antes de habilitarte.`],
+    ["¿Cobro la visita?", "Vos decidís: podés cobrarla, ofrecerla sin cargo, y descontarla del arreglo si el cliente te contrata. También publicás precios de referencia (\"desde\") para que el cliente sepa qué esperar."],
+    ["¿Por qué no comparto mi teléfono?", "Para cuidarte: si todo queda en Fixy (chat, dirección, aprobaciones y pagos), podemos ayudarte ante un problema y tu reputación crece con cada trabajo."],
     ["¿Cómo funcionan las reseñas?", "Solo pueden calificarte clientes con trabajos completados. Las reseñas se publican de forma anónima y días después (el plazo varía), así el cliente opina con libertad y tu reputación refleja opiniones sinceras."],
     ["¿Cuándo cobro?", "La liquidación se libera cuando el cliente da conformidad y deja su reseña, y se procesa en el ciclo de liquidaciones. Si hay un reclamo, queda en pausa hasta que el equipo lo resuelva."],
     ["¿Y si el cliente pide algo más en el lugar?", "Lo proponés como adicional desde la plataforma. El cliente lo acepta (o no) y se cobra aparte. Nunca se cambia el precio acordado sin su aprobación."],
@@ -74,7 +76,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
               {oficio ? <>¿Sos {oficio.singular}?<br />Sumate a Fixy.</> : <>Tu oficio,<br />más oportunidades.</>}
             </h1>
             <p className="mt-5 max-w-xl text-lg text-white/80">
-              Recibí pedidos de {oficio ? oficio.ejemplos : "hogares, oficinas y comercios"} en tu zona de CABA y GBA. Vos elegís qué cotizar y cuánto cobrar; Fixy se ocupa de la coordinación y el cobro.
+              Recibí pedidos de {oficio ? oficio.ejemplos : "hogares, oficinas y comercios"} en tu zona de CABA y GBA. Los clientes te eligen por tu perfil, presupuestás en el lugar con tu precio y Fixy se ocupa de la coordinación y el cobro.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <ButtonLink href={signupHref} size="lg" variant="secondary">Quiero sumarme <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>

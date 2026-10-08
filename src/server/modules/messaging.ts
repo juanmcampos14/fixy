@@ -5,6 +5,8 @@ import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { notify } from "@/server/notifications";
 import { storeFile } from "@/server/storage";
 import { check } from "./authz";
+import { maskContactInfo } from "@/server/domain/contact-guard";
+import { audit } from "@/server/audit";
 
 export async function sendMessage(actor: Actor, conversationId: string, body: string, file?: { data: Buffer; name: string }) {
   const text = body.trim();
@@ -24,7 +26,14 @@ export async function sendMessage(actor: Actor, conversationId: string, body: st
     const fileId = file
       ? await storeFile(tx, { data: file.data, originalName: file.name, uploadedBy: actor.id, purpose: "message_attachment", ownerType: "conversation", ownerId: conversationId })
       : null;
-    await tx`insert into messages (conversation_id, sender_id, sender_side, body, file_id) values (${conversationId}, ${actor.id}, ${side}, ${text || "(adjunto)"}, ${fileId})`;
+    // Coordinación y pagos dentro de Fixy: se ocultan teléfonos, emails, enlaces y datos para transferir por fuera.
+    const guarded = side === "platform" ? { text, masked: false } : maskContactInfo(text);
+    await tx`insert into messages (conversation_id, sender_id, sender_side, body, file_id) values (${conversationId}, ${actor.id}, ${side}, ${guarded.text || "(adjunto)"}, ${fileId})`;
+    if (guarded.masked) {
+      await tx`insert into messages (conversation_id, sender_id, sender_side, body) values (${conversationId}, null, 'system',
+        'Ocultamos datos de contacto para cuidar a ambas partes. Coordiná, compartí la dirección y pagá dentro de Fixy: así todo queda registrado y podemos ayudarte si algo sale mal.')`;
+      await audit(tx, actor, "message.contact_masked", "conversation", conversationId, null);
+    }
     await tx`insert into conversation_reads (conversation_id, user_id, last_read_at) values (${conversationId}, ${actor.id}, now())
       on conflict (conversation_id, user_id) do update set last_read_at = now()`;
     // Notificar a la contraparte (sin email por cada mensaje, para no saturar).

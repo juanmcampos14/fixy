@@ -2,21 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { act, files, str } from "@/server/action";
+import { act, bool, files, str } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
 import { requireActor } from "@/server/auth/session";
 import type { Actor } from "@/server/auth/actor";
 import { forbidden, invalid } from "@/server/domain/errors";
 import { parseArsToMinor } from "@/server/domain/money";
 import { declineInvitation } from "@/server/modules/requests";
-import { createQuote, quoteSchema, withdrawQuote } from "@/server/modules/quotes";
+import { acceptBooking, createQuote, quoteSchema, withdrawQuote } from "@/server/modules/quotes";
 import {
   addEvidence, assignTechnician, cancelJob, confirmJob, decideReschedule, finishJob, markOnTheWay, proposeExtra, proposeReschedule,
   startJob, withdrawExtra,
 } from "@/server/modules/jobs";
 import { replyDispute, replyReview } from "@/server/modules/disputes";
 import { openReviewDispute } from "@/server/modules/review-disputes";
-import { addProviderMember, deactivateProviderMember } from "@/server/modules/providers";
+import { addPriceRef, addProviderMember, deactivateProviderMember, removePriceRef, updateVisitSettings } from "@/server/modules/providers";
 
 function adminProviderId(actor: Actor): string {
   const m = actor.providers.find((p) => p.role === "admin");
@@ -122,7 +122,7 @@ export async function jobStepAction(_: ActionState, f: FormData): Promise<Action
     const id = str(f, "jobId");
     const step = str(f, "step");
     if (step === "on_the_way") await markOnTheWay(actor, id);
-    else if (step === "start") await startJob(actor, id);
+    else if (step === "start") await startJob(actor, id, str(f, "visitCode"));
     else if (step === "finish") await finishJob(actor, id, str(f, "note") || str(f, "reason"));
     else return { error: "Acción desconocida." };
     revalidatePath(jobPath(id));
@@ -153,9 +153,10 @@ export async function proposeExtraAction(_: ActionState, f: FormData): Promise<A
       reason: str(f, "reason"),
       laborMinor: money(str(f, "labor"), "mano de obra", true),
       materialsMinor: money(str(f, "materials"), "materiales", true),
+      isMainQuote: str(f, "isMainQuote") === "1",
     });
     revalidatePath(jobPath(id));
-    return { ok: true, message: "Enviamos el adicional al cliente. No se cobra hasta que lo acepte." };
+    return { ok: true, message: str(f, "isMainQuote") === "1" ? "Enviamos el presupuesto al cliente para que lo apruebe en la app." : "Enviamos el adicional al cliente. No se cobra hasta que lo acepte." };
   });
 }
 
@@ -255,4 +256,41 @@ export async function deactivateMemberAction(_: ActionState, f: FormData): Promi
     revalidatePath("/proveedor/equipo");
     return { ok: true, message: "Desactivamos a la persona. Sus trabajos abiertos quedaron sin asignar." };
   });
+}
+
+export async function acceptBookingAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await acceptBooking(actor, str(f, "invitationId"), { proposedDate: str(f, "proposedDate"), proposedWindow: str(f, "proposedWindow"), note: str(f, "note"), accessAcknowledged: bool(f, "accessAcknowledged") });
+    revalidatePath(`/proveedor/oportunidades/${str(f, "invitationId")}`);
+    return { ok: true, message: "Aceptaste el pedido. Le avisamos al cliente para que confirme la visita." };
+  });
+}
+
+export async function updateVisitSettingsAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const fee = parseArsToMinor(str(f, "visitFee") || "0");
+    if (fee === null) return { error: "Revisá el precio de la visita.", fieldErrors: { visitFee: ["Usá un formato como 15.000 o 15000,50."] } };
+    await updateVisitSettings(actor, adminProviderId(actor), { visitFeeMinor: fee, visitFeeCredited: f.get("visitFeeCredited") === "on" });
+    revalidatePath("/proveedor/perfil");
+    return { ok: true, message: fee === 0 ? "Listo: tu visita es sin cargo." : "Guardamos el precio de tu visita." };
+  });
+}
+
+export async function addPriceRefAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const from = parseArsToMinor(str(f, "from"));
+    if (!from) return { error: "Indicá un precio válido.", fieldErrors: { from: ["Usá un formato como 45.000."] } };
+    await addPriceRef(actor, adminProviderId(actor), { categoryId: str(f, "categoryId"), title: str(f, "title"), fromMinor: from, note: str(f, "note") });
+    revalidatePath("/proveedor/perfil");
+    return { ok: true, message: "Precio agregado." };
+  });
+}
+
+export async function removePriceRefAction(f: FormData) {
+  const actor = await requireActor();
+  await removePriceRef(actor, adminProviderId(actor), str(f, "id"));
+  revalidatePath("/proveedor/perfil");
 }

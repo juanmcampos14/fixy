@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2, House, MessageCircle, Receipt, ShieldCheck, ClipboardList, Search, CircleCheck } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck, House, MessageCircle, Receipt, ShieldCheck, Search, CircleCheck } from "lucide-react";
 import { sql } from "@/server/db/client";
 import { listCategories } from "@/server/modules/catalog";
 import { Mascot } from "@/components/brand/mascot";
@@ -10,14 +10,17 @@ import { formatMoney } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  { icon: MessageCircle, title: "Contanos qué pasa", text: "Describilo con tus palabras y sumá una foto si podés. Te hacemos solo las preguntas necesarias." },
-  { icon: Search, title: "Recibí presupuestos", text: "Invitamos a un grupo acotado de profesionales que cubren tu zona y tu tipo de trabajo." },
-  { icon: Receipt, title: "Compará y elegí", text: "Ves qué incluye cada propuesta, qué no incluye, el cargo de servicio y el total antes de confirmar." },
-  { icon: ClipboardList, title: "Seguí el trabajo", text: "Mensajes, pagos, adicionales, avances y reclamos quedan registrados en Fixy." },
+  { icon: MessageCircle, title: "Contanos qué pasa", text: "Describilo con tus palabras y sumá una foto si podés. Te ayudamos a identificar qué profesional necesitás." },
+  { icon: Search, title: "Elegí a tu profesional", text: "Ves quiénes cubren tu zona, con reseñas reales, verificaciones, precio de la visita y precios de referencia." },
+  { icon: CalendarCheck, title: "Coordinen la visita en Fixy", text: "Acuerdan día y horario por el chat. La dirección se comparte recién cuando confirmás, y al llegar le das tu código de visita." },
+  { icon: Receipt, title: "Aprobá y pagá en la app", text: "El profesional ve el problema y te presupuesta el arreglo ahí mismo. Lo aprobás, pagás, y los extras siempre pasan por vos." },
 ];
 
 const FAQ = [
-  ["¿Cuánto cuesta pedir presupuestos?", "Nada. Pedir y comparar presupuestos es gratis. Si contratás, ves el desglose completo antes de confirmar: mano de obra, materiales, visita, cargo de servicio de Fixy y total."],
+  ["¿Cómo elijo al profesional?", "Te mostramos los profesionales que cubren tu zona y tu tipo de trabajo, con reseñas de trabajos reales, verificaciones, cuánto cobran la visita y precios de referencia. Elegís uno; si no puede o no responde a tiempo, elegís otro."],
+  ["¿Por qué presupuestan en el lugar?", "Porque casi ningún arreglo se puede cotizar bien sin verlo. El profesional visita, revisa y te manda el presupuesto por la app. Si la visita tiene costo, muchos lo descuentan si contratás el arreglo."],
+  ["¿Puedo pedir varios presupuestos?", "Sí. Para obras grandes o trabajos bien definidos, podés pedir presupuestos a varios profesionales y comparar."],
+  ["¿Tengo que pasar mi teléfono o dirección?", "No. Se coordina por el chat de Fixy y la dirección se comparte solo con el profesional que confirmaste. Al llegar, le das tu código de visita."],
   ["¿Cómo se paga?", "El pago se hace dentro de Fixy, a través de una pasarela de pagos. Fixy no guarda datos de tarjetas. En esta versión de prueba los pagos son simulados y no se mueve dinero real."],
   ["¿Fixy retiene el dinero hasta que termine el trabajo?", "No. Hoy no ofrecemos custodia de fondos. Te mostramos con claridad cuándo se cobra cada concepto y cómo funcionan las cancelaciones y los reclamos."],
   ["¿Qué significa que un profesional esté verificado?", "Mostramos solo verificaciones que revisamos: por ejemplo, identidad o una matrícula vigente cargada y aprobada por nuestro equipo. No mostramos verificaciones que no hicimos."],
@@ -38,7 +41,7 @@ export default async function Landing() {
               <span className="h-2 w-2 rounded-full bg-spark" aria-hidden /> Servicios para tu hogar y oficina
             </p>
             <h1 className="text-[2.6rem] font-extrabold leading-[1.05] sm:text-6xl">De problema a resuelto.</h1>
-            <p className="mt-4 max-w-xl text-lg text-ink-2">Contanos qué pasa. Encontrá al profesional indicado, conocé el precio antes de contratar y gestioná todo desde un solo lugar.</p>
+            <p className="mt-4 max-w-xl text-lg text-ink-2">Contanos qué pasa y elegí al profesional indicado. Coordinan, presupuesta en el lugar y aprobás y pagás todo desde un solo lugar.</p>
             <form action="/solicitar" method="get" className="mt-7 rounded-[28px] bg-white p-2 shadow-[var(--shadow-lift)] ring-1 ring-line">
               <label htmlFor="hero-q" className="sr-only">¿Qué necesitás resolver hoy?</label>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -49,7 +52,7 @@ export default async function Landing() {
               </div>
             </form>
             <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-ink-2">
-              {["Pedir presupuestos es gratis", "Precio claro antes de confirmar", "Todo queda registrado"].map((t) => (
+              {["Elegís a quién llamar", "Nada se cobra sin tu aprobación", "Todo queda registrado"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-700" aria-hidden />{t}</li>
               ))}
             </ul>
@@ -106,12 +109,12 @@ export default async function Landing() {
       {/* Transparencia */}
       <section aria-labelledby="price-title" className="mx-auto mt-20 grid max-w-6xl items-center gap-8 px-4 sm:px-6 md:grid-cols-2">
         <div>
-          <h2 id="price-title" className="text-2xl font-extrabold sm:text-3xl">Revisá qué incluye antes de confirmar</h2>
-          <p className="mt-3 text-ink-2">Cada presupuesto separa mano de obra, materiales, visita y el cargo de servicio de Fixy. Ves el total, la vigencia, las exclusiones y las condiciones de cancelación antes de contratar. Sin cargos ocultos.</p>
+          <h2 id="price-title" className="text-2xl font-extrabold sm:text-3xl">Nada se cobra sin tu aprobación</h2>
+          <p className="mt-3 text-ink-2">Antes de elegir ves el precio de la visita de cada profesional (algunos no la cobran) y sus precios de referencia. Después de ver el problema, te presupuesta el arreglo en la app con mano de obra, materiales y el cargo de servicio de Fixy separados. Vos decidís.</p>
           <ul className="mt-5 space-y-2 text-[15px]">
             <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Los adicionales solo se cobran si los aceptás.</li>
             <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />El alcance y el precio contratados quedan guardados y no cambian.</li>
-            <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Distinguimos estimación, presupuesto y precio confirmado.</li>
+            <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Mensajes, dirección y pagos dentro de Fixy: no hace falta pasar tu teléfono.</li>
           </ul>
         </div>
         <figure className="rounded-[var(--radius-card)] bg-white p-6 shadow-[var(--shadow-lift)] ring-1 ring-line">
