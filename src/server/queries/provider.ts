@@ -267,9 +267,11 @@ export async function getEarnings(userId: string, providerId: string) {
 /** Reseñas publicadas del proveedor: sin cliente, sin trabajo y sin fecha exacta (solo el mes). */
 export async function listReviews(userId: string, providerId: string) {
   return asUser(userId, (tx) =>
-    tx<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; published_month: string }[]>`
-      select id, rating, comment, provider_reply, is_demo, published_month
-      from reviews_published where provider_id = ${providerId} order by published_month desc, sort_key`,
+    tx<{ id: string; rating: number; comment: string; provider_reply: string | null; is_demo: boolean; published_month: string; dispute_status: string | null; dispute_resolution: string | null; dispute_summary: string | null }[]>`
+      select r.id, r.rating, r.comment, r.provider_reply, r.is_demo, r.published_month,
+        d.status as dispute_status, d.resolution as dispute_resolution, d.provider_summary as dispute_summary
+      from reviews_published r left join review_disputes_provider d on d.review_id = r.id
+      where r.provider_id = ${providerId} order by r.published_month desc, r.sort_key`,
   );
 }
 

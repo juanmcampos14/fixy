@@ -4,6 +4,7 @@ import { processOutbox } from "@/server/notifications";
 import { sql } from "@/server/db/client";
 import { expireQuotes } from "@/server/modules/quotes";
 import { processReviewTasks } from "@/server/modules/disputes";
+import { processReviewDisputeDeadlines } from "@/server/modules/review-disputes";
 
 /** Tareas periódicas (llamar con cron externo): envíos pendientes y vencimiento de presupuestos. */
 async function run(req: Request) {
@@ -13,9 +14,10 @@ async function run(req: Request) {
     return new Response("No autorizado", { status: 401 });
   }
   const reviews = await processReviewTasks();
+  const reviewDisputes = await processReviewDisputeDeadlines();
   const outbox = await processOutbox(100);
   const expired = await sql().begin((tx) => expireQuotes(tx as never));
-  return Response.json({ outbox, expiredQuotes: expired, reviews });
+  return Response.json({ outbox, expiredQuotes: expired, reviews, reviewDisputes });
 }
 
 // Vercel Cron llama con GET y envía "Authorization: Bearer $CRON_SECRET".

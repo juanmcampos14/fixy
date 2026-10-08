@@ -15,6 +15,7 @@ import {
   startJob, withdrawExtra,
 } from "@/server/modules/jobs";
 import { replyDispute, replyReview } from "@/server/modules/disputes";
+import { openReviewDispute } from "@/server/modules/review-disputes";
 import { addProviderMember, deactivateProviderMember } from "@/server/modules/providers";
 
 function adminProviderId(actor: Actor): string {
@@ -221,6 +222,15 @@ export async function replyReviewAction(_: ActionState, f: FormData): Promise<Ac
     await replyReview(actor, str(f, "reviewId"), reply);
     revalidatePath("/proveedor/resenas");
     return { ok: true, message: "Publicamos tu respuesta." };
+  });
+}
+
+export async function openReviewDisputeAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await openReviewDispute(actor, str(f, "reviewId"), { reasonCode: str(f, "reasonCode") as never, statement: str(f, "statement") });
+    revalidatePath("/proveedor/resenas");
+    return { ok: true, message: "Recibimos tu impugnación. Vamos a consultar al cliente y te avisamos el resultado." };
   });
 }
 

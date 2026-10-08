@@ -134,8 +134,9 @@ export async function getAttention(userId: string) {
 
 export async function navCounts(userId: string) {
   return asUser(userId, async (tx) => {
-    const [r] = await tx<{ providers: number; requests: number; disputes: number }[]>`
+    const [r] = await tx<{ providers: number; requests: number; disputes: number; reviewDisputes: number }[]>`
       select (select count(*)::int from providers where status = 'in_review') as providers,
+        (select count(*)::int from review_disputes where status = 'escalated') as "reviewDisputes",
         (select count(*)::int from service_requests where status not in ('draft','cancelled','converted') and (needs_review or status = 'no_coverage')) as requests,
         (select count(*)::int from disputes where status in ('open','in_review','awaiting_response')) as disputes`;
     return r;
@@ -516,3 +517,54 @@ export async function listAudit(userId: string, f: { action?: string; entityType
 }
 
 export type { TimelineEvent };
+
+// ───────────────────────── Reseñas e impugnaciones ─────────────────────────
+
+export async function listReviewDisputes(userId: string, status?: string) {
+  return asUser(userId, (tx) => tx<{
+    id: string; status: string; resolution: string | null; reason_code: string; created_at: Date; ai_rounds: number; resolved_by_ai: boolean;
+    rating: number; job_id: string; job_code: string; provider_name: string; client_name: string; escalation_reason: string | null;
+  }[]>`
+    select d.id, d.status, d.resolution, d.reason_code, d.created_at, d.ai_rounds, d.resolved_by_ai, r.rating, j.id as job_id, j.code as job_code,
+      p.display_name as provider_name, u.full_name as client_name, d.escalation_reason
+    from review_disputes d join reviews r on r.id = d.review_id join jobs j on j.id = r.job_id
+    join providers p on p.id = d.provider_id join user_names u on u.id = r.client_user_id
+    ${status ? tx`where d.status = ${status}` : tx``}
+    order by case d.status when 'escalated' then 0 when 'ai_review' then 1 when 'awaiting_client' then 2 else 3 end, d.created_at desc limit 200`);
+}
+
+export async function listAllReviews(userId: string, q?: string) {
+  return asUser(userId, (tx) => tx<{
+    id: string; rating: number; comment: string; created_at: Date; visible_at: Date; hidden_at: Date | null; withdrawn_at: Date | null; edited_at: Date | null;
+    is_demo: boolean; job_id: string; job_code: string; provider_id: string; provider_name: string; client_name: string; dispute_id: string | null; dispute_status: string | null;
+  }[]>`
+    select r.id, r.rating, r.comment, r.created_at, r.visible_at, r.hidden_at, r.withdrawn_at, r.edited_at, r.is_demo, j.id as job_id, j.code as job_code,
+      p.id as provider_id, p.display_name as provider_name, u.full_name as client_name, d.id as dispute_id, d.status as dispute_status
+    from reviews r join jobs j on j.id = r.job_id join providers p on p.id = r.provider_id join user_names u on u.id = r.client_user_id
+    left join review_disputes d on d.review_id = r.id
+    ${q ? tx`where j.code ilike ${"%" + q + "%"} or p.display_name ilike ${"%" + q + "%"} or u.full_name ilike ${"%" + q + "%"}` : tx``}
+    order by r.created_at desc limit 300`);
+}
+
+export async function getReviewDispute(userId: string, id: string) {
+  return asUser(userId, async (tx) => {
+    const [d] = await tx<{
+      id: string; status: string; resolution: string | null; reason_code: string; provider_statement: string; ai_rounds: number; resolved_by_ai: boolean;
+      ai_last_decision: { decision?: string; confidence?: string; policyFlags?: string[]; source?: string } | null; internal_summary: string | null; provider_summary: string | null;
+      escalation_reason: string | null; client_deadline: Date; created_at: Date; resolved_at: Date | null; review_id: string; provider_id: string;
+    }[]>`select * from review_disputes where id = ${id}`;
+    if (!d) return null;
+    const [review] = await tx<{ rating: number; comment: string; created_at: Date; visible_at: Date; hidden_at: Date | null; withdrawn_at: Date | null; edited_at: Date | null; job_id: string; client_user_id: string }[]>`
+      select rating, comment, created_at, visible_at, hidden_at, withdrawn_at, edited_at, job_id, client_user_id from reviews where id = ${d.review_id}`;
+    const [job] = await tx<{ code: string; title: string; status: string; completed_at: Date | null }[]>`
+      select j.code, r.title, j.status, j.completed_at from jobs j join service_requests r on r.id = j.request_id where j.id = ${review.job_id}`;
+    const [client] = await tx<{ full_name: string; email: string; phone: string | null }[]>`select full_name, email, phone from users where id = ${review.client_user_id}`;
+    const [provider] = await tx<{ display_name: string; slug: string }[]>`select display_name, slug from providers where id = ${d.provider_id}`;
+    const messages = await tx<{ id: string; author: string; author_name: string | null; body: string; created_at: Date }[]>`
+      select m.id, m.author, u.full_name as author_name, m.body, m.created_at from review_dispute_messages m left join user_names u on u.id = m.author_id
+      where m.dispute_id = ${id} order by m.created_at`;
+    const revisions = await tx<{ rating: number; comment: string; reason: string; created_at: Date }[]>`
+      select rating, comment, reason, created_at from review_revisions where review_id = ${d.review_id} order by created_at`;
+    return { d, review, job, client, provider, messages, revisions };
+  });
+}

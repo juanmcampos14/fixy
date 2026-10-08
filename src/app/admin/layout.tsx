@@ -15,6 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/solicitudes", label: "Solicitudes", icon: "inbox", badge: counts.requests },
     { href: "/admin/trabajos", label: "Trabajos", icon: "briefcase" },
     { href: "/admin/reclamos", label: "Reclamos", icon: "flag", badge: counts.disputes },
+    { href: "/admin/resenas", label: "Reseñas", icon: "star", badge: counts.reviewDisputes },
     { href: "/admin/finanzas", label: "Finanzas", icon: "wallet" },
     { href: "/admin/catalogo", label: "Catálogo", icon: "clipboard" },
     { href: "/admin/comisiones", label: "Comisiones", icon: "coins" },

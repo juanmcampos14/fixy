@@ -8,7 +8,10 @@ import { EmptyState } from "@/components/ui/empty";
 import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { Field, Textarea } from "@/components/ui/field";
 import { Stars } from "@/components/provider/stars";
-import { replyReviewAction } from "../actions";
+import { openReviewDisputeAction, replyReviewAction } from "../actions";
+import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/field";
+import { REASON_LABEL } from "@/server/assistant/review-mediator";
 
 export const metadata: Metadata = { title: "Reseñas" };
 
@@ -41,6 +44,35 @@ export default async function ReviewsPage() {
                   </span>
                 </div>
                 <p className="mt-2 text-[15px]">{r.comment || <span className="text-muted">Sin comentario.</span>}</p>
+                {r.dispute_status ? (
+                  <div className="mt-3 rounded-2xl bg-info-bg/60 p-3 text-sm ring-1 ring-info/15">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">
+                      Impugnación
+                      <Badge tone={r.dispute_status === "resolved" || r.dispute_status === "closed" ? "ok" : "info"}>
+                        {{ awaiting_client: "Consultando al cliente", ai_review: "En análisis", escalated: "En revisión del equipo", resolved: "Resuelta", closed: "Cerrada" }[r.dispute_status] ?? r.dispute_status}
+                      </Badge>
+                    </p>
+                    {r.dispute_summary && <p className="mt-1 text-ink-2">{r.dispute_summary}</p>}
+                  </div>
+                ) : (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-fixy-800">Impugnar esta reseña</summary>
+                    <ActionForm action={openReviewDisputeAction} className="mt-3 space-y-3 rounded-2xl bg-cream/60 p-4 ring-1 ring-line">
+                      <input type="hidden" name="reviewId" value={r.id} />
+                      <p className="text-sm text-muted">Un asistente consulta al cliente de forma neutral y analiza el trabajo. Si no se resuelve, lo revisa una persona del equipo. No vas a saber quién escribió la reseña, y la reseña sigue publicada mientras se revisa.</p>
+                      <Field label="Motivo" htmlFor={`rd-r-${r.id}`} required>
+                        <Select id={`rd-r-${r.id}`} name="reasonCode" required defaultValue="">
+                          <option value="" disabled>Elegí un motivo</option>
+                          {Object.entries(REASON_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="Tu versión" htmlFor={`rd-s-${r.id}`} required hint="Contá qué pasó, con hechos concretos. Mínimo 20 caracteres.">
+                        <Textarea id={`rd-s-${r.id}`} name="statement" required minLength={20} maxLength={3000} />
+                      </Field>
+                      <SubmitButton variant="secondary" size="sm" pendingText="Enviando…">Enviar impugnación</SubmitButton>
+                    </ActionForm>
+                  </details>
+                )}
                 {r.provider_reply ? (
                   <div className="mt-3 rounded-2xl bg-cream/70 p-3 text-[15px] ring-1 ring-line">
                     <p className="text-xs font-semibold text-fixy-800">Tu respuesta</p>

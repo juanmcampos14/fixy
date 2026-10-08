@@ -1,5 +1,7 @@
 "use server";
 
+import { adminMessage, adminResolve } from "@/server/modules/review-disputes";
+
 import { revalidatePath } from "next/cache";
 import { act, bool, files, str, strs } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
@@ -402,5 +404,23 @@ export async function updateReviewSettingsAction(_: ActionState, f: FormData): P
     await admin.updateReviewSettings(actor, { delays: str(f, "delays"), jitterHours: str(f, "jitterHours"), reminderDays: str(f, "reminderDays") }, str(f, "reason"));
     refresh();
     return { ok: true, message: "Regla de reseñas actualizada. Aplica a las reseñas nuevas." };
+  });
+}
+
+// ───────── Impugnaciones de reseñas ─────────
+
+export async function reviewDisputeMessageAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await adminMessage(await requireStaff(), str(f, "disputeId"), str(f, "body"));
+    revalidatePath(`/admin/resenas/${str(f, "disputeId")}`);
+    return { ok: true, message: "Mensaje enviado al cliente." };
+  });
+}
+
+export async function reviewDisputeResolveAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await adminResolve(await requireStaff(), str(f, "disputeId"), { resolution: str(f, "resolution") as never, note: str(f, "reason"), providerSummary: str(f, "providerSummary") });
+    revalidatePath(`/admin/resenas/${str(f, "disputeId")}`);
+    return { ok: true, message: "Impugnación resuelta." };
   });
 }

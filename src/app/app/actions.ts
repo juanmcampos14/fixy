@@ -1,5 +1,7 @@
 "use server";
 
+import { clientDecide, clientReply } from "@/server/modules/review-disputes";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { act, bool, files, str } from "@/server/action";
@@ -186,5 +188,25 @@ export async function removeMemberAction(_: ActionState, f: FormData): Promise<A
     await props.removeOrganizationMember(await requireActor(), str(f, "organizationId"), str(f, "userId"));
     revalidatePath(`/app/organizaciones/${str(f, "organizationId")}`);
     return { ok: true };
+  });
+}
+
+// ───────── Revisión de reseñas (cliente autor) ─────────
+
+export async function reviewDisputeReplyAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await clientReply(await requireActor(), str(f, "disputeId"), str(f, "body"));
+    revalidatePath(`/app/resenas/${str(f, "disputeId")}`);
+    return { ok: true, message: "Gracias, recibimos tu respuesta." };
+  });
+}
+
+export async function reviewDisputeDecideAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const choice = str(f, "choice") as "keep" | "edit" | "withdraw";
+    if (!["keep", "edit", "withdraw"].includes(choice)) return { error: "Opción inválida." };
+    await clientDecide(await requireActor(), str(f, "disputeId"), choice, choice === "edit" ? { rating: Number(str(f, "rating")), comment: str(f, "comment") } : undefined);
+    revalidatePath(`/app/resenas/${str(f, "disputeId")}`);
+    return { ok: true, message: choice === "keep" ? "Registramos que mantenés tu reseña." : choice === "edit" ? "Tu reseña quedó corregida." : "Retiraste tu reseña." };
   });
 }

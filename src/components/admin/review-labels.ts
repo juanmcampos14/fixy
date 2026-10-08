@@ -1,0 +1,1 @@
+export const DISPUTE_STATUS: Record<string, string> = { awaiting_client: "Consultando al cliente (IA)", ai_review: "En análisis (IA)", escalated: "Revisión humana", resolved: "Resuelta", closed: "Cerrada" };

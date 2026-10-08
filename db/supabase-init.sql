@@ -1490,79 +1490,193 @@ CREATE INDEX providers_signup_source_idx ON providers (signup_source);
 
 INSERT INTO schema_migrations (name) VALUES ('0008_provider_signup_source.sql');
 
+-- ===== 0009_review_disputes.sql =====
+-- Impugnación de reseñas: el proveedor cuestiona una reseña publicada (sin saber quién la escribió);
+-- una IA consulta al cliente y evalúa; si no se resuelve, pasa a revisión humana.
+
+CREATE TABLE review_disputes (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  review_id           uuid NOT NULL REFERENCES reviews(id),
+  provider_id         uuid NOT NULL REFERENCES providers(id),
+  opened_by           uuid NOT NULL REFERENCES users(id),
+  reason_code         text NOT NULL CHECK (reason_code IN ('false_facts','not_my_job','offensive','personal_data','extortion','other')),
+  provider_statement  text NOT NULL CHECK (length(provider_statement) BETWEEN 20 AND 3000),
+  status              text NOT NULL DEFAULT 'awaiting_client'
+                      CHECK (status IN ('awaiting_client','ai_review','escalated','resolved','closed')),
+  resolution          text CHECK (resolution IN ('kept','edited','withdrawn','hidden','other')),
+  resolved_by_ai      boolean NOT NULL DEFAULT false,
+  resolved_by         uuid REFERENCES users(id),
+  ai_rounds           integer NOT NULL DEFAULT 0,
+  ai_last_decision    jsonb,
+  internal_summary    text,          -- análisis para operación (puede identificar a las partes)
+  provider_summary    text,          -- resumen para el proveedor (nunca identifica al cliente)
+  escalation_reason   text,
+  client_deadline     timestamptz NOT NULL DEFAULT now() + interval '5 days',
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  resolved_at         timestamptz
+);
+-- Una impugnación por reseña (la decisión final no se puede re-impugnar desde el panel).
+CREATE UNIQUE INDEX review_disputes_one_per_review ON review_disputes (review_id);
+CREATE INDEX review_disputes_status_idx ON review_disputes (status, created_at);
+CREATE TRIGGER review_disputes_touch BEFORE UPDATE ON review_disputes FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
+
+INSERT INTO app.allowed_transitions (entity, from_state, to_state) VALUES
+  ('review_dispute','awaiting_client','ai_review'), ('review_dispute','awaiting_client','escalated'), ('review_dispute','awaiting_client','resolved'),
+  ('review_dispute','ai_review','awaiting_client'), ('review_dispute','ai_review','resolved'), ('review_dispute','ai_review','escalated'),
+  ('review_dispute','escalated','resolved'), ('review_dispute','escalated','awaiting_client'),
+  ('review_dispute','resolved','closed');
+CREATE TRIGGER review_disputes_transition BEFORE UPDATE OF status ON review_disputes
+  FOR EACH ROW EXECUTE FUNCTION app.check_transition('review_dispute');
+
+-- Conversación de la consulta: cliente ↔ asistente (IA) ↔ operación. El proveedor no la ve.
+CREATE TABLE review_dispute_messages (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dispute_id  uuid NOT NULL REFERENCES review_disputes(id),
+  author      text NOT NULL CHECK (author IN ('client','ai','admin','system')),
+  author_id   uuid REFERENCES users(id),
+  body        text NOT NULL CHECK (length(body) BETWEEN 1 AND 4000),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX review_dispute_messages_idx ON review_dispute_messages (dispute_id, created_at);
+CREATE TRIGGER review_dispute_messages_immutable BEFORE UPDATE OR DELETE ON review_dispute_messages
+  FOR EACH ROW EXECUTE FUNCTION app.forbid_change();
+
+-- Historial de versiones de reseñas (ediciones del cliente), y retiro voluntario.
+CREATE TABLE review_revisions (
+  id         bigserial PRIMARY KEY,
+  review_id  uuid NOT NULL REFERENCES reviews(id),
+  rating     integer NOT NULL,
+  comment    text NOT NULL,
+  reason     text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE reviews ADD COLUMN edited_at timestamptz;
+ALTER TABLE reviews ADD COLUMN withdrawn_at timestamptz;
+
+-- RLS
+ALTER TABLE review_disputes ENABLE ROW LEVEL SECURITY;
+-- La fila completa (con el análisis interno) solo la ve operación. Proveedor y cliente usan vistas acotadas.
+CREATE POLICY review_disputes_staff ON review_disputes FOR SELECT TO fixy_app USING (app.is_staff(app.uid()));
+ALTER TABLE review_dispute_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY review_dispute_messages_access ON review_dispute_messages FOR SELECT TO fixy_app
+  USING (app.is_staff(app.uid())
+         OR EXISTS (SELECT 1 FROM review_disputes d JOIN reviews r ON r.id = d.review_id WHERE d.id = dispute_id AND r.client_user_id = app.uid()));
+ALTER TABLE review_revisions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY review_revisions_access ON review_revisions FOR SELECT TO fixy_app
+  USING (app.is_staff(app.uid()) OR EXISTS (SELECT 1 FROM reviews r WHERE r.id = review_id AND r.client_user_id = app.uid()));
+GRANT SELECT ON review_disputes, review_dispute_messages, review_revisions TO fixy_app;
+
+-- Vista del proveedor: estado y resumen no identificatorio de SUS impugnaciones.
+CREATE VIEW review_disputes_provider AS
+  SELECT d.id, d.review_id, d.provider_id, d.reason_code, d.status, d.resolution, d.provider_summary, d.created_at, d.resolved_at
+  FROM review_disputes d
+  WHERE app.provider_role(app.uid(), d.provider_id) = 'admin' OR app.is_staff(app.uid());
+-- Vista del cliente autor de la reseña: estado de la consulta (sin el descargo literal ni el análisis interno).
+CREATE VIEW review_disputes_client AS
+  SELECT d.id, d.review_id, d.reason_code, d.status, d.resolution, d.client_deadline, d.created_at, d.resolved_at
+  FROM review_disputes d JOIN reviews r ON r.id = d.review_id
+  WHERE r.client_user_id = app.uid();
+GRANT SELECT ON review_disputes_provider, review_disputes_client TO fixy_app;
+
+INSERT INTO platform_settings (key, value) VALUES
+  ('reviews.dispute_window_days', '30'::jsonb),
+  ('reviews.dispute_client_days', '5'::jsonb),
+  ('reviews.dispute_max_ai_rounds', '2'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO schema_migrations (name) VALUES ('0009_review_disputes.sql');
+
+-- ===== 0010_review_dispute_client_access.sql =====
+-- El cliente autor de la reseña debe ver la conversación de la revisión (la tabla review_disputes es solo de operación).
+CREATE FUNCTION app.is_review_dispute_client(u uuid, dispute uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM review_disputes d JOIN reviews r ON r.id = d.review_id WHERE d.id = dispute AND r.client_user_id = u)
+$$;
+GRANT EXECUTE ON FUNCTION app.is_review_dispute_client(uuid, uuid) TO fixy_app;
+
+DROP POLICY review_dispute_messages_access ON review_dispute_messages;
+CREATE POLICY review_dispute_messages_access ON review_dispute_messages FOR SELECT TO fixy_app
+  USING (app.is_staff(app.uid()) OR app.is_review_dispute_client(app.uid(), dispute_id));
+
+INSERT INTO schema_migrations (name) VALUES ('0010_review_dispute_client_access.sql');
+
 -- ===== Datos base =====
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('5a4f7ba9-4902-4265-ad5b-fac429082b98', 'electricidad', 'Electricidad', 'Enchufes, térmicas, cortes, luminarias y tableros.', 'zap', 0, true, false, 'Si ves chispas, olor a quemado o cables expuestos, no los toques y cortá la luz desde la térmica general si podés hacerlo sin riesgo.') ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('3751d255-c080-442c-b850-c9d111fd583e', 'plomeria', 'Plomería', 'Pérdidas, canillas, inodoros, desagües y cañerías.', 'droplets', 1, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('9c289071-1e4b-4393-a8a3-75358aabd92f', 'gas', 'Gas', 'Artefactos a gas, calefones, estufas y cocinas. Solo profesionales con matrícula.', 'flame', 2, true, false, 'Si sentís olor a gas: no prendas ni apagues luces, ventilá, salí del lugar y llamá a la emergencia de tu distribuidora o al 911.') ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('baecc79e-4aab-4b65-82cb-3bb11e8e1521', 'climatizacion', 'Aire acondicionado y climatización', 'Instalación, mantenimiento y reparación de equipos.', 'snowflake', 3, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('4f797ae4-5522-4084-ba26-1afb3283f72a', 'electrodomesticos', 'Electrodomésticos', 'Heladeras, lavarropas, hornos y otros equipos.', 'washing-machine', 4, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('5d1b2c4f-60b5-4710-a46c-da4081d6ef10', 'cerrajeria', 'Cerrajería', 'Cerraduras, aperturas, cambios de combinación.', 'key-round', 5, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('1dba772d-4c0a-467e-a207-aaf2668192f8', 'pintura', 'Pintura', 'Interiores, exteriores, retoques y preparación de superficies.', 'paint-roller', 6, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('5afded0c-0110-48f7-9d7f-ba56d8226e60', 'albanileria', 'Albañilería', 'Revoques, grietas, humedad, cerámicos y pequeñas obras.', 'brick-wall', 7, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('bca423a0-def8-461c-8970-83b1e170dba9', 'carpinteria', 'Carpintería', 'Muebles, puertas, placares y armado.', 'hammer', 8, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('3ca03db3-a988-49f7-b7e6-6db366b44ae9', 'limpieza', 'Limpieza', 'Limpieza profunda, final de obra y oficinas.', 'sparkles', 9, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('49bc2347-ce67-4295-a9ce-868449502415', 'informatica', 'Informática y redes', 'Wi-Fi, redes, computadoras e impresoras.', 'wifi', 10, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('9a47ac6d-64d8-4f4c-8ea9-668a0cea56e2', 'mantenimiento', 'Mantenimiento general', 'Arreglos varios: colgar, ajustar, instalar y reparar.', 'wrench', 11, true, false, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('a2417b97-f9b7-401b-b4d7-209e7ed03df6', 'otro', 'Otro problema / no sé qué profesional necesito', 'Describilo con tus palabras: una persona del equipo lo revisa y lo deriva.', 'circle-help', 12, true, true, NULL) ON CONFLICT DO NOTHING;
-INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('b6c8dcfc-781f-4185-a2ff-0753121b3fc5', 'matricula_gasista', 'Matrícula de gasista', 'Matrícula vigente habilitante para trabajos en instalaciones de gas.', true) ON CONFLICT DO NOTHING;
-INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('058ea78b-ca09-48a5-a828-4b17b3ea26fe', 'matricula_electricista', 'Matrícula de electricista', 'Matrícula o habilitación vigente como instalador electricista.', true) ON CONFLICT DO NOTHING;
-INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('7aa3de5c-d14e-4973-ac40-957f3b560bc1', 'seguro_ap', 'Seguro de accidentes personales', 'Póliza vigente de accidentes personales o ART.', true) ON CONFLICT DO NOTHING;
-INSERT INTO public.category_required_credentials (category_id, credential_type_id) VALUES ('9c289071-1e4b-4393-a8a3-75358aabd92f', 'b6c8dcfc-781f-4185-a2ff-0753121b3fc5') ON CONFLICT DO NOTHING;
-INSERT INTO public.commission_rules (id, category_id, provider_rate_bps, client_rate_bps, client_fee_tax_bps, active, created_by, created_at) VALUES ('6f731218-5d88-44ac-bf60-df889ee994a4', NULL, 1000, 500, 0, true, NULL, '2026-10-08 22:29:27.376648+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.publish_delay_hours', '[48, 72, 168]', NULL, '2026-10-08 22:29:26.961655+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.publish_jitter_hours', '12', NULL, '2026-10-08 22:29:26.961655+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.reminder_days', '[1, 3, 7]', NULL, '2026-10-08 22:29:26.961655+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('matching.invite_limit', '4', NULL, '2026-10-08 22:29:27.377257+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('coverage.regions', '["CABA", "GBA_NORTE", "GBA_OESTE", "GBA_SUR"]', NULL, '2026-10-08 22:29:27.377858+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('quotes.default_valid_days', '7', NULL, '2026-10-08 22:29:27.378178+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('b9c380b1-d315-492b-a260-6f969574c7fb', 'terms', '0.1-borrador', 'Términos y condiciones (borrador)', true, '2026-10-08 22:29:27.37848+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('8144b643-9642-47fe-a694-2358b1d92fb6', 'privacy', '0.1-borrador', 'Política de privacidad (borrador)', true, '2026-10-08 22:29:27.379232+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('c58055b1-fbd3-494c-bbc2-dae514070131', 'provider_terms', '0.1-borrador', 'Condiciones para proveedores (borrador)', true, '2026-10-08 22:29:27.379524+00') ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('af96e09a-01c9-401a-9969-611556b38e9d', '5a4f7ba9-4902-4265-ad5b-fac429082b98', 'afecta_toda_casa', '¿Afecta a todo el lugar o a un sector?', 'select', '["Todo el lugar", "Un ambiente o sector", "Un solo enchufe o luz", "No sé"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('31313f7e-0d75-4424-9e97-76a1ca9f635a', '5a4f7ba9-4902-4265-ad5b-fac429082b98', 'salta_termica', '¿Salta la térmica o el disyuntor?', 'select', '["Sí", "No", "No sé"]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('851f84fc-dea1-4936-a125-ca2256e70c78', '3751d255-c080-442c-b850-c9d111fd583e', 'hay_perdida_activa', '¿Hay una pérdida de agua activa ahora?', 'select', '["Sí, constante", "Gotea", "No"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('c817fbea-6cd8-41a8-bdf5-65b1b8793b75', '3751d255-c080-442c-b850-c9d111fd583e', 'pudo_cerrar_llave', '¿Pudiste cerrar la llave de paso?', 'select', '["Sí", "No", "No sé dónde está"]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('794b7492-d566-4e1c-9a99-2479cb425e41', '9c289071-1e4b-4393-a8a3-75358aabd92f', 'artefacto', '¿Qué artefacto es?', 'select', '["Calefón", "Termotanque", "Estufa", "Cocina / horno", "Caldera", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('135243a7-47e0-4c81-be60-37f0729a3562', '9c289071-1e4b-4393-a8a3-75358aabd92f', 'olor_gas', '¿Sentís olor a gas?', 'select', '["Sí", "No"]', true, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('e9a2eb12-f82d-4b77-98a0-10f0582bc337', 'baecc79e-4aab-4b65-82cb-3bb11e8e1521', 'tipo_equipo', 'Tipo de equipo', 'select', '["Split", "Ventana", "Portátil", "Central", "No sé"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('22a8c01d-6b79-468b-bf22-a788dc31116f', 'baecc79e-4aab-4b65-82cb-3bb11e8e1521', 'frigorias', 'Frigorías aproximadas (si las sabés)', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('87f5e07b-b40a-45e6-a8e4-f13e93297e5e', 'baecc79e-4aab-4b65-82cb-3bb11e8e1521', 'necesita_instalacion', '¿Es una instalación nueva?', 'boolean', '[]', false, 2) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('0d8c6928-5021-4e80-a37d-ea2fce015109', '4f797ae4-5522-4084-ba26-1afb3283f72a', 'equipo', '¿Qué equipo es?', 'text', '[]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('1f48020e-685d-4e7b-885c-a4fad469c36e', '4f797ae4-5522-4084-ba26-1afb3283f72a', 'marca_modelo', 'Marca y modelo (si los tenés)', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('e0bca970-6f20-44a4-a982-fe559dbee48b', '4f797ae4-5522-4084-ba26-1afb3283f72a', 'en_garantia', '¿Está en garantía de fábrica?', 'select', '["Sí", "No", "No sé"]', false, 2) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('336f2987-910f-425f-b98c-3944a7a46005', '5d1b2c4f-60b5-4710-a46c-da4081d6ef10', 'situacion', '¿Cuál es la situación?', 'select', '["Me quedé afuera", "Cambio de cerradura", "Cambio de combinación", "Cerradura trabada", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('6f232356-26aa-48d6-904d-bc0d4c8fb61e', '1dba772d-4c0a-467e-a207-aaf2668192f8', 'superficie', 'Superficie aproximada (m² o ambientes)', 'text', '[]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('eadaecdf-65a1-4484-ad0a-6e4b62cc7a04', '1dba772d-4c0a-467e-a207-aaf2668192f8', 'incluye_materiales', '¿Querés que el profesional provea la pintura?', 'boolean', '[]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('373c08ad-b524-466e-9188-69d95d22d0a0', '5afded0c-0110-48f7-9d7f-ba56d8226e60', 'tipo_trabajo', '¿Qué tipo de trabajo es?', 'select', '["Reparación", "Humedad", "Revestimiento", "Pequeña obra", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('df411900-9849-46b1-adbd-723b6efab7be', 'bca423a0-def8-461c-8970-83b1e170dba9', 'tipo_trabajo', '¿Qué necesitás?', 'select', '["Reparar", "Armar", "Fabricar a medida", "Ajustar puertas"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('06ec7823-46dd-4324-b6be-deb4da31a16a', '3ca03db3-a988-49f7-b7e6-6db366b44ae9', 'tipo_limpieza', 'Tipo de limpieza', 'select', '["General profunda", "Final de obra", "Oficina", "Vidrios"]', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('5687b7e4-9d9c-4392-8d71-6c4e7d608456', '3ca03db3-a988-49f7-b7e6-6db366b44ae9', 'superficie', 'Superficie o ambientes', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('8824fdef-efda-4ac7-80da-a68bf90df3c8', '49bc2347-ce67-4295-a9ce-868449502415', 'equipos', '¿Cuántos equipos o puestos involucra?', 'text', '[]', false, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('ccaf1f09-26da-4320-9f8e-ab7698faff23', '9a47ac6d-64d8-4f4c-8ea9-668a0cea56e2', 'lista', 'Contanos la lista de tareas', 'text', '[]', false, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('99e43556-63d8-4656-9d44-edcf2707ef84', '5a4f7ba9-4902-4265-ad5b-fac429082b98', 'instalacion-luminaria', 'Instalación de luminaria (hasta 1 punto)', '', 'fixed', 2800000, NULL, 'ARS', 'Instalación de una luminaria en un punto existente, con prueba de funcionamiento.', 'No incluye la luminaria ni tendido de cables nuevos.', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('ac0daf77-7df2-48f3-871f-63175d5dffb7', '5a4f7ba9-4902-4265-ad5b-fac429082b98', 'cambio-tomacorriente', 'Cambio de tomacorriente o llave', '', 'fixed', 1900000, NULL, 'ARS', 'Reemplazo de un tomacorriente o llave de luz existente.', 'No incluye materiales ni reparación de cableado.', true, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('781f3d52-945e-4450-91c9-197a98f1c320', '3751d255-c080-442c-b850-c9d111fd583e', 'destapacion-pileta', 'Destapación simple de pileta o bacha', '', 'fixed', 3500000, NULL, 'ARS', 'Destapación manual de pileta de cocina o bacha de baño.', 'No incluye destapación de cloacas ni rotura de cañerías.', true, 2) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('1e3ecba4-6ad6-40cc-b9d4-d1205913c264', '5d1b2c4f-60b5-4710-a46c-da4081d6ef10', 'cambio-cerradura', 'Cambio de cerradura (mano de obra)', '', 'fixed', 3000000, NULL, 'ARS', 'Reemplazo de cerradura de puerta interior o exterior estándar.', 'No incluye la cerradura nueva.', true, 3) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('ecd72181-36b5-443f-8310-e1866390871a', '4f797ae4-5522-4084-ba26-1afb3283f72a', 'diagnostico-electrodomesticos', 'Visita de diagnóstico de electrodoméstico', '', 'diagnostic', NULL, 1800000, 'ARS', 'Revisión del equipo y presupuesto de reparación.', 'La reparación se cotiza aparte después de la visita.', true, 4) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('ceb6a310-be79-4a63-8db2-597c983305bd', 'baecc79e-4aab-4b65-82cb-3bb11e8e1521', 'diagnostico-aire', 'Visita de diagnóstico de aire acondicionado', '', 'diagnostic', NULL, 2000000, 'ARS', 'Revisión del equipo y presupuesto de reparación o carga.', 'La reparación se cotiza aparte después de la visita.', true, 5) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('e7a945d0-e0ef-4ab9-8168-f780b1e1d29a', '3751d255-c080-442c-b850-c9d111fd583e', 'reparacion-perdida', 'Reparación de pérdida', '', 'quote', NULL, NULL, 'ARS', '', '', true, 6) ON CONFLICT DO NOTHING;
-INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('7a2489ce-7c3b-4c40-9417-a743c64d779e', '1dba772d-4c0a-467e-a207-aaf2668192f8', 'pintura-ambiente', 'Pintura de ambientes', '', 'quote', NULL, NULL, 'ARS', '', '', true, 7) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('dde3bfc8-9a01-45e6-88cf-c9a5f64e6c26', 'caba-palermo', 'Palermo', 'CABA', true, 0) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('2579b5c6-c74f-4d90-ae85-35df33ae5b56', 'caba-belgrano', 'Belgrano / Núñez', 'CABA', true, 1) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('ef1eed40-362e-4bb7-b7df-e85da64d0212', 'caba-recoleta', 'Recoleta / Retiro', 'CABA', true, 2) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('f92c406e-6009-42df-99fc-36cd3da95694', 'caba-centro', 'Microcentro / San Nicolás', 'CABA', true, 3) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('79d7a0cc-0900-4ab6-aef7-fffa71d169c1', 'caba-caballito', 'Caballito / Almagro', 'CABA', true, 4) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('b8f49ffa-3abc-451b-80df-ccf1c714bb7d', 'caba-urquiza', 'Villa Urquiza / Saavedra', 'CABA', true, 5) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('47c40fbc-7a6e-42f0-a859-9b3393c5d7ed', 'caba-flores', 'Flores / Floresta', 'CABA', true, 6) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('806f2877-72bf-4aec-bdd5-f90b1a96b82d', 'caba-sur', 'San Telmo / Barracas / La Boca', 'CABA', true, 7) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('09a4f917-152a-467c-ab83-c8ec84f4da84', 'gba-vicente-lopez', 'Vicente López', 'GBA_NORTE', true, 8) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('549336fa-e97a-4f8f-8aeb-90e507d984b3', 'gba-san-isidro', 'San Isidro', 'GBA_NORTE', true, 9) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('030e6b5d-e328-4e04-ba7d-645f8226dfb3', 'gba-tigre', 'Tigre', 'GBA_NORTE', true, 10) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('de0b4b41-88e9-4f18-ac91-2e45aaf6faa5', 'gba-moron', 'Morón', 'GBA_OESTE', true, 11) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('2e09100b-7114-44e5-9d00-9bef60021bea', 'gba-la-matanza', 'La Matanza', 'GBA_OESTE', true, 12) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('ddd84dbe-26f9-48a1-a214-04681a25e96a', 'gba-avellaneda', 'Avellaneda', 'GBA_SUR', true, 13) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('b82cc796-2e8d-4217-8147-c6914b656736', 'gba-lanus', 'Lanús', 'GBA_SUR', true, 14) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('0ed2f8b0-530d-47d1-8388-07f654c8f345', 'gba-lomas', 'Lomas de Zamora', 'GBA_SUR', true, 15) ON CONFLICT DO NOTHING;
-INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('36796459-f675-4b7a-9e5b-5e1bb8301755', 'gba-quilmes', 'Quilmes', 'GBA_SUR', true, 16) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('f74591b9-c0c3-42a2-90bb-a30de5444f43', 'electricidad', 'Electricidad', 'Enchufes, térmicas, cortes, luminarias y tableros.', 'zap', 0, true, false, 'Si ves chispas, olor a quemado o cables expuestos, no los toques y cortá la luz desde la térmica general si podés hacerlo sin riesgo.') ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('3549aaf0-f99f-48e7-ba2d-a4828861793f', 'plomeria', 'Plomería', 'Pérdidas, canillas, inodoros, desagües y cañerías.', 'droplets', 1, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('2ef29bce-6f5d-40c9-abca-39cac1d6a637', 'gas', 'Gas', 'Artefactos a gas, calefones, estufas y cocinas. Solo profesionales con matrícula.', 'flame', 2, true, false, 'Si sentís olor a gas: no prendas ni apagues luces, ventilá, salí del lugar y llamá a la emergencia de tu distribuidora o al 911.') ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('4b87c34b-0d78-47db-8d2a-97c930eb1311', 'climatizacion', 'Aire acondicionado y climatización', 'Instalación, mantenimiento y reparación de equipos.', 'snowflake', 3, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('19a25717-f3bf-4c42-8d39-e6c2d7df4081', 'electrodomesticos', 'Electrodomésticos', 'Heladeras, lavarropas, hornos y otros equipos.', 'washing-machine', 4, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('64c50778-5839-4727-b87e-f25f2767a0bb', 'cerrajeria', 'Cerrajería', 'Cerraduras, aperturas, cambios de combinación.', 'key-round', 5, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('2f43eea5-41d3-4f5b-a365-bc7aeda8bde2', 'pintura', 'Pintura', 'Interiores, exteriores, retoques y preparación de superficies.', 'paint-roller', 6, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('a2465fa8-4c2b-4a06-bf72-81bffa694046', 'albanileria', 'Albañilería', 'Revoques, grietas, humedad, cerámicos y pequeñas obras.', 'brick-wall', 7, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('d60a7e0e-4eb3-453a-9c20-a49b317a17b1', 'carpinteria', 'Carpintería', 'Muebles, puertas, placares y armado.', 'hammer', 8, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('4713b364-0550-4fff-a3e0-9239417d5146', 'limpieza', 'Limpieza', 'Limpieza profunda, final de obra y oficinas.', 'sparkles', 9, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('68887c2b-3a3c-4a1b-962b-f196ec960088', 'informatica', 'Informática y redes', 'Wi-Fi, redes, computadoras e impresoras.', 'wifi', 10, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('a68fa5ce-3cc3-45cc-b772-d5617ff92fd8', 'mantenimiento', 'Mantenimiento general', 'Arreglos varios: colgar, ajustar, instalar y reparar.', 'wrench', 11, true, false, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('78942b65-6720-4599-91fc-1adf7d41d61e', 'otro', 'Otro problema / no sé qué profesional necesito', 'Describilo con tus palabras: una persona del equipo lo revisa y lo deriva.', 'circle-help', 12, true, true, NULL) ON CONFLICT DO NOTHING;
+INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('da9c289c-188b-4e3c-b37f-d44d962b728c', 'matricula_gasista', 'Matrícula de gasista', 'Matrícula vigente habilitante para trabajos en instalaciones de gas.', true) ON CONFLICT DO NOTHING;
+INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('bfa7db5e-bd6c-4efe-9335-dd7d368f091e', 'matricula_electricista', 'Matrícula de electricista', 'Matrícula o habilitación vigente como instalador electricista.', true) ON CONFLICT DO NOTHING;
+INSERT INTO public.credential_types (id, code, name, description, expires) VALUES ('408fd69c-f071-4a41-ad9d-af6b8fc540e0', 'seguro_ap', 'Seguro de accidentes personales', 'Póliza vigente de accidentes personales o ART.', true) ON CONFLICT DO NOTHING;
+INSERT INTO public.category_required_credentials (category_id, credential_type_id) VALUES ('2ef29bce-6f5d-40c9-abca-39cac1d6a637', 'da9c289c-188b-4e3c-b37f-d44d962b728c') ON CONFLICT DO NOTHING;
+INSERT INTO public.commission_rules (id, category_id, provider_rate_bps, client_rate_bps, client_fee_tax_bps, active, created_by, created_at) VALUES ('be9f04bb-16da-439f-83f2-b38a74abf648', NULL, 1000, 500, 0, true, NULL, '2026-10-08 22:56:37.869908+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.publish_delay_hours', '[48, 72, 168]', NULL, '2026-10-08 22:56:37.34751+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.publish_jitter_hours', '12', NULL, '2026-10-08 22:56:37.34751+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.reminder_days', '[1, 3, 7]', NULL, '2026-10-08 22:56:37.34751+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.dispute_window_days', '30', NULL, '2026-10-08 22:56:37.359273+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.dispute_client_days', '5', NULL, '2026-10-08 22:56:37.359273+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('reviews.dispute_max_ai_rounds', '2', NULL, '2026-10-08 22:56:37.359273+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('matching.invite_limit', '4', NULL, '2026-10-08 22:56:37.870558+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('coverage.regions', '["CABA", "GBA_NORTE", "GBA_OESTE", "GBA_SUR"]', NULL, '2026-10-08 22:56:37.871148+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.platform_settings (key, value, updated_by, updated_at) VALUES ('quotes.default_valid_days', '7', NULL, '2026-10-08 22:56:37.871437+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('ce586586-774b-4d72-a1ac-df6199b1db46', 'terms', '0.1-borrador', 'Términos y condiciones (borrador)', true, '2026-10-08 22:56:37.871744+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('a9fd1ad1-a093-4d6c-a99f-0c09febb1455', 'privacy', '0.1-borrador', 'Política de privacidad (borrador)', true, '2026-10-08 22:56:37.872391+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.policy_documents (id, kind, version, title, is_draft, published_at) VALUES ('48e976dd-bd57-46ec-89c6-6bec11fdce4c', 'provider_terms', '0.1-borrador', 'Condiciones para proveedores (borrador)', true, '2026-10-08 22:56:37.872671+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('1f0b6f92-6c40-4b2c-8d37-66305f6f6937', 'f74591b9-c0c3-42a2-90bb-a30de5444f43', 'afecta_toda_casa', '¿Afecta a todo el lugar o a un sector?', 'select', '["Todo el lugar", "Un ambiente o sector", "Un solo enchufe o luz", "No sé"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('c219ad12-b386-4ddc-9c4c-0ee11b4513f5', 'f74591b9-c0c3-42a2-90bb-a30de5444f43', 'salta_termica', '¿Salta la térmica o el disyuntor?', 'select', '["Sí", "No", "No sé"]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('628e7a11-c115-4055-af63-59fa3862c859', '3549aaf0-f99f-48e7-ba2d-a4828861793f', 'hay_perdida_activa', '¿Hay una pérdida de agua activa ahora?', 'select', '["Sí, constante", "Gotea", "No"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('5d01a5d1-5b90-4f2d-b839-93c13e163283', '3549aaf0-f99f-48e7-ba2d-a4828861793f', 'pudo_cerrar_llave', '¿Pudiste cerrar la llave de paso?', 'select', '["Sí", "No", "No sé dónde está"]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('f2539fbb-c9db-4d4c-ab79-76731d55f3ba', '2ef29bce-6f5d-40c9-abca-39cac1d6a637', 'artefacto', '¿Qué artefacto es?', 'select', '["Calefón", "Termotanque", "Estufa", "Cocina / horno", "Caldera", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('413002be-91b1-46f3-9d81-002463a1d33d', '2ef29bce-6f5d-40c9-abca-39cac1d6a637', 'olor_gas', '¿Sentís olor a gas?', 'select', '["Sí", "No"]', true, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('add84e1b-3146-44be-a2a6-bc5755e373f3', '4b87c34b-0d78-47db-8d2a-97c930eb1311', 'tipo_equipo', 'Tipo de equipo', 'select', '["Split", "Ventana", "Portátil", "Central", "No sé"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('507f5417-bea1-481b-9eda-5e51874991a6', '4b87c34b-0d78-47db-8d2a-97c930eb1311', 'frigorias', 'Frigorías aproximadas (si las sabés)', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('f3be619e-efdd-491c-9d94-ad58238dbae2', '4b87c34b-0d78-47db-8d2a-97c930eb1311', 'necesita_instalacion', '¿Es una instalación nueva?', 'boolean', '[]', false, 2) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('21d736f1-1d9c-4875-84bc-5700911f94d6', '19a25717-f3bf-4c42-8d39-e6c2d7df4081', 'equipo', '¿Qué equipo es?', 'text', '[]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('c6d4f316-794e-437d-81a6-410e595938d6', '19a25717-f3bf-4c42-8d39-e6c2d7df4081', 'marca_modelo', 'Marca y modelo (si los tenés)', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('b725ab80-8641-4dee-817d-b4618e66af3f', '19a25717-f3bf-4c42-8d39-e6c2d7df4081', 'en_garantia', '¿Está en garantía de fábrica?', 'select', '["Sí", "No", "No sé"]', false, 2) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('5df5d7a7-c61d-4755-b3f2-63ec29c8da47', '64c50778-5839-4727-b87e-f25f2767a0bb', 'situacion', '¿Cuál es la situación?', 'select', '["Me quedé afuera", "Cambio de cerradura", "Cambio de combinación", "Cerradura trabada", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('3e99a750-211e-49b6-b9fc-8373bb32172e', '2f43eea5-41d3-4f5b-a365-bc7aeda8bde2', 'superficie', 'Superficie aproximada (m² o ambientes)', 'text', '[]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('ba30f667-03dc-4cf3-bf96-aa46b695d2fd', '2f43eea5-41d3-4f5b-a365-bc7aeda8bde2', 'incluye_materiales', '¿Querés que el profesional provea la pintura?', 'boolean', '[]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('b996e673-e99e-476b-8bc5-3b78bbeb1690', 'a2465fa8-4c2b-4a06-bf72-81bffa694046', 'tipo_trabajo', '¿Qué tipo de trabajo es?', 'select', '["Reparación", "Humedad", "Revestimiento", "Pequeña obra", "Otro"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('ec1ce3ac-d85f-4ab2-93f0-74f154b6fba1', 'd60a7e0e-4eb3-453a-9c20-a49b317a17b1', 'tipo_trabajo', '¿Qué necesitás?', 'select', '["Reparar", "Armar", "Fabricar a medida", "Ajustar puertas"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('565e6813-834b-4a4a-988e-cca8bcff3976', '4713b364-0550-4fff-a3e0-9239417d5146', 'tipo_limpieza', 'Tipo de limpieza', 'select', '["General profunda", "Final de obra", "Oficina", "Vidrios"]', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('a020c0b6-e041-4970-846d-f2badf2ea1c2', '4713b364-0550-4fff-a3e0-9239417d5146', 'superficie', 'Superficie o ambientes', 'text', '[]', false, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('146f24bb-5bb3-4324-b5e5-3ded3ca71a36', '68887c2b-3a3c-4a1b-962b-f196ec960088', 'equipos', '¿Cuántos equipos o puestos involucra?', 'text', '[]', false, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.service_questions (id, category_id, key, label, kind, options, required, sort) VALUES ('0a6d377c-3229-49c3-8d80-b0b948361294', 'a68fa5ce-3cc3-45cc-b772-d5617ff92fd8', 'lista', 'Contanos la lista de tareas', 'text', '[]', false, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('3d95d33c-b8d3-4c2f-b625-bdf1f5a74ec6', 'f74591b9-c0c3-42a2-90bb-a30de5444f43', 'instalacion-luminaria', 'Instalación de luminaria (hasta 1 punto)', '', 'fixed', 2800000, NULL, 'ARS', 'Instalación de una luminaria en un punto existente, con prueba de funcionamiento.', 'No incluye la luminaria ni tendido de cables nuevos.', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('846e680a-f90f-4fdc-b9ba-02915392f583', 'f74591b9-c0c3-42a2-90bb-a30de5444f43', 'cambio-tomacorriente', 'Cambio de tomacorriente o llave', '', 'fixed', 1900000, NULL, 'ARS', 'Reemplazo de un tomacorriente o llave de luz existente.', 'No incluye materiales ni reparación de cableado.', true, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('f0a26df6-d2e1-49d4-95fb-bd57a1c3a8f1', '3549aaf0-f99f-48e7-ba2d-a4828861793f', 'destapacion-pileta', 'Destapación simple de pileta o bacha', '', 'fixed', 3500000, NULL, 'ARS', 'Destapación manual de pileta de cocina o bacha de baño.', 'No incluye destapación de cloacas ni rotura de cañerías.', true, 2) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('39dd4ba6-054c-405a-bc15-9a8c9e324da2', '64c50778-5839-4727-b87e-f25f2767a0bb', 'cambio-cerradura', 'Cambio de cerradura (mano de obra)', '', 'fixed', 3000000, NULL, 'ARS', 'Reemplazo de cerradura de puerta interior o exterior estándar.', 'No incluye la cerradura nueva.', true, 3) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('e47effee-92b0-48c4-8cf0-5ee1495fc8ae', '19a25717-f3bf-4c42-8d39-e6c2d7df4081', 'diagnostico-electrodomesticos', 'Visita de diagnóstico de electrodoméstico', '', 'diagnostic', NULL, 1800000, 'ARS', 'Revisión del equipo y presupuesto de reparación.', 'La reparación se cotiza aparte después de la visita.', true, 4) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('d290c996-8bcd-4043-9b22-6b0d278c4233', '4b87c34b-0d78-47db-8d2a-97c930eb1311', 'diagnostico-aire', 'Visita de diagnóstico de aire acondicionado', '', 'diagnostic', NULL, 2000000, 'ARS', 'Revisión del equipo y presupuesto de reparación o carga.', 'La reparación se cotiza aparte después de la visita.', true, 5) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('f50f830d-9fab-4625-bfef-82a91d027551', '3549aaf0-f99f-48e7-ba2d-a4828861793f', 'reparacion-perdida', 'Reparación de pérdida', '', 'quote', NULL, NULL, 'ARS', '', '', true, 6) ON CONFLICT DO NOTHING;
+INSERT INTO public.services (id, category_id, slug, name, description, pricing_mode, fixed_price_minor, diagnostic_price_minor, currency, scope, exclusions, active, sort) VALUES ('a8dbf87f-ce25-4c84-b30b-487a5f6aff13', '2f43eea5-41d3-4f5b-a365-bc7aeda8bde2', 'pintura-ambiente', 'Pintura de ambientes', '', 'quote', NULL, NULL, 'ARS', '', '', true, 7) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('8f5658ca-ecb9-407c-adb6-225bed27e03e', 'caba-palermo', 'Palermo', 'CABA', true, 0) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('371afcb4-e0d7-4187-ab03-f077c145d87c', 'caba-belgrano', 'Belgrano / Núñez', 'CABA', true, 1) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('cd816080-af95-468c-97c3-942f3a3fa1f2', 'caba-recoleta', 'Recoleta / Retiro', 'CABA', true, 2) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('618661fd-6594-44b1-8dce-718de097a085', 'caba-centro', 'Microcentro / San Nicolás', 'CABA', true, 3) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('5a30202b-3300-441f-b84b-c4abba981e15', 'caba-caballito', 'Caballito / Almagro', 'CABA', true, 4) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('ff8744f7-d35e-4fe0-874e-ed9a712c6557', 'caba-urquiza', 'Villa Urquiza / Saavedra', 'CABA', true, 5) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('9735e7f7-f128-4b14-bbd4-9fd15f1ce438', 'caba-flores', 'Flores / Floresta', 'CABA', true, 6) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('dab5abb2-e265-4a2a-9ded-b085a7decd10', 'caba-sur', 'San Telmo / Barracas / La Boca', 'CABA', true, 7) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('f458003b-e90b-4b33-b5a7-108a9e1325f3', 'gba-vicente-lopez', 'Vicente López', 'GBA_NORTE', true, 8) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('73076a67-e06f-477a-bbb2-7dffd7046dfc', 'gba-san-isidro', 'San Isidro', 'GBA_NORTE', true, 9) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('70307f97-5275-458a-9d32-688fa1b326f4', 'gba-tigre', 'Tigre', 'GBA_NORTE', true, 10) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('2c1d94cd-ae06-4f92-9302-05917658b9ae', 'gba-moron', 'Morón', 'GBA_OESTE', true, 11) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('73c1fd68-63ae-4657-9b59-f704cc0d583f', 'gba-la-matanza', 'La Matanza', 'GBA_OESTE', true, 12) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('88965f38-e3ee-4b0a-8c4d-236ed7e74fcb', 'gba-avellaneda', 'Avellaneda', 'GBA_SUR', true, 13) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('57568761-d044-4894-b85c-cf0263cd4b46', 'gba-lanus', 'Lanús', 'GBA_SUR', true, 14) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('bcf3ad32-d885-406f-ab29-d0deb26f1ac7', 'gba-lomas', 'Lomas de Zamora', 'GBA_SUR', true, 15) ON CONFLICT DO NOTHING;
+INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('f14378e1-637b-4cdc-8b78-7b485ad76c96', 'gba-quilmes', 'Quilmes', 'GBA_SUR', true, 16) ON CONFLICT DO NOTHING;
 COMMIT;
 SELECT (SELECT count(*) FROM categories) AS categorias, (SELECT count(*) FROM zones) AS zonas, (SELECT count(*) FROM schema_migrations) AS migraciones;
