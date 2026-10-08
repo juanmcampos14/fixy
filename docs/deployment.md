@@ -57,7 +57,7 @@ Verificación: en Supabase → Table Editor deberías ver `categories` (13 filas
 |---|---|
 | `DATABASE_URL` | Cadena **Transaction pooler** (puerto **6543**) con `?sslmode=require` |
 | `DATABASE_POOL_MAX` | `3` |
-| `APP_URL` | `https://fixy.solutions` |
+| `APP_URL` | `https://www.fixy.solutions` (si `fixy.solutions` redirige a `www`) |
 | `FILE_SIGNING_SECRET` | secreto aleatorio (≥ 32 caracteres) |
 | `STORAGE_DRIVER` | `supabase` |
 | `SUPABASE_URL` | Project URL de Supabase |
