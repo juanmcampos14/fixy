@@ -1,0 +1,36 @@
+/** Constantes de interfaz del panel de proveedor (seguras para cliente y servidor). */
+export const REGION_LABEL: Record<string, string> = {
+  CABA: "Ciudad de Buenos Aires",
+  GBA_NORTE: "GBA Norte",
+  GBA_OESTE: "GBA Oeste",
+  GBA_SUR: "GBA Sur",
+};
+export const REGION_ORDER = ["CABA", "GBA_NORTE", "GBA_OESTE", "GBA_SUR"];
+
+export const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+/** Orden de visualización: lunes primero. */
+export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+export const ITEM_KIND_LABEL: Record<string, string> = { labor: "Mano de obra", materials: "Materiales", visit: "Visita / diagnóstico" };
+export const EVIDENCE_KIND_LABEL: Record<string, string> = { before: "Antes", progress: "Avance", after: "Después", note: "Nota" };
+export const INVITATION_STATUS_LABEL: Record<string, string> = {
+  invited: "Nueva",
+  viewed: "Vista",
+  quoted: "Cotizada",
+  declined: "Rechazada por vos",
+  expired: "Vencida",
+  closed: "Cerrada",
+};
+export const DOCUMENT_STATUS_LABEL: Record<string, string> = { pending: "En revisión", approved: "Aprobado", rejected: "Rechazado" };
+export const DOCUMENT_KIND_LABEL: Record<string, string> = { identity: "Documento de identidad", credential: "Credencial / matrícula", tax: "Constancia fiscal", other: "Otro" };
+
+export function minutesToHour(m: number) {
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** Agrupa zonas por región, en el orden definido. */
+export function groupZones<T extends { region: string }>(zones: T[]): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const z of zones) map.set(z.region, [...(map.get(z.region) ?? []), z]);
+  return [...map.entries()].sort((a, b) => REGION_ORDER.indexOf(a[0]) - REGION_ORDER.indexOf(b[0]));
+}

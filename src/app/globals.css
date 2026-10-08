@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Fixy · tokens de marca (docs/brand-manual.md) */
+@theme {
+  --color-fixy-50: #effcf9;
+  --color-fixy-100: #cdf6ee;
+  --color-fixy-200: #9cecdd;
+  --color-fixy-500: #14b8a6; /* Verde Fixy: identidad e ilustraciones (no texto blanco pequeño encima) */
+  --color-fixy-600: #0d9488;
+  --color-fixy-700: #0f766e; /* Verde profundo: botones principales con texto blanco */
+  --color-fixy-800: #115e59;
+  --color-ink: #15343b; /* Azul tinta: texto y títulos */
+  --color-ink-2: #2f4d54;
+  --color-muted: #55696e;
+  --color-cream: #fff9f1;
+  --color-cream-2: #fdf1e2;
+  --color-spark: #ff9b54; /* Naranja chispa: detalles pequeños, nunca la acción principal */
+  --color-spark-100: #ffeadb;
+  --color-line: #e6eeec;
+  --color-surface: #ffffff;
+  --color-ok-bg: #e3f6ef;
+  --color-ok: #0b6b4f;
+  --color-warn-bg: #fff3d6;
+  --color-warn: #8a5300;
+  --color-danger-bg: #fde8e6;
+  --color-danger: #b42318;
+  --color-info-bg: #e8f0f4;
+  --color-info: #1f4f63;
+
+  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 20px;
+  --shadow-card: 0 1px 2px rgb(21 52 59 / 0.04), 0 4px 16px rgb(21 52 59 / 0.05);
+  --shadow-lift: 0 2px 4px rgb(21 52 59 / 0.06), 0 12px 32px rgb(21 52 59 / 0.1);
+
+  --animate-pop-in: pop-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-fade-up: fade-up 0.4s ease-out both;
+  --animate-wave: wave 1.5s ease-in-out 1;
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes wave {
+    0%, 100% { transform: rotate(0); }
+    25% { transform: rotate(-4deg); }
+    50% { transform: rotate(3deg); }
+    75% { transform: rotate(-2deg); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-cream);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-fixy-500);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--color-fixy-100);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}

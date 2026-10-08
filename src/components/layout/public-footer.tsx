@@ -1,0 +1,42 @@
+import Link from "next/link";
+import { Logo } from "@/components/brand/logo";
+
+export function PublicFooter() {
+  return (
+    <footer className="mt-20 bg-ink text-white/85">
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div>
+          <Logo variant="white" size="sm" />
+          <p className="mt-3 max-w-xs text-sm text-white/70">Servicios para tu hogar y oficina. Cobertura inicial: Ciudad de Buenos Aires y GBA.</p>
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white">Clientes</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link className="hover:underline" href="/solicitar">Pedir presupuesto</Link></li>
+            <li><Link className="hover:underline" href="/#como-funciona">Cómo funciona</Link></li>
+            <li><Link className="hover:underline" href="/#empresas">Oficinas y empresas</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white">Profesionales</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link className="hover:underline" href="/ofrece-tus-servicios">Ofrecé tus servicios</Link></li>
+            <li><Link className="hover:underline" href="/proveedor">Panel de proveedores</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white">Legales (borradores)</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link className="hover:underline" href="/terminos">Términos y condiciones</Link></li>
+            <li><Link className="hover:underline" href="/privacidad">Privacidad</Link></li>
+          </ul>
+        </div>
+      </div>
+      <div className="border-t border-white/10">
+        <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-white/60 sm:px-6">
+          © {new Date().getFullYear()} Fixy · fixy.solutions · MVP en desarrollo: los perfiles, reseñas y pagos que ves son de demostración.
+        </p>
+      </div>
+    </footer>
+  );
+}

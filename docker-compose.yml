@@ -1,0 +1,21 @@
+# Base de datos local para desarrollo y pruebas (PostgreSQL 16, compatible con Supabase Postgres).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fixy-db
+    environment:
+      POSTGRES_USER: fixy
+      POSTGRES_PASSWORD: fixy_local_only
+      POSTGRES_DB: fixy
+    ports:
+      - "54329:5432"
+    volumes:
+      - fixy-db:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixy"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  fixy-db:
