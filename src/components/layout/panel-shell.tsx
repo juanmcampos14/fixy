@@ -15,7 +15,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
   const [{ unread }] = await sql()<{ unread: number }[]>`select count(*)::int as unread from notifications where user_id = ${actor.id} and read_at is null`;
   const areas: { key: Area; href: string; label: string }[] = [
     { key: "client", href: "/app", label: "Cliente" },
-    ...(actor.providers.length ? [{ key: "provider" as const, href: "/proveedor", label: "Proveedor" }] : []),
+    ...(actor.providers.length ? [{ key: "provider" as const, href: "/proveedor", label: "Profesional" }] : []),
     ...(isStaff(actor) ? [{ key: "admin" as const, href: "/admin", label: "Operación" }] : []),
   ];
   return (
@@ -44,6 +44,12 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
             </nav>
           )}
           <div className="ml-auto flex items-center gap-1">
+            {area === "client" && !actor.providers.length && !isStaff(actor) && (
+              <Link href="/sumate" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/5 sm:inline">Ofrecé tus servicios</Link>
+            )}
+            {area === "provider" && (
+              <Link href="/solicitar" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/5 sm:inline">Pedir un servicio</Link>
+            )}
             <Link href="/notificaciones" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-ink/5" aria-label={`Notificaciones${unread ? `: ${unread} sin leer` : ""}`}>
               <Bell className="h-5 w-5" aria-hidden />
               {unread > 0 && <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-spark px-1 text-[11px] font-bold text-ink">{unread > 99 ? "99+" : unread}</span>}

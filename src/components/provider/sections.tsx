@@ -4,9 +4,8 @@ import { CircleCheck, CircleDashed, FileText, ImagePlus, Trash2 } from "lucide-r
 import type { OnboardingChecklist } from "@/server/modules/providers";
 import type { OwnProvider, ProviderSetup } from "@/server/queries/provider";
 import {
-  acceptTermsAction, addPortfolioAction, removePortfolioAction, setupPayoutsAction, updateCoverageAction, uploadDocumentAction,
+  acceptTermsAction, addPortfolioAction, removePortfolioAction, updateCoverageAction, uploadDocumentAction,
 } from "@/app/proveedor/alta/actions";
-import { paymentsAreTestMode } from "@/server/env";
 import { identityStatusLabel, payoutsStatusLabel, providerStatusLabel } from "@/server/domain/labels";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -14,6 +13,7 @@ import { Badge, StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { Checkbox, ChoiceChip, Field, Input, Select } from "@/components/ui/field";
 import { CategoryIcon } from "@/components/category-icon";
+import { ButtonLink } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { DOCUMENT_KIND_LABEL, DOCUMENT_STATUS_LABEL, REGION_LABEL, WEEKDAYS, WEEKDAY_ORDER, groupZones } from "./constants";
 
@@ -247,24 +247,16 @@ export function DocumentsSection({ setup, checklist, id = "documentacion" }: { s
   );
 }
 
-export function PayoutsSection({ provider, id = "cobros" }: { provider: OwnProvider; id?: string }) {
-  const test = paymentsAreTestMode();
-  const configured = provider.payouts_status === "enabled" || provider.payouts_status === "pending";
+export function PayoutsSection({ id = "cobros" }: { provider?: OwnProvider; id?: string }) {
   return (
     <Card as="section" id={id} aria-labelledby={`${id}-t`} className="scroll-mt-24">
-      <CardHeader title={<span id={`${id}-t`}>Cobros</span>} description="Para recibir pagos, vinculás una cuenta en la pasarela de pagos." action={test ? <TestModeBadge /> : undefined} />
-      <p className="text-[15px] text-ink-2">
-        La configuración se hace con el proceso de la pasarela: ahí cargás tus datos de cobro. Fixy guarda solo una referencia a esa cuenta, nunca tus datos bancarios.
-      </p>
-      {test && <Alert tone="warn" className="mt-3" title="Modo de prueba">En esta versión la vinculación es simulada. No se mueve dinero real.</Alert>}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <StatusBadge status={provider.payouts_status} labels={payoutsStatusLabel} />
-        {provider.payouts_status !== "enabled" && (
-          <ActionForm action={setupPayoutsAction}>
-            <SubmitButton variant={configured ? "secondary" : "primary"} pendingText="Configurando…">{configured ? "Retomar configuración" : "Configurar cobros"}</SubmitButton>
-          </ActionForm>
-        )}
-      </div>
+      <CardHeader title={<span id={`${id}-t`}>Cobros</span>} description="0 % de comisión: cobrás el 100 % de cada trabajo." />
+      <ul className="space-y-1.5 text-[15px] text-ink-2">
+        <li>Cuando el cliente da conformidad y deja su reseña, el monto pasa a tu saldo.</li>
+        <li>Una vez por mes pedís retirar todo lo acumulado y te lo transferimos a los 20 días.</li>
+        <li>Tus datos bancarios los cargás al pedir el primer retiro (o antes, si querés).</li>
+      </ul>
+      <ButtonLink href="/proveedor/cobros#banco" variant="secondary" className="mt-4">Ir a cobros y datos bancarios</ButtonLink>
     </Card>
   );
 }

@@ -15,7 +15,7 @@ export async function audit(
     values (${actor?.id ?? null}, ${actor?.platformRole ?? null}, ${action}, ${entityType}, ${entityId}, ${reason}, ${db.json(data as never)})`;
 }
 
-export type EntityType = "request" | "quote" | "job" | "charge" | "payout" | "dispute" | "provider" | "refund";
+export type EntityType = "request" | "quote" | "job" | "charge" | "payout" | "dispute" | "provider" | "refund" | "withdrawal";
 
 /** Evento de línea de tiempo / historial de estados. */
 export async function recordEvent(

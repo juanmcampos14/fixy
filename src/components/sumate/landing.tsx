@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowRight, BadgeCheck, Banknote, CalendarCheck, CircleCheck, EyeOff, FileCheck2, MapPin, MessageCircle, Search, Send, ShieldCheck, Star, Users } from "lucide-react";
 import { sql } from "@/server/db/client";
 import { getActor } from "@/server/auth/session";
-import { applyBps } from "@/server/domain/money";
 import { Mascot } from "@/components/brand/mascot";
 import { ButtonLink } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/category-icon";
@@ -18,8 +17,6 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
   const ownApproved = actor?.providers.find((p) => p.role === "admin" && p.status === "approved");
   const ref = ownApproved?.slug ?? (refParam && /^[a-z0-9-]{3,60}$/.test(refParam) ? refParam : "");
 
-  const [rule] = await db<{ provider_rate_bps: number }[]>`select provider_rate_bps from commission_rules where active and category_id is null limit 1`;
-  const rate = rule?.provider_rate_bps ?? 1000;
   const [cat] = oficio?.category
     ? await db<{ id: string; name: string; icon: string }[]>`select id, name, icon from categories where slug = ${oficio.category} and active`
     : [];
@@ -40,21 +37,20 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
     ? `Te paso Fixy: recibís pedidos de ${oficio.ejemplos} en tu zona y cobrás dentro de la plataforma. Para ${oficio.plural}: ${shareUrl}`
     : `Te paso Fixy: una plataforma para recibir pedidos de trabajos en tu zona y cobrar dentro de la plataforma: ${shareUrl}`;
   const exampleGross = 10_000_000;
-  const exampleFee = applyBps(exampleGross, rate);
 
   const steps = [
     { icon: Search, title: "Te eligen por tu perfil", text: "Los clientes de tu zona ven tus reseñas, verificaciones, el precio de tu visita y tus precios de referencia, y te eligen. Sin subastas con 50 personas." },
     { icon: CalendarCheck, title: "Aceptás y coordinás la visita", text: "Tenés unas horas para aceptar y proponer día y horario por el chat. La dirección se te comparte cuando el cliente confirma." },
-    { icon: Banknote, title: "Presupuestás en el lugar", text: "Ves el problema y armás el presupuesto del arreglo desde la app, con tu precio. Antes de enviarlo ves cuánto te queda neto." },
-    { icon: Star, title: "El cliente aprueba, paga y califica", text: "Todo pasa por Fixy: aprobación, pago, extras y conformidad. Con la reseña del cliente, se libera tu liquidación." },
+    { icon: Banknote, title: "Presupuestás en el lugar", text: "Ves el problema y armás el presupuesto del arreglo desde la app, con tu precio. Cobrás el 100 %: Fixy no te descuenta nada." },
+    { icon: Star, title: "El cliente aprueba, paga y califica", text: "Todo pasa por Fixy: aprobación, pago, extras y conformidad. Con la reseña del cliente, el monto pasa a tu saldo y lo retirás una vez por mes." },
   ];
   const faqs: [string, string][] = [
-    ["¿Cuánto cuesta sumarme?", `Nada. El alta no tiene costo ni abono mensual. Fixy cobra una comisión del ${rate / 100} % sobre cada trabajo que hacés, descontada de lo que cobrás.`],
-    ["¿Qué necesito para empezar?", `Tu DNI, una descripción de tu trabajo, las zonas y horarios en los que trabajás, fotos de trabajos anteriores (recomendado) y una cuenta para recibir los cobros.${credentials.length ? ` Para este oficio también: ${credentials.map((c) => c.name.toLowerCase()).join(", ")} vigente.` : ""} Nuestro equipo revisa la documentación antes de habilitarte.`],
+    ["¿Cuánto cuesta sumarme?", "Nada. Ni alta, ni abono, ni comisión: cobrás el 100 % de tu presupuesto. Fixy solo le cobra un cargo de servicio al cliente."],
+    ["¿Qué necesito para empezar?", `Tu DNI, una descripción de tu trabajo, las zonas y horarios en los que trabajás, fotos de trabajos anteriores (recomendado) y, cuando quieras retirar, tus datos bancarios.${credentials.length ? ` Para este oficio también: ${credentials.map((c) => c.name.toLowerCase()).join(", ")} vigente.` : ""} Nuestro equipo revisa la documentación antes de habilitarte.`],
     ["¿Cobro la visita?", "Vos decidís: podés cobrarla, ofrecerla sin cargo, y descontarla del arreglo si el cliente te contrata. También publicás precios de referencia (\"desde\") para que el cliente sepa qué esperar."],
     ["¿Por qué no comparto mi teléfono?", "Para cuidarte: si todo queda en Fixy (chat, dirección, aprobaciones y pagos), podemos ayudarte ante un problema y tu reputación crece con cada trabajo."],
     ["¿Cómo funcionan las reseñas?", "Solo pueden calificarte clientes con trabajos completados. Las reseñas se publican de forma anónima y días después (el plazo varía), así el cliente opina con libertad y tu reputación refleja opiniones sinceras."],
-    ["¿Cuándo cobro?", "La liquidación se libera cuando el cliente da conformidad y deja su reseña, y se procesa en el ciclo de liquidaciones. Si hay un reclamo, queda en pausa hasta que el equipo lo resuelva."],
+    ["¿Cuándo cobro?", "Cuando el cliente da conformidad y deja su reseña, el monto pasa a tu saldo. Una vez por mes pedís retirar todo lo acumulado y te lo transferimos a tu cuenta a los 20 días. Si hay un reclamo, ese trabajo queda en pausa hasta que se resuelva."],
     ["¿Y si el cliente pide algo más en el lugar?", "Lo proponés como adicional desde la plataforma. El cliente lo acepta (o no) y se cobra aparte. Nunca se cambia el precio acordado sin su aprobación."],
     ["¿Trabajo solo o con mi empresa?", "Las dos cosas. Si tenés una empresa, podés sumar a tus técnicos: cada uno ve solo los trabajos que le asignás y no ve importes."],
   ];
@@ -83,7 +79,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
               <ButtonLink href="#como-funciona" size="lg" variant="ghost" className="text-white ring-1 ring-inset ring-white/30 hover:bg-white/10">Cómo funciona</ButtonLink>
             </div>
             <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-white/85">
-              {["Alta sin costo", `Comisión del ${rate / 100} % solo si trabajás`, "Cobrás dentro de Fixy"].map((t) => (
+              {["Alta sin costo", "0 % de comisión: cobrás el 100 %", "Retirás tu saldo una vez por mes"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-200" aria-hidden />{t}</li>
               ))}
             </ul>
@@ -135,20 +131,20 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
         </div>
       </section>
 
-      {/* Comisión + requisitos */}
+      {/* Sin comisión + requisitos */}
       <section className="mx-auto mt-16 grid max-w-6xl gap-4 px-4 sm:px-6 md:grid-cols-2">
         <article aria-labelledby="com-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
-          <h2 id="com-t" className="text-2xl font-extrabold">Cuánto cobra Fixy</h2>
-          <p className="mt-2 text-ink-2">Sin costo de alta ni abono. Solo una comisión del <strong>{rate / 100} %</strong> sobre cada trabajo que hacés.</p>
+          <h2 id="com-t" className="text-2xl font-extrabold">A vos no te cobramos nada</h2>
+          <p className="mt-2 text-ink-2">Sin costo de alta, sin abono y <strong>sin comisión</strong>. Lo que presupuestás es lo que cobrás.</p>
           <figure className="mt-5 rounded-2xl bg-cream/60 p-4 ring-1 ring-line">
             <figcaption className="mb-2 text-sm font-semibold text-muted">Ejemplo</figcaption>
             <dl className="tabular divide-y divide-line text-[15px]">
               <div className="flex justify-between py-2"><dt>Tu presupuesto</dt><dd>{formatMoney(exampleGross)}</dd></div>
-              <div className="flex justify-between py-2"><dt>Comisión Fixy ({rate / 100} %)</dt><dd>− {formatMoney(exampleFee)}</dd></div>
-              <div className="flex justify-between py-2.5 text-lg font-bold"><dt>Te queda</dt><dd>{formatMoney(exampleGross - exampleFee)}</dd></div>
+              <div className="flex justify-between py-2"><dt>Comisión Fixy</dt><dd className="font-semibold text-ok">$ 0</dd></div>
+              <div className="flex justify-between py-2.5 text-lg font-bold"><dt>Te queda</dt><dd>{formatMoney(exampleGross)}</dd></div>
             </dl>
           </figure>
-          <p className="mt-3 text-xs text-muted">El cliente paga aparte un cargo de servicio. Los costos propios de la pasarela de pagos pueden aplicar según el medio de cobro.</p>
+          <p className="mt-3 text-xs text-muted">Fixy se sostiene con un cargo de servicio que paga el cliente, aparte de tu presupuesto. A vos no te descontamos nada.</p>
         </article>
         <article aria-labelledby="req-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
           <h2 id="req-t" className="text-2xl font-extrabold">Qué necesitás</h2>
@@ -156,7 +152,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
             <li className="flex gap-3"><FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />DNI (lo revisa nuestro equipo; no se publica).</li>
             {credentials.map((c) => <li key={c.name} className="flex gap-3"><BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />{c.name} vigente (obligatoria para este oficio).</li>)}
             <li className="flex gap-3"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Las zonas y horarios en los que trabajás.</li>
-            <li className="flex gap-3"><Banknote className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Una cuenta para recibir tus cobros.</li>
+            <li className="flex gap-3"><Banknote className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Tus datos bancarios (recién cuando retirás tu saldo).</li>
             <li className="flex gap-3"><Star className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Fotos de trabajos anteriores (recomendado).</li>
           </ul>
           <p className="mt-4 text-sm text-muted">El alta toma unos 15 minutos. Podés completarla de a partes y te avisamos cuando estés habilitado.</p>

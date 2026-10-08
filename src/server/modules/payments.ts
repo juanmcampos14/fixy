@@ -425,9 +425,10 @@ export async function executePayout(actor: Actor, payoutId: string, reason: stri
   if (!isStaff(actor)) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá un motivo o referencia.");
   return systemTx(async (tx) => {
-    const [p] = await tx<{ id: string; status: string; on_hold: boolean; awaiting_review: boolean; provider_id: string; job_id: string; amount_minor: number; gateway: GatewayName; is_test: boolean }[]>`
+    const [p] = await tx<{ id: string; status: string; on_hold: boolean; awaiting_review: boolean; provider_id: string; job_id: string; amount_minor: number; gateway: GatewayName; is_test: boolean; withdrawal_id: string | null }[]>`
       select * from payouts where id = ${payoutId} for update`;
     if (!p) throw notFound();
+    if (p.withdrawal_id) throw invalid("Esta liquidación es parte de un retiro: se paga desde Retiros.");
     if (p.on_hold) throw invalid("La liquidación está retenida. Liberala antes de ejecutarla.");
     if (p.awaiting_review) throw invalid("Falta la reseña del cliente: sin reseña no se libera la liquidación.");
     const [prov] = await tx<{ payouts_status: string; payout_account_ref: string | null }[]>`

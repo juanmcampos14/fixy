@@ -34,7 +34,7 @@ export function profileStrength(f: ProfileFacts): { score: number; level: string
     { key: "credentials", label: "Matrículas de tus rubros", hint: "Obligatorias en gas y electricidad.", points: 5, earned: f.credentialsComplete ? 5 : 0, href: "/proveedor/alta#documentacion" },
     { key: "prices", label: "Precios de referencia \"desde\" (2 o más)", hint: "El cliente ve cuánto sale antes de elegirte.", points: 10, earned: f.priceRefs >= 2 ? 10 : f.priceRefs === 1 ? 5 : 0, href: "/proveedor/perfil#visita" },
     { key: "visit", label: "Precio de la visita", hint: "Definí si cobrás la visita (puede ser sin cargo).", points: 5, earned: f.visitConfigured ? 5 : 0, href: "/proveedor/perfil#visita" },
-    { key: "payouts", label: "Cobros habilitados", hint: "Necesario para recibir pagos.", points: 5, earned: f.payoutsEnabled ? 5 : 0, href: "/proveedor/alta#cobros" },
+    { key: "payouts", label: "Datos bancarios", hint: "Los pedimos al retirar: si los cargás antes, retirás en un paso.", points: 5, earned: f.payoutsEnabled ? 5 : 0, href: "/proveedor/cobros#banco" },
   ];
   const score = items.reduce((s, i) => s + i.earned, 0);
   const level = score >= 90 ? "Excelente" : score >= 70 ? "Muy bueno" : score >= 40 ? "Bueno" : "Inicial";

@@ -98,9 +98,7 @@ export default async function CommissionsAdmin() {
                   {categories.map((c) => <option key={c.id} value={c.id}>Categoría: {c.name}</option>)}
                 </Select>
               </Field>
-              <Field label="Comisión al proveedor (%)" htmlFor="cr-prov" required hint="Se descuenta del neto del proveedor. Máximo 50 %.">
-                <Input id="cr-prov" name="providerRate" inputMode="decimal" required defaultValue={def ? pctInput(def.provider_rate_bps) : "10"} />
-              </Field>
+              <p className="rounded-xl bg-ok-bg px-3 py-2 text-sm text-ok sm:col-span-2"><strong>Comisión al profesional: 0 %.</strong> Es una promesa comercial de Fixy y la base de datos no permite otro valor. Los ingresos salen del cargo de servicio al cliente.</p>
               <Field label="Cargo de servicio al cliente (%)" htmlFor="cr-client" required hint="Se suma al total que paga el cliente.">
                 <Input id="cr-client" name="clientRate" inputMode="decimal" required defaultValue={def ? pctInput(def.client_rate_bps) : "5"} />
               </Field>

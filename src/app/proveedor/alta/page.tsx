@@ -64,7 +64,6 @@ export default async function AltaPage({ searchParams }: { searchParams: Promise
     [checklist.availability, "Disponibilidad", "#servicios"],
     [checklist.portfolio, "Portfolio (recomendado)", "#portfolio"],
     [checklist.identityDocument && credsOk, "Documentación", "#documentacion"],
-    [checklist.payouts, "Cobros", "#cobros"],
     [checklist.termsAccepted, "Términos", "#terminos"],
   ];
   const missingRequired = steps.filter(([ok, label]) => !ok && !label.startsWith("Portfolio"));

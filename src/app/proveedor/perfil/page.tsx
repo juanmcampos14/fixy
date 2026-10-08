@@ -21,7 +21,7 @@ export default async function ProfilePage() {
         title="Perfil"
         description="Lo que ven los clientes y cómo te llegan las oportunidades."
         action={p.status === "approved" ? (
-          <ButtonLink href={`/profesionales/${p.slug}`} variant="secondary" target="_blank">Ver perfil público <ExternalLink className="h-4 w-4" aria-hidden /></ButtonLink>
+          <ButtonLink href={`/profesionales/${p.slug}`} variant="secondary" target="_blank">Verlo como cliente <ExternalLink className="h-4 w-4" aria-hidden /></ButtonLink>
         ) : undefined}
       />
       <div className="space-y-5">

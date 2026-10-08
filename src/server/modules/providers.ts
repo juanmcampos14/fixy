@@ -258,7 +258,6 @@ export async function submitForReview(actor: Actor, providerId: string) {
     if (!c.availability) missing.push("disponibilidad");
     if (!c.identityDocument) missing.push("documento de identidad");
     if (c.requiredCredentials.some((r) => !r.uploaded)) missing.push("credenciales obligatorias");
-    if (!c.payouts) missing.push("configuración de cobros");
     if (!c.termsAccepted) missing.push("aceptación de términos");
     if (missing.length) throw invalid(`Para enviar a revisión falta completar: ${missing.join(", ")}.`);
     let from = p.status;
@@ -347,7 +346,6 @@ export async function providerEligibility(db: Db | Tx, providerId: string) {
   const reasons: string[] = [];
   if (p.status !== "approved") reasons.push("El perfil todavía no está aprobado.");
   if (p.identity_status !== "verified") reasons.push("Falta verificar la identidad.");
-  if (p.payouts_status !== "enabled") reasons.push("Falta habilitar la recepción de pagos.");
   if (!p.accepting_jobs) reasons.push("Pausaste la recepción de trabajos.");
   for (const e of expired) reasons.push(`Credencial vencida: ${e.name}.`);
   return { eligible: reasons.length === 0, reasons };
@@ -440,7 +438,7 @@ export async function profileFacts(db: Db | Tx, providerIds: string[]): Promise<
           and d.credential_type_id = rc.credential_type_id and d.status <> 'rejected')) as creds_missing,
       (select count(*)::int from provider_price_refs r where r.provider_id = p.id) as refs,
       p.visit_configured_at is not null as visit,
-      p.payouts_status = 'enabled' as payouts
+      exists (select 1 from provider_bank_accounts b where b.provider_id = p.id) as payouts
     from providers p where p.id in ${db(providerIds)}`;
   return new Map(rows.map((r) => [r.id, {
     descriptionLength: r.dlen, hasPhone: r.phone, hasYears: r.years, categories: r.cats, zones: r.zones, hasBaseZone: r.base,

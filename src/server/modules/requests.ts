@@ -114,7 +114,7 @@ export async function findCandidatesFor(
          from provider_availability a where a.provider_id = p.id) as slots
     from providers p
     left join zones bz on bz.id = p.base_zone_id
-    where p.status = 'approved' and p.identity_status = 'verified' and p.payouts_status = 'enabled' and p.accepting_jobs
+    where p.status = 'approved' and p.identity_status = 'verified' and p.accepting_jobs
       and exists (select 1 from provider_categories pc where pc.provider_id = p.id and pc.category_id = ${r.category_id})
       and exists (select 1 from provider_zones pz where pz.provider_id = p.id and pz.zone_id = ${r.zone_id})
       and exists (select 1 from provider_availability a where a.provider_id = p.id)

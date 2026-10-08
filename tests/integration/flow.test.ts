@@ -80,9 +80,9 @@ describe("recorrido principal de punta a punta", () => {
     });
     const [q] = await sql()<{ total_minor: number; provider_net_minor: number; client_fee_minor: number; provider_fee_minor: number }[]>`select * from quotes where id = ${quoteId}`;
     expect(q.client_fee_minor).toBe(900_000); // 5 % cliente
-    expect(q.provider_fee_minor).toBe(1_800_000); // 10 % proveedor
+    expect(q.provider_fee_minor).toBe(0); // 0 % al profesional
     expect(q.total_minor).toBe(18_900_000);
-    expect(q.provider_net_minor).toBe(16_200_000);
+    expect(q.provider_net_minor).toBe(18_000_000); // cobra el 100 % del presupuesto
 
     // 5. Cliente acepta y paga en modo de prueba
     const accepted = await quotes.acceptQuote(cliente, quoteId, { totalMinor: q.total_minor, acceptedTerms: true });
@@ -111,7 +111,7 @@ describe("recorrido principal de punta a punta", () => {
     await jobs.approveJob(cliente, accepted.jobId);
     const [payout] = await sql()<{ id: string; status: string; amount_minor: number }[]>`select id, status, amount_minor from payouts where job_id = ${accepted.jobId}`;
     expect(payout.status).toBe("pending"); // completado no implica liquidado
-    expect(payout.amount_minor).toBe(16_200_000);
+    expect(payout.amount_minor).toBe(18_000_000);
 
     // 8. Sin reseña no se libera la liquidación
     await expect(executePayout(operador, payout.id, "Liquidación de prueba")).rejects.toThrow(/reseña/);

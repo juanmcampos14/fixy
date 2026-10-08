@@ -61,8 +61,8 @@ export async function getJobDetail(userId: string, jobId: string) {
       from charges where job_id = ${jobId} order by created_at`;
     const refunds = await tx<{ id: string; charge_id: string; amount_minor: number; reason: string; created_at: Date }[]>`
       select r.id, r.charge_id, r.amount_minor, r.reason, r.created_at from refunds r join charges c on c.id = r.charge_id where c.job_id = ${jobId} order by r.created_at`;
-    const [payout] = await tx<{ id: string; status: string; gross_minor: number; fee_minor: number; adjustments_minor: number; amount_minor: number; on_hold: boolean; hold_reason: string | null; paid_at: Date | null; is_test: boolean; scheduled_for: string | null }[]>`
-      select id, status, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason, paid_at, is_test, scheduled_for from payouts where job_id = ${jobId}`;
+    const [payout] = await tx<{ id: string; status: string; gross_minor: number; fee_minor: number; adjustments_minor: number; amount_minor: number; on_hold: boolean; hold_reason: string | null; paid_at: Date | null; is_test: boolean; scheduled_for: string | null; awaiting_review: boolean }[]>`
+      select id, status, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason, paid_at, is_test, scheduled_for, awaiting_review from payouts where job_id = ${jobId}`;
     const extras = await tx<{ id: string; description: string; reason: string; labor_minor: number; materials_minor: number; discount_minor: number; is_main_quote: boolean; subtotal_minor: number; client_fee_minor: number; client_fee_tax_minor: number; provider_fee_minor: number; total_minor: number; provider_net_minor: number; status: string; created_at: Date; decided_at: Date | null; decision_note: string | null }[]>`
       select * from job_extras where job_id = ${jobId} order by created_at`;
     const reschedules = await tx<{ id: string; proposed_side: string; new_date: string; new_window: string | null; previous_date: string | null; reason: string; status: string; created_at: Date; proposer: string | null }[]>`

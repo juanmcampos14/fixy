@@ -31,12 +31,14 @@ export function ClientPriceBreakdown({ a, className, title = "Desglose", discoun
   );
 }
 
-/** Vista del proveedor: bruto, comisión, neto. */
+/** Vista del proveedor: bruto, comisión (hoy 0 %; los trabajos viejos pueden tener una) y neto. */
 export function ProviderNetBreakdown({ grossMinor, feeMinor, netMinor, rateBps, adjustmentsMinor = 0, className }: { grossMinor: number; feeMinor: number; netMinor: number; rateBps?: number; adjustmentsMinor?: number; className?: string }) {
   return (
     <dl className={cn("tabular divide-y divide-line text-[15px]", className)}>
       <div className="flex justify-between py-2"><dt className="text-ink-2">Importe bruto (tu presupuesto)</dt><dd>{formatMoney(grossMinor)}</dd></div>
-      <div className="flex justify-between py-2"><dt className="text-ink-2">Comisión Fixy{rateBps != null ? ` (${rateBps / 100} %)` : ""}</dt><dd>− {formatMoney(feeMinor)}</dd></div>
+      {feeMinor === 0
+        ? <div className="flex justify-between py-2"><dt className="text-ink-2">Comisión Fixy</dt><dd className="font-semibold text-ok">0 % · $ 0</dd></div>
+        : <div className="flex justify-between py-2"><dt className="text-ink-2">Comisión Fixy{rateBps != null ? ` (${rateBps / 100} %)` : ""}</dt><dd>− {formatMoney(feeMinor)}</dd></div>}
       {adjustmentsMinor !== 0 && <div className="flex justify-between py-2"><dt className="text-ink-2">Ajustes (reembolsos)</dt><dd>{adjustmentsMinor < 0 ? "− " : ""}{formatMoney(Math.abs(adjustmentsMinor))}</dd></div>}
       <div className="flex justify-between py-2.5 text-lg font-bold"><dt>Neto para vos</dt><dd>{formatMoney(netMinor + adjustmentsMinor)}</dd></div>
     </dl>

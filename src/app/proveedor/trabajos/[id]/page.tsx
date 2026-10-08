@@ -344,16 +344,17 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                   ))}
                 </ul>
               )}
-              <h3 className="mt-4 text-sm font-semibold text-muted">Liquidación</h3>
+              <h3 className="mt-4 text-sm font-semibold text-muted">Tu cobro</h3>
               {d.payout ? (
                 <div className="mt-1 space-y-1 text-sm">
                   <p className="flex flex-wrap items-center gap-2"><StatusBadge status={d.payout.status} labels={payoutStatusLabel} /> {formatMoney(d.payout.amount_minor)}</p>
                   {d.payout.on_hold && <p className="text-warn">En pausa: {d.payout.hold_reason ?? "en revisión"}</p>}
-                  {d.payout.paid_at && <p>Liquidada {formatDateTime(d.payout.paid_at)}</p>}
-                  {d.payout.scheduled_for && !d.payout.paid_at && <p>Programada para {formatDate(d.payout.scheduled_for)}</p>}
+                  {d.payout.status === "pending" && !d.payout.on_hold && <p className="text-muted">{d.payout.awaiting_review ? "Pasa a tu saldo cuando el cliente deje su reseña." : <>En tu saldo disponible. <Link href="/proveedor/cobros" className="font-semibold text-fixy-800 underline">Retirar</Link></>}</p>}
+                  {d.payout.paid_at && <p>Transferido {formatDateTime(d.payout.paid_at)}</p>}
+                  {d.payout.scheduled_for && !d.payout.paid_at && <p>En un retiro: se transfiere el {formatDate(d.payout.scheduled_for)}</p>}
                 </div>
               ) : (
-                <p className="mt-1 text-sm text-muted">Se genera cuando el cliente da conformidad. Pago aprobado no es lo mismo que liquidación realizada.</p>
+                <p className="mt-1 text-sm text-muted">Cuando el cliente da conformidad y deja su reseña, el monto pasa a tu saldo para retirarlo.</p>
               )}
             </Card>
           )}

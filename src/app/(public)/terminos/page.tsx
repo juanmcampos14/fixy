@@ -13,7 +13,7 @@ export default function Terms() {
       <h2>3. Presupuestos y contratación</h2>
       <ul><li>Pedir presupuestos es gratis.</li><li>Antes de contratar ves el desglose completo y el total. El alcance y el precio aceptados quedan registrados y no se modifican unilateralmente.</li><li>Los adicionales requieren tu aceptación explícita.</li></ul>
       <h2>4. Pagos y cargos</h2>
-      <ul><li>Los pagos se procesan mediante una pasarela de pagos. Fixy no almacena datos de tarjetas.</li><li>Fixy cobra un cargo de servicio al cliente y una comisión al proveedor, informados antes de confirmar.</li><li>Fixy no ofrece custodia de fondos. [Pendiente: condiciones definitivas según la pasarela.]</li></ul>
+      <ul><li>Los pagos se procesan mediante una pasarela de pagos. Fixy no almacena datos de tarjetas.</li><li>Fixy cobra un cargo de servicio al cliente, informado antes de confirmar. Fixy no cobra comisión a los profesionales.</li><li>Fixy no ofrece custodia de fondos. [Pendiente: condiciones definitivas según la pasarela.]</li></ul>
       <h2>5. Cancelaciones y reembolsos</h2>
       <p>Podés cancelar sin cargo antes de la confirmación del profesional. Después, la cancelación y cualquier reembolso se gestionan según el caso. [Pendiente: política definitiva.]</p>
       <h2>6. Reclamos</h2>

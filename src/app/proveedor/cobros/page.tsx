@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getEarnings, getOwnProvider, requireProviderContext } from "@/server/queries/provider";
-import { jobStatusLabelProvider, payoutStatusLabel, payoutsStatusLabel } from "@/server/domain/labels";
+import { BadgePercent, Wallet } from "lucide-react";
+import { getEarnings, requireProviderContext } from "@/server/queries/provider";
+import { providerBalance } from "@/server/modules/withdrawals";
+import { sql } from "@/server/db/client";
+import { BankAccountForm, WithdrawForm } from "@/components/provider/withdraw-forms";
+import { jobStatusLabelProvider, payoutStatusLabel } from "@/server/domain/labels";
 import { paymentsAreTestMode } from "@/server/env";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Card, CardHeader, PageHeader, Stat } from "@/components/ui/card";
@@ -13,54 +17,85 @@ export const metadata: Metadata = { title: "Cobros" };
 
 export default async function EarningsPage() {
   const { actor, provider } = await requireProviderContext({ adminOnly: true });
-  const [rows, own] = await Promise.all([getEarnings(actor.id, provider.id), getOwnProvider(actor.id, provider.id)]);
+  const [rows, b] = await Promise.all([getEarnings(actor.id, provider.id), providerBalance(sql(), provider.id)]);
   const test = paymentsAreTestMode() || rows.some((r) => r.any_test || r.payout_test);
-
-  // Bruto y comisión: lo cobrado (pagos aprobados). Neto: bruto − comisión − reembolsos (ajustes).
-  let gross = 0, fees = 0, adjustments = 0, pending = 0, paid = 0, withoutPayout = 0;
-  for (const r of rows) {
-    if (r.payout_id) {
-      gross += r.gross_minor ?? 0;
-      fees += r.fee_minor ?? 0;
-      adjustments += r.adjustments_minor ?? 0;
-      if (r.payout_status === "paid") paid += r.amount_minor ?? 0;
-      else if (r.payout_status !== "reversed") pending += r.amount_minor ?? 0;
-    } else {
-      gross += r.charged_gross;
-      fees += r.charged_fee;
-      withoutPayout += r.charged_gross - r.charged_fee;
-    }
-  }
-  const net = gross - fees + adjustments;
+  const day = (iso: string) => new Date(`${iso}T12:00:00-03:00`).toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  const transferDate = (() => {
+    const d = new Date(`${b.nextRequestFrom}T12:00:00-03:00`);
+    d.setDate(d.getDate() + b.delayDays);
+    return d.toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  })();
 
   return (
     <>
-      <PageHeader title="Cobros" description="Lo que cobraste por Fixy, las comisiones y el estado de cada liquidación." action={test ? <TestModeBadge /> : undefined} />
-      <p className="-mt-3 mb-6 max-w-3xl text-sm text-muted">Cada liquidación se libera cuando el cliente da conformidad <strong>y deja su reseña</strong>. Las reseñas se publican de forma anónima y días después, por eso no vas a ver cuál cliente dejó cada una.</p>
+      <PageHeader title="Cobros" description="Tu saldo, tus retiros y lo que ganaste en cada trabajo." action={test ? <TestModeBadge /> : undefined} />
       <div className="space-y-5">
-        {test && <Alert tone="warn" title="Modo de prueba">Los pagos y liquidaciones son simulados. No se mueve dinero real.</Alert>}
-        <Alert tone="info" title="Tres momentos distintos">
-          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-            <li><strong>Pago aprobado:</strong> el cliente pagó por la pasarela. Todavía no es tu dinero liquidado.</li>
-            <li><strong>Trabajo completado:</strong> el cliente dio conformidad. Ahí se genera la liquidación pendiente.</li>
-            <li><strong>Liquidación realizada:</strong> el neto se transfirió a tu cuenta de cobro.</li>
-          </ol>
-        </Alert>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted">Cuenta de cobro:</span>
-          {own && <StatusBadge status={own.payouts_status} labels={payoutsStatusLabel} />}
-          {own?.payouts_status !== "enabled" && <Link href="/proveedor/perfil#cobros" className="font-semibold text-fixy-800 underline">Configurar</Link>}
+        {test && <Alert tone="warn" title="Modo de prueba">Los pagos y retiros son simulados. No se mueve dinero real.</Alert>}
+
+        <Card className="ring-2 ring-fixy-500/25">
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-semibold text-muted"><Wallet className="h-4 w-4" aria-hidden />Disponible para retirar</p>
+              <p className="tabular mt-1 text-4xl font-extrabold">{formatMoney(b.availableMinor)}</p>
+              <p className="mt-1 text-sm text-muted">{b.availableJobs ? `De ${b.availableJobs} trabajo${b.availableJobs === 1 ? "" : "s"} terminado${b.availableJobs === 1 ? "" : "s"} y calificado${b.availableJobs === 1 ? "" : "s"}.` : "Se suma cuando el cliente da conformidad y deja su reseña."}</p>
+              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-ok-bg px-3 py-2 text-sm text-ok"><BadgePercent className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span><strong>0 % de comisión.</strong> Cobrás el 100 % de tu presupuesto: Fixy solo le cobra un cargo de servicio al cliente.</span></p>
+            </div>
+            <div>
+              {b.thisMonth ? (
+                <Alert tone={b.thisMonth.status === "paid" ? "ok" : "info"} title={b.thisMonth.status === "paid" ? "Ya cobraste tu retiro de este mes" : `Retiro en camino: ${formatMoney(b.thisMonth.amount_minor)}`}>
+                  {b.thisMonth.status === "paid" ? <>Transferido el {formatDateTime(b.thisMonth.paid_at!)}</> : <>Te lo transferimos el <strong>{day(b.thisMonth.scheduled_for)}</strong>.</>}{" "}
+                  Podés pedir el próximo desde el {day(b.nextRequestFrom)}.
+                </Alert>
+              ) : b.availableMinor > 0 ? (
+                <WithdrawForm availableMinor={b.availableMinor} bank={b.bank} transferDate={transferDate} />
+              ) : (
+                <div className="space-y-2 text-[15px] text-ink-2">
+                  <p className="font-semibold text-ink">¿Cómo cobro?</p>
+                  <ol className="list-decimal space-y-1 pl-5">
+                    <li>Terminás el trabajo y el cliente da conformidad.</li>
+                    <li>Cuando deja su reseña, el monto pasa a tu saldo disponible.</li>
+                    <li>Una vez por mes pedís el retiro de todo tu saldo y te lo transferimos a los {b.delayDays} días.</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="En trabajos en curso" value={formatMoney(b.inProgressMinor)} hint="Ya pagado por el cliente; falta terminar" />
+          <Stat label="Esperando reseña" value={formatMoney(b.waitingReviewMinor)} hint="Se libera cuando el cliente califica" />
+          <Stat label="Retiro en camino" value={formatMoney(b.requestedMinor)} tone={b.requestedMinor ? "warn" : undefined} />
+          <Stat label="Cobrado en total" value={formatMoney(b.paidMinor)} tone="ok" />
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Bruto" value={formatMoney(gross)} hint="Suma de tus presupuestos y adicionales pagados" />
-          <Stat label="Comisiones Fixy" value={formatMoney(fees)} />
-          <Stat label="Neto" value={formatMoney(net)} hint={adjustments ? `Incluye ajustes por ${formatMoney(adjustments)}` : "Bruto menos comisiones y ajustes"} />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Pagado, sin conformidad aún" value={formatMoney(withoutPayout)} hint="Todavía no genera liquidación" />
-          <Stat label="Pendiente de liquidación" value={formatMoney(pending)} tone="warn" />
-          <Stat label="Liquidado" value={formatMoney(paid)} tone="ok" />
-        </div>
+        {b.onHoldMinor > 0 && <Alert tone="warn" title={`${formatMoney(b.onHoldMinor)} en pausa por un reclamo`}>Se libera cuando se resuelva el reclamo.</Alert>}
+
+        {b.withdrawals.length > 0 && (
+          <Card>
+            <CardHeader title="Tus retiros" />
+            <ul className="divide-y divide-line">
+              {b.withdrawals.map((w) => (
+                <li key={w.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <div>
+                    <p className="tabular font-semibold">{formatMoney(w.amount_minor)}</p>
+                    <p className="text-sm text-muted">
+                      Pedido {formatDateTime(w.requested_at)} · {w.status === "paid" ? `transferido ${formatDateTime(w.paid_at!)} · ref. ${w.external_ref}` : w.status === "rejected" ? `rechazado: ${w.reject_reason}` : `se transfiere el ${day(w.scheduled_for)}`}
+                    </p>
+                  </div>
+                  <span className="flex items-center gap-2">
+                    <Badge tone={w.status === "paid" ? "ok" : w.status === "rejected" ? "danger" : "info"}>{w.status === "paid" ? "Transferido" : w.status === "rejected" ? "Rechazado" : "En camino"}</Badge>
+                    {w.is_test && <TestModeBadge />}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        <Card as="section" id="banco" className="scroll-mt-24">
+          <CardHeader title="Datos bancarios" description={b.bank ? "Acá llegan tus retiros. Solo los ve el equipo de pagos de Fixy." : "Opcional hasta tu primer retiro: si los cargás ahora, retirás en un paso."} />
+          <BankAccountForm bank={b.bank} />
+        </Card>
 
         <Card>
           <CardHeader title="Detalle por trabajo" />

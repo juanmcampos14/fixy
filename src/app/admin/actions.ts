@@ -12,6 +12,7 @@ import type { JobStatus } from "@/server/domain/state-machines";
 import { reviewDocument, reviewProvider, type ReviewAction } from "@/server/modules/providers";
 import { cancelRequest, operatorInvite, operatorRunMatching, operatorSetCategory } from "@/server/modules/requests";
 import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
+import { markWithdrawalPaid, rejectWithdrawal } from "@/server/modules/withdrawals";
 import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, resyncCharge, setPayoutHold } from "@/server/modules/payments";
 import { moveDispute, replyDispute, resolveDispute } from "@/server/modules/disputes";
 import * as admin from "@/server/modules/admin";
@@ -360,7 +361,7 @@ export async function replaceCommissionAction(_: ActionState, f: FormData): Prom
       actor,
       {
         categoryId: scope && scope !== "default" ? scope : null,
-        providerRateBps: pct(f, "providerRate", "la comisión al proveedor"),
+        providerRateBps: 0,
         clientRateBps: pct(f, "clientRate", "el cargo al cliente"),
         clientFeeTaxBps: pct(f, "clientFeeTax", "el impuesto sobre el cargo"),
       },
@@ -422,5 +423,23 @@ export async function reviewDisputeResolveAction(_: ActionState, f: FormData): P
     await adminResolve(await requireStaff(), str(f, "disputeId"), { resolution: str(f, "resolution") as never, note: str(f, "reason"), providerSummary: str(f, "providerSummary") });
     revalidatePath(`/admin/resenas/${str(f, "disputeId")}`);
     return { ok: true, message: "Impugnación resuelta." };
+  });
+}
+
+export async function payWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    await markWithdrawalPaid(actor, str(f, "withdrawalId"), str(f, "reason"), { allowEarly: str(f, "early") === "1" });
+    refresh();
+    return { ok: true, message: "Retiro registrado como transferido." };
+  });
+}
+
+export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    await rejectWithdrawal(actor, str(f, "withdrawalId"), str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Retiro rechazado. El saldo volvió a estar disponible para el profesional." };
   });
 }

@@ -41,7 +41,7 @@ export function ExtraForm({ jobId, rule, mainQuote }: { jobId: string; rule: Com
           <dl className="tabular space-y-1">
             {discount > 0 && <div className="flex justify-between gap-4"><dt className="text-ink-2">Descuento de la visita</dt><dd>− {formatMoney(discount)}</dd></div>}
             <div className="flex justify-between gap-4"><dt className="text-ink-2">Bruto</dt><dd>{formatMoney(b.subtotalMinor)}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-ink-2">Comisión Fixy ({rule.providerRateBps / 100} %)</dt><dd>− {formatMoney(b.providerFeeMinor)}</dd></div>
+            <div className="flex justify-between gap-4"><dt className="text-ink-2">Comisión Fixy</dt><dd className="font-semibold text-ok">{b.providerFeeMinor ? `− ${formatMoney(b.providerFeeMinor)}` : "0 % · $ 0"}</dd></div>
             <div className="flex justify-between gap-4 font-bold"><dt>Neto para vos</dt><dd>{formatMoney(b.providerNetMinor)}</dd></div>
             <div className="flex justify-between gap-4 text-muted"><dt>Total que paga el cliente</dt><dd>{formatMoney(b.totalMinor)}</dd></div>
           </dl>

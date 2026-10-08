@@ -15,7 +15,8 @@ import * as requests from "@/server/modules/requests";
 import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
-import { executePayout, processPaymentWebhook } from "@/server/modules/payments";
+import { processPaymentWebhook } from "@/server/modules/payments";
+import * as withdrawals from "@/server/modules/withdrawals";
 import { buildMockWebhook, mockCompleteCheckout } from "@/server/payments/mock";
 
 // En entornos públicos de demostración, definí DEMO_SEED_PASSWORD para no usar la contraseña conocida del repositorio.
@@ -230,8 +231,12 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   await jobs.approveJob(A.ana, jobA);
   await disputes.createReview(A.ana, jobA, { rating: 5, comment: "Muy claro con el presupuesto y prolijo. Explicó todo lo que hizo. (Reseña de demostración)" });
   await db`update reviews set is_demo = true, visible_at = now() - interval '1 day', publish_notified = true where job_id = ${jobA}`;
-  const [payoutA] = await db<{ id: string }[]>`select id from payouts where job_id = ${jobA}`;
-  await executePayout(A.admin, payoutA.id, "Liquidación semanal simulada (demo)");
+  // Martín retira su saldo (datos bancarios ficticios de demostración) y la operación registra la transferencia simulada.
+  const martinPid = (await db<{ provider_id: string }[]>`select provider_id from jobs where id = ${jobA}`)[0].provider_id;
+  const wA = await withdrawals.requestWithdrawal(A.martin, martinPid, {
+    holderName: "Martín López (demo)", holderTaxId: "20-00000000-1", cbu: "0000000000000000000001", alias: "martin.demo.fixy", bankName: "Banco ficticio (demo)",
+  });
+  await withdrawals.markWithdrawalPaid(A.admin, wA.id, "SIM-DEMO-0001", { allowEarly: true });
 
   // B. Solicitud con presupuestos comparables (Ana, plomería)
   log("· Escenario: presupuestos comparables");

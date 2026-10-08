@@ -13,11 +13,13 @@ import { EmptyState } from "@/components/ui/empty";
 import { ConfirmAction } from "@/components/ui/form";
 import { DataTable, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import { executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction } from "../actions";
+import { listPendingWithdrawals } from "@/server/modules/withdrawals";
+import { payWithdrawalAction, rejectWithdrawalAction, executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction } from "../actions";
 
 export const metadata = { title: "Finanzas" };
 
 const TABS = [
+  { key: "retiros", label: "Retiros" },
   { key: "cobros", label: "Cobros" },
   { key: "liquidaciones", label: "Liquidaciones" },
   { key: "reembolsos", label: "Reembolsos" },
@@ -45,7 +47,7 @@ const STATUS_FILTER = ["pending", "processing", "approved", "failed", "partially
 export default async function FinanceAdmin({ searchParams }: { searchParams: Promise<{ tab?: string; estado?: string }> }) {
   const sp = await searchParams;
   const actor = await requireStaff();
-  const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? "cobros") as TabKey;
+  const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? "retiros") as TabKey;
 
   return (
     <>
@@ -58,6 +60,7 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
         Fixy emite comprobantes de pago internos (registro del cobro). Esta versión del MVP no emite facturas fiscales: la facturación electrónica queda pendiente.
       </Alert>
       <Tabs current={tab} items={TABS.map((t) => ({ key: t.key, label: t.label, href: `/admin/finanzas?tab=${t.key}` }))} />
+      {tab === "retiros" && <Withdrawals canPayEarly={isPlatformAdmin(actor)} />}
       {tab === "cobros" && <Charges userId={actor.id} status={STATUS_FILTER.includes(sp.estado ?? "") ? sp.estado : undefined} />}
       {tab === "liquidaciones" && <Payouts userId={actor.id} />}
       {tab === "reembolsos" && <Refunds userId={actor.id} />}
@@ -70,6 +73,46 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
       {tab === "conciliacion" && <Reconciliation />}
       {tab === "registro" && <Ledger userId={actor.id} canAdjust={isPlatformAdmin(actor)} />}
     </>
+  );
+}
+
+async function Withdrawals({ canPayEarly }: { canPayEarly: boolean }) {
+  const rows = await listPendingWithdrawals(sql());
+  if (!rows.length) return <EmptyState title="No hay retiros pendientes" description="Los profesionales piden retirar su saldo una vez por mes; cada pedido se transfiere a los 20 días." />;
+  return (
+    <Section id="retiros" title="Retiros a transferir" description="Transferí a la cuenta indicada y registrá la referencia. Los datos bancarios son confidenciales.">
+      <DataTable caption="Retiros pendientes">
+        <thead><tr><Th>Profesional</Th><Th className="text-right">Monto</Th><Th>Transferir el</Th><Th>Cuenta destino</Th><Th>Acciones</Th></tr></thead>
+        <tbody className="divide-y divide-line">
+          {rows.map((w) => (
+            <tr key={w.id} className="align-top">
+              <Td><Link href={`/admin/proveedores/${w.provider_id}`} className="font-semibold hover:underline">{w.provider_name}</Link><div className="text-xs text-muted">{w.jobs} trabajo{w.jobs === 1 ? "" : "s"} · pedido {formatDateTime(w.requested_at)}</div></Td>
+              <Td className="text-right font-semibold">{formatMoney(w.amount_minor)}{w.is_test && <div><TestModeBadge /></div>}</Td>
+              <Td>{formatDate(w.scheduled_for)}{w.due ? <div><Badge tone="warn">Vence hoy o antes</Badge></div> : null}</Td>
+              <Td className="text-sm">
+                <div className="font-semibold">{w.bank_snapshot.holderName}</div>
+                <div className="text-muted">CUIT/CUIL {w.bank_snapshot.holderTaxId}</div>
+                {w.bank_snapshot.cbu && <div className="font-mono">CBU {w.bank_snapshot.cbu}</div>}
+                {w.bank_snapshot.alias && <div>Alias {w.bank_snapshot.alias}</div>}
+                {w.bank_snapshot.bankName && <div className="text-muted">{w.bank_snapshot.bankName}</div>}
+              </Td>
+              <Td>
+                <div className="flex flex-col items-start gap-2">
+                  {(w.due || canPayEarly) && (
+                    <ConfirmAction action={payWithdrawalAction} label={w.due ? "Registrar transferencia" : "Transferir antes de fecha"} size="sm" title="Registrar transferencia"
+                      description={`Confirmá que transferiste ${formatMoney(w.amount_minor)} a ${w.bank_snapshot.holderName}.${w.is_test ? " Modo de prueba: no se mueve dinero real." : ""}`}
+                      requireReason reasonLabel="Referencia de la transferencia" hidden={{ withdrawalId: w.id, early: w.due ? "0" : "1" }} confirmLabel="Registrar" />
+                  )}
+                  {!w.due && !canPayEarly && <span className="text-sm text-muted">Disponible desde el {formatDate(w.scheduled_for)}</span>}
+                  <ConfirmAction action={rejectWithdrawalAction} label="Rechazar" variant="ghost" size="sm" title="Rechazar retiro"
+                    description="El saldo vuelve a estar disponible y el profesional puede volver a pedirlo este mes." requireReason hidden={{ withdrawalId: w.id }} confirmLabel="Rechazar" />
+                </div>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </Section>
   );
 }
 

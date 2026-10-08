@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty";
 import { ProviderStatusCard } from "@/components/provider/sections";
 import { StrengthMeter } from "@/components/provider/strength-meter";
 import { getProfileStrength } from "@/server/modules/providers";
+import { providerBalance } from "@/server/modules/withdrawals";
 import { sql } from "@/server/db/client";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -22,7 +23,7 @@ export default async function ProviderHome() {
     getDashboard(actor.id, provider.id, isAdmin),
     isAdmin ? getOnboardingState(actor.id, provider.id) : Promise.resolve(null),
   ]);
-  const strength = isAdmin ? await getProfileStrength(sql(), provider.id) : null;
+  const [strength, balance] = isAdmin ? await Promise.all([getProfileStrength(sql(), provider.id), providerBalance(sql(), provider.id)]) : [null, null];
   const pendingActions = dash.toConfirm.length + dash.extrasWaiting.length + dash.reschedulesToAnswer.length + dash.openDisputes.length;
 
   return (
@@ -95,14 +96,18 @@ export default async function ProviderHome() {
           )}
         </Card>
 
-        {isAdmin && dash.earnings && (
+        {isAdmin && balance && (
           <Card>
-            <CardHeader title="Liquidaciones" description="Se generan cuando el cliente da conformidad al trabajo." action={dash.anyTest ? <TestModeBadge /> : undefined} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Stat label="Pendiente de liquidación" value={formatMoney(dash.earnings.pending)} />
-              <Stat label="Liquidado" value={formatMoney(dash.earnings.paid)} tone="ok" />
+            <CardHeader title="Tu saldo" description="0 % de comisión: cobrás el 100 % de cada trabajo." action={dash.anyTest ? <TestModeBadge /> : undefined} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Stat label="Disponible para retirar" value={formatMoney(balance.availableMinor)} tone={balance.availableMinor ? "ok" : undefined} />
+              <Stat label="Esperando reseña" value={formatMoney(balance.waitingReviewMinor)} />
+              <Stat label="Retiro en camino" value={formatMoney(balance.requestedMinor)} />
             </div>
-            <Link href="/proveedor/cobros" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-fixy-800 underline">Ver detalle de cobros <ArrowRight className="h-4 w-4" aria-hidden /></Link>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {balance.canRequest && <ButtonLink href="/proveedor/cobros">Retirar {formatMoney(balance.availableMinor)}</ButtonLink>}
+              <Link href="/proveedor/cobros" className="inline-flex items-center gap-1 text-sm font-semibold text-fixy-800 underline">Ver cobros y retiros <ArrowRight className="h-4 w-4" aria-hidden /></Link>
+            </div>
           </Card>
         )}
       </div>

@@ -241,7 +241,7 @@ export default async function ProviderAdminPage({ params }: { params: Promise<{ 
                 ["Disponibilidad", checklist.availability],
                 ["Documento de identidad cargado", checklist.identityDocument],
                 ["Credenciales obligatorias cargadas", checklist.requiredCredentials.every((r) => r.uploaded)],
-                ["Configuración de cobros", checklist.payouts],
+                ["Datos bancarios (opcional hasta el primer retiro)", checklist.payouts],
                 ["Términos para proveedores aceptados", checklist.termsAccepted],
                 ["Fotos de trabajos (recomendado)", checklist.portfolio],
               ] as [string, boolean][]).map(([k, ok]) => (

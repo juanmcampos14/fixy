@@ -137,7 +137,7 @@ export function QuoteForm({ invitationId, rule, allowFixed, windows, defaultDate
         {preview.b && (
           <dl className="tabular mt-2 divide-y divide-line text-[15px]">
             <div className="flex justify-between gap-4 py-2"><dt className="text-ink-2">Importe bruto (tu presupuesto)</dt><dd>{formatMoney(preview.b.subtotalMinor)}</dd></div>
-            <div className="flex justify-between gap-4 py-2"><dt className="text-ink-2">Comisión Fixy ({rule.providerRateBps / 100} %)</dt><dd>− {formatMoney(preview.b.providerFeeMinor)}</dd></div>
+            <div className="flex justify-between gap-4 py-2"><dt className="text-ink-2">Comisión Fixy</dt><dd className="font-semibold text-ok">{preview.b.providerFeeMinor ? `− ${formatMoney(preview.b.providerFeeMinor)}` : "0 % · $ 0"}</dd></div>
             <div className="flex justify-between gap-4 py-2.5 text-lg font-bold"><dt>Neto para vos</dt><dd>{formatMoney(preview.b.providerNetMinor)}</dd></div>
             <div className="flex justify-between gap-4 py-2 text-muted">
               <dt>El cliente paga en total (incluye cargo de servicio de {rule.clientRateBps / 100} %{preview.b.clientFeeTaxMinor ? " e impuestos" : ""})</dt>
@@ -145,7 +145,7 @@ export function QuoteForm({ invitationId, rule, allowFixed, windows, defaultDate
             </div>
           </dl>
         )}
-        <p className="mt-2 text-xs text-muted">Calculado con la regla de comisión vigente. El importe final se confirma al enviar.</p>
+        <p className="mt-2 text-xs text-muted">Fixy no te cobra comisión: el cargo de servicio lo paga el cliente aparte. El importe final se confirma al enviar.</p>
       </section>
 
       <SubmitButton size="lg" pendingText="Enviando presupuesto…" className="w-full sm:w-auto">Enviar presupuesto</SubmitButton>

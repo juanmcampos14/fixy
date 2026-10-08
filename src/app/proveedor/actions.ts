@@ -17,6 +17,8 @@ import {
 import { replyDispute, replyReview } from "@/server/modules/disputes";
 import { openReviewDispute } from "@/server/modules/review-disputes";
 import { addPriceRef, addProviderMember, deactivateProviderMember, removePriceRef, updateVisitSettings } from "@/server/modules/providers";
+import { requestWithdrawal, saveBankAccount } from "@/server/modules/withdrawals";
+import { formatMoney } from "@/lib/format";
 
 function adminProviderId(actor: Actor): string {
   const m = actor.providers.find((p) => p.role === "admin");
@@ -293,4 +295,30 @@ export async function removePriceRefAction(f: FormData) {
   const actor = await requireActor();
   await removePriceRef(actor, adminProviderId(actor), str(f, "id"));
   revalidatePath("/proveedor/perfil");
+}
+
+// ───────── Saldo y retiros ─────────
+
+function bankInput(f: FormData) {
+  return { holderName: str(f, "holderName"), holderTaxId: str(f, "holderTaxId"), cbu: str(f, "cbu"), alias: str(f, "alias"), bankName: str(f, "bankName") };
+}
+
+export async function saveBankAccountAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await saveBankAccount(actor, adminProviderId(actor), bankInput(f));
+    revalidatePath("/proveedor/cobros");
+    return { ok: true, message: "Guardamos tus datos bancarios." };
+  });
+}
+
+export async function requestWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const r = await requestWithdrawal(actor, adminProviderId(actor), bool(f, "withBank") ? bankInput(f) : null);
+    revalidatePath("/proveedor/cobros");
+    revalidatePath("/proveedor");
+    const when = new Date(`${r.scheduledFor}T12:00:00-03:00`).toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+    return { ok: true, message: `Listo: te transferimos ${formatMoney(r.amountMinor)} el ${when}.` };
+  });
 }

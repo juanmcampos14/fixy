@@ -239,7 +239,8 @@ export function percentToBps(input: string): number | null {
 
 export const commissionSchema = z.object({
   categoryId: z.string().uuid().nullable(),
-  providerRateBps: z.number().int().min(0).max(5000, "La comisión al proveedor no puede superar el 50 %."),
+  // Promesa comercial: Fixy no cobra comisión a los profesionales (también lo exige la base de datos).
+  providerRateBps: z.literal(0, { error: "Fixy no cobra comisión a los profesionales." }).default(0),
   clientRateBps: z.number().int().min(0).max(5000, "El cargo al cliente no puede superar el 50 %."),
   clientFeeTaxBps: z.number().int().min(0).max(5000, "El impuesto configurado no puede superar el 50 %."),
 });
