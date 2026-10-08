@@ -1440,7 +1440,6 @@ ALTER TABLE password_resets ENABLE ROW LEVEL SECURITY;
 INSERT INTO schema_migrations (name) VALUES ('0006_password_resets.sql');
 
 -- ===== Datos base =====
-\restrict EGleg7FIONVA6Dk39agmTsLyeI8HMLMbzFZ32ePOf9DplvXpPl6q0zpPrD2NG9u
 INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('4cf7b388-67ac-495c-b720-ff6ad065d3cb', 'electricidad', 'Electricidad', 'Enchufes, térmicas, cortes, luminarias y tableros.', 'zap', 0, true, false, 'Si ves chispas, olor a quemado o cables expuestos, no los toques y cortá la luz desde la térmica general si podés hacerlo sin riesgo.');
 INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('ea9ca341-1c38-416a-9d06-b2d91c6d33a8', 'plomeria', 'Plomería', 'Pérdidas, canillas, inodoros, desagües y cañerías.', 'droplets', 1, true, false, NULL);
 INSERT INTO public.categories (id, slug, name, description, icon, sort, active, requires_review, safety_note) VALUES ('bad368d0-4be4-4ec0-bcb4-8545059adbed', 'gas', 'Gas', 'Artefactos a gas, calefones, estufas y cocinas. Solo profesionales con matrícula.', 'flame', 2, true, false, 'Si sentís olor a gas: no prendas ni apagues luces, ventilá, salí del lugar y llamá a la emergencia de tu distribuidora o al 911.');
@@ -1511,6 +1510,5 @@ INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('943e79f
 INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('91765a21-6612-4dcd-bea7-de551f789c91', 'gba-lanus', 'Lanús', 'GBA_SUR', true, 14);
 INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('7e6541a6-32db-44cf-800e-db3a19351bf0', 'gba-lomas', 'Lomas de Zamora', 'GBA_SUR', true, 15);
 INSERT INTO public.zones (id, code, name, region, active, sort) VALUES ('f028d738-8213-42f3-a841-8d0b489310b4', 'gba-quilmes', 'Quilmes', 'GBA_SUR', true, 16);
-\unrestrict EGleg7FIONVA6Dk39agmTsLyeI8HMLMbzFZ32ePOf9DplvXpPl6q0zpPrD2NG9u
 COMMIT;
 SELECT (SELECT count(*) FROM categories) AS categorias, (SELECT count(*) FROM zones) AS zonas, (SELECT count(*) FROM schema_migrations) AS migraciones;
