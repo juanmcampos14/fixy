@@ -15,7 +15,7 @@
 | Plataforma | Web responsive mobile-first, preparada para PWA. Sin apps nativas. |
 | Clientes | Particulares y organizaciones (con sedes y miembros). |
 | Proveedores | Independientes y empresas con técnicos. Registro abierto. |
-| Monetización | Comisión configurable: por defecto 10 % al proveedor (descontada de su neto) + 5 % de cargo de servicio al cliente. Configurable por categoría. Impuestos sobre el cargo: configurable, 0 por defecto (pendiente definición fiscal). |
+| Monetización | **0 % de comisión al profesional** (garantizado por la base) + cargo de servicio al cliente (5 % por defecto). Saldo acumulado y retiro mensual a 20 días (ver `docs/payments.md`). Configurable por categoría. Impuestos sobre el cargo: configurable, 0 por defecto (pendiente definición fiscal). |
 | Presupuestos | Pedir presupuestos es gratis. |
 | Pagos | Modo de prueba (pasarela simulada) mientras no haya credenciales y validación comercial. Ver `docs/payments.md`. |
 | Asistente | Reglas locales por defecto; adaptador opcional de IA (Claude) en servidor. |

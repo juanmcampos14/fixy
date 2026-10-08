@@ -21,7 +21,7 @@ Proveedor: importe bruto (su presupuesto), comisión Fixy, ajustes (reembolsos),
 `total cliente = subtotal + cargo + impuesto`
 `comisión proveedor = subtotal × tasa_proveedor` · `neto proveedor = subtotal − comisión proveedor`
 `ingreso plataforma = cargo cliente + comisión proveedor`
-Por defecto: proveedor 10 %, cliente 5 %, impuesto 0 %. Cada presupuesto guarda las tasas vigentes al enviarse; los adicionales usan las tasas del contrato.
+**Desde la migración 0016 la comisión al profesional es 0 %** (promesa comercial; la base rechaza otro valor con `commission_rules_provider_zero`). Por defecto: proveedor 0 %, cliente 5 %, impuesto 0 %. Los trabajos anteriores conservan la tasa con la que se cotizaron. Cada presupuesto guarda las tasas vigentes al enviarse; los adicionales usan las tasas del contrato.
 
 ## Modalidades
 | Modalidad | Cobro (demo) |
@@ -79,3 +79,18 @@ Paneles: cliente (acordado, pagado, saldo, movimientos, comprobantes, reembolsos
 
 ## Variables
 `PAYMENTS_GATEWAY` (`mock` | `mercadopago`), `MOCK_WEBHOOK_SECRET`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`. Con `mercadopago` sin implementación completa, las operaciones fallan explícitamente (no se simula en silencio).
+
+
+## Saldo y retiros de profesionales (migración 0016)
+
+- Cada trabajo completado genera su liquidación (`payouts`) por el 100 % del presupuesto (menos reembolsos). Pasa a **disponible** cuando el trabajo está completado, con reseña y sin reclamo abierto.
+- **Un retiro por mes calendario** (hora de Buenos Aires; índice único `withdrawals_one_per_month`, un rechazo no cuenta). Se retira todo el saldo disponible.
+- Se transfiere a los **20 días** (`platform_settings.withdrawals.delay_days`). Al pedirlo, las liquidaciones pasan a `scheduled` con `withdrawal_id`.
+- Los **datos bancarios** (titular, CUIT/CUIL, CBU/CVU o alias) se cargan al pedir el retiro o antes en Cobros. Tabla `provider_bank_accounts` con RLS (solo administradores del perfil y operación); nunca se escriben en la auditoría. Cada retiro guarda una copia de la cuenta destino.
+- La operación registra la transferencia (`/admin/finanzas?tab=retiros`) con su referencia: recién ahí se asienta `provider_payable +neto · gateway_clearing −neto` por cada liquidación. Si rechaza, el saldo vuelve a estar disponible.
+- Ya no es requisito tener cobros configurados para recibir pedidos.
+
+### Pendiente antes de dinero real (bloqueante)
+- **Custodia de fondos:** con este modelo Fixy recibe el pago del cliente y transfiere al profesional después. Hay que validar con asesoría legal/contable el encuadre (BCRA/PSP, facturación por cuenta y orden, retenciones impositivas) y, si corresponde, operar con una cuenta recaudadora o un proveedor de pagos que lo permita.
+- Con el Split 1:1 de Mercado Pago el dinero va directo al vendedor y MP le descuenta su costo: eso **no es compatible** con "0 % al profesional" ni con los retiros mensuales. Alternativas: cobrar en la cuenta de Fixy y transferir (modelo actual) o absorber el costo de MP en el cargo al cliente.
+- Encriptar CBU/alias en reposo y verificar titularidad (CUIT del titular = CUIT del profesional) antes de la primera transferencia.
