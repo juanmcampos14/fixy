@@ -123,7 +123,7 @@ const SAFETY_RULES: SafetyRule[] = [
     ],
   },
   {
-    pattern: /(inund|se llena de agua|agua[a-z ]{0,25}(enchufe|tablero|cables))/,
+    pattern: /(inund|se llena de agua|(agua|gotea|goteo|filtra|moja)[a-z ]{0,40}(enchufe|tablero|cable|lampara|luz|luces|toma)|(enchufe|tablero|lampara|luz|toma)[a-z ]{0,30}(agua|gotea|mojad))/,
     level: "caution",
     title: "Agua y electricidad no se mezclan",
     guidance: [

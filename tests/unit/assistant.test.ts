@@ -22,6 +22,7 @@ describe("asistente por reglas", () => {
     expect(r.suggestedUrgency).toBe("urgent");
     expect(r.safety?.guidance.join(" ")).toMatch(/911|emergencia/);
     expect(triageByRules("El enchufe tira chispas").safety?.level).toBe("caution");
+    expect(triageByRules("Cuando llueve gotea cerca de la lámpara del living").safety?.level).toBe("caution");
   });
 
   it("no inventa precios ni disponibilidad", () => {
