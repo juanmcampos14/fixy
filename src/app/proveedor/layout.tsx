@@ -36,6 +36,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
         ...(m.status === "approved" || m.status === "suspended" ? [] : [{ href: "/proveedor/alta", label: "Alta", icon: "scroll" as const }]),
         ...(await isCompany(actor.id, m.id) ? [{ href: "/proveedor/equipo", label: "Equipo", icon: "users" as const }] : []),
         { href: "/proveedor/cobros", label: "Cobros", icon: "wallet" },
+        { href: "/proveedor/recomendaciones", label: "Recomendaciones", icon: "users" },
         { href: "/proveedor/resenas", label: "Reseñas", icon: "star" },
       ]
     : [

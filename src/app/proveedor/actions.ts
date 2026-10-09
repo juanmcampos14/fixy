@@ -80,9 +80,10 @@ export async function createQuoteAction(_: ActionState, f: FormData): Promise<Ac
 export async function declineInvitationAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = await requireActor();
-    await declineInvitation(actor, str(f, "invitationId"), str(f, "reason"));
+    const referTo = str(f, "referTo");
+    await declineInvitation(actor, str(f, "invitationId"), str(f, "reason"), referTo ? { toProviderId: referTo, note: str(f, "referNote") } : null);
     revalidatePath("/proveedor", "layout");
-    return { ok: true, message: "Registramos que no tomás esta oportunidad." };
+    return { ok: true, message: referTo ? "Listo. Le avisamos al cliente tu recomendación." : "Registramos que no tomás esta oportunidad." };
   });
 }
 

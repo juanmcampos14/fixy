@@ -98,7 +98,7 @@ export default async function ProviderHome() {
 
         {isAdmin && balance && (
           <Card>
-            <CardHeader title="Tu saldo" description="0 % de comisión: cobrás el 100 % de cada trabajo." action={dash.anyTest ? <TestModeBadge /> : undefined} />
+            <CardHeader title="Tu saldo" description="0 % de comisión de Fixy: cobrás el neto de cada trabajo (menos los costos de Mercado Pago e impuestos del cobro)." action={dash.anyTest ? <TestModeBadge /> : undefined} />
             <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Disponible para retirar" value={formatMoney(balance.availableMinor)} tone={balance.availableMinor ? "ok" : undefined} />
               <Stat label="Esperando reseña" value={formatMoney(balance.waitingReviewMinor)} />

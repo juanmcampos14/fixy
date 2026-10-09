@@ -38,7 +38,7 @@ export default async function EarningsPage() {
               <p className="flex items-center gap-2 text-sm font-semibold text-muted"><Wallet className="h-4 w-4" aria-hidden />Disponible para retirar</p>
               <p className="tabular mt-1 text-4xl font-extrabold">{formatMoney(b.availableMinor)}</p>
               <p className="mt-1 text-sm text-muted">{b.availableJobs ? `De ${b.availableJobs} trabajo${b.availableJobs === 1 ? "" : "s"} terminado${b.availableJobs === 1 ? "" : "s"} y calificado${b.availableJobs === 1 ? "" : "s"}.` : "Se suma cuando el cliente da conformidad y deja su reseña."}</p>
-              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-ok-bg px-3 py-2 text-sm text-ok"><BadgePercent className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span><strong>0 % de comisión.</strong> Cobrás el 100 % de tu presupuesto: Fixy solo le cobra un cargo de servicio al cliente.</span></p>
+              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-ok-bg px-3 py-2 text-sm text-ok"><BadgePercent className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span><strong>0 % de comisión de Fixy.</strong> Cobrás el neto de tu presupuesto: solo se descuentan los costos de cobro de Mercado Pago y los impuestos del pago. Fixy se sostiene con un cargo que paga el cliente.</span></p>
             </div>
             <div>
               {b.thisMonth ? (

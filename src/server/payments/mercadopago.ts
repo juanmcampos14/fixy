@@ -84,7 +84,7 @@ export const mercadoPagoGateway: PaymentGateway = {
   async getPayment(_db, paymentId): Promise<GatewayPayment | null> {
     if (!/^\d{3,25}$/.test(paymentId)) return null;
     try {
-      const p = await mp<{ id: number; external_reference: string | null; transaction_amount: number; currency_id: string; status: string; status_detail?: string; transaction_amount_refunded?: number }>(`/v1/payments/${paymentId}`);
+      const p = await mp<{ id: number; external_reference: string | null; transaction_amount: number; currency_id: string; status: string; status_detail?: string; transaction_amount_refunded?: number; transaction_details?: { net_received_amount?: number } }>(`/v1/payments/${paymentId}`);
       if (!p.external_reference) return null;
       return {
         id: String(p.id),
@@ -93,6 +93,8 @@ export const mercadoPagoGateway: PaymentGateway = {
         currency: p.currency_id,
         status: mapStatus(p),
         refundedMinor: toMinor(p.transaction_amount_refunded ?? 0),
+        // Lo que Mercado Pago no nos acredita: su comisión e impuestos/retenciones del cobro.
+        feesMinor: p.transaction_details?.net_received_amount != null ? Math.max(0, toMinor(p.transaction_amount) - toMinor(p.transaction_details.net_received_amount)) : 0,
       };
     } catch (e) {
       if (e instanceof Error && /Mercado Pago 404/.test(e.message)) return null;

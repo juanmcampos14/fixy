@@ -34,6 +34,7 @@ export const mockGateway: PaymentGateway = {
       currency: p.currency,
       status: p.status,
       refundedMinor: p.refunded_minor,
+      feesMinor: 0,
     };
   },
 

@@ -2,7 +2,7 @@
 import "server-only";
 import type { AccessRequirements } from "@/server/assistant/access-rules";
 import { asUser } from "@/server/db/client";
-import { signedFileUrl } from "@/server/storage";
+import { signedFileUrl, publicFileUrl } from "@/server/storage";
 import { conversationMessages, timeline } from "./shared";
 
 export type RequestListItem = {
@@ -91,7 +91,12 @@ export async function getClientRequest(userId: string, requestId: string) {
     const [job] = await tx<{ id: string; code: string; status: string }[]>`select id, code, status from jobs where request_id = ${requestId}`;
     const photos = (await tx<{ file_id: string }[]>`select file_id from request_attachments where request_id = ${requestId}`).map((p) => signedFileUrl(p.file_id, 900));
     const events = await timeline(tx, "request", requestId);
-    return { r, accessInfo: priv?.access_info ?? null, questions, invitations, invitationList, quotes, quoteItems, threads, job: job ?? null, photos, events };
+    const referrals = (await tx<{ id: string; note: string | null; from_name: string; to_slug: string; to_name: string; to_verified: boolean; to_avatar: string | null }[]>`
+      select pr.id, pr.note, f.display_name as from_name, t.slug as to_slug, t.display_name as to_name,
+        (t.status = 'approved' and t.identity_status = 'verified') as to_verified, t.avatar_file_id as to_avatar
+      from provider_referrals pr join provider_public f on f.id = pr.from_provider_id join provider_public t on t.id = pr.to_provider_id
+      where pr.request_id = ${requestId} and pr.status = 'proposed' order by pr.created_at desc`).map((x) => ({ ...x, to_avatar: x.to_avatar ? publicFileUrl(x.to_avatar) : null }));
+    return { r, accessInfo: priv?.access_info ?? null, questions, invitations, invitationList, quotes, quoteItems, threads, job: job ?? null, photos, events, referrals };
   });
 }
 

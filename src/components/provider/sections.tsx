@@ -284,7 +284,7 @@ export function DocumentsSection({ setup, checklist, id = "documentacion" }: { s
 export function PayoutsSection({ id = "cobros" }: { provider?: OwnProvider; id?: string }) {
   return (
     <Card as="section" id={id} aria-labelledby={`${id}-t`} className="scroll-mt-24">
-      <CardHeader title={<span id={`${id}-t`}>Cobros</span>} description="0 % de comisión: cobrás el 100 % de cada trabajo." />
+      <CardHeader title={<span id={`${id}-t`}>Cobros</span>} description="0 % de comisión de Fixy: cobrás el neto de cada trabajo (menos los costos de Mercado Pago e impuestos del cobro)." />
       <ul className="space-y-1.5 text-[15px] text-ink-2">
         <li>Cuando el cliente da conformidad y deja su reseña, el monto pasa a tu saldo.</li>
         <li>Una vez por mes pedís retirar todo lo acumulado y te lo transferimos a los 20 días.</li>

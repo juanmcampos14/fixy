@@ -25,6 +25,8 @@ import { formatMoney } from "@/lib/format";
 type LedgerLine = {
   account: "gateway_clearing" | "client_payments" | "platform_revenue" | "provider_payable" | "taxes_payable" | "refunds";
   amount: number;
+  /** Profesional de la línea si difiere del del asiento (p. ej. traspaso por recomendación). */
+  providerId?: string;
   entryType:
     | "charge" | "deposit" | "balance" | "extra" | "platform_fee" | "provider_payable"
     | "refund" | "chargeback" | "payout" | "adjustment" | "reversal";
@@ -54,7 +56,7 @@ export async function postLedger(
     await db`insert into ledger_entries (txn_id, job_id, charge_id, refund_id, payout_id, provider_id, entry_type, account,
         amount_minor, currency, is_test, external_ref, reason, actor_id)
       values (${txnId}, ${meta.jobId}, ${meta.chargeId ?? null}, ${meta.refundId ?? null}, ${meta.payoutId ?? null},
-        ${meta.providerId ?? null}, ${l.entryType}, ${l.account}, ${l.amount}, 'ARS', ${meta.isTest},
+        ${l.providerId ?? meta.providerId ?? null}, ${l.entryType}, ${l.account}, ${l.amount}, 'ARS', ${meta.isTest},
         ${meta.externalRef ?? null}, ${meta.reason}, ${meta.actorId ?? null})`;
   }
   return txnId;
@@ -80,6 +82,7 @@ export type ChargeRow = {
   checkout_url: string | null;
   payer_user_id: string;
   status_rank: number;
+  gateway_fee_minor: number;
 };
 
 /** Crea un cobro pendiente y la intención de pago en la pasarela. Importes calculados por el servidor. */
@@ -244,12 +247,14 @@ export async function syncPaymentFromGateway(
   }
   if (charge.status === "failed" || charge.status === "approved") return { result: "ignored_stale", chargeId: charge.id };
 
+  const gatewayFee = target === "approved" ? Math.min(payment.feesMinor ?? 0, charge.provider_net_minor) : 0;
   await tx`update charges set status = ${target}, status_rank = ${CHARGE_RANK[target]}, external_payment_id = ${payment.id},
+    gateway_fee_minor = ${gatewayFee},
     approved_at = ${target === "approved" ? new Date() : null},
     failure_reason = ${target === "failed" ? "Pago rechazado por la pasarela" : null}
     where id = ${charge.id}`;
   await recordEvent(tx, { entityType: "charge", entityId: charge.id, action: "gateway_update", from: charge.status, to: target });
-  if (target === "approved") await onChargeApproved(tx, { ...charge, status: "approved", external_payment_id: payment.id });
+  if (target === "approved") await onChargeApproved(tx, { ...charge, status: "approved", external_payment_id: payment.id, gateway_fee_minor: gatewayFee });
   if (target === "failed") await onChargeFailed(tx, charge);
   return { result: "applied", chargeId: charge.id };
 }
@@ -275,6 +280,17 @@ async function onChargeApproved(tx: Tx, c: ChargeRow) {
       reason: `Cobro aprobado (${c.kind})`,
     },
   );
+  // Costos de cobro de la pasarela (comisión + impuestos): a cargo del profesional; Fixy no los recibe.
+  if (c.gateway_fee_minor > 0) {
+    await postLedger(
+      tx,
+      [
+        { account: "provider_payable", amount: c.gateway_fee_minor, entryType: "adjustment" },
+        { account: "gateway_clearing", amount: -c.gateway_fee_minor, entryType: "adjustment" },
+      ],
+      { jobId: c.job_id, chargeId: c.id, providerId: job.provider_id, isTest: c.is_test, externalRef: c.external_payment_id, reason: "Costos de cobro de la pasarela e impuestos" },
+    );
+  }
   if (c.kind === "extra" && c.extra_id) {
     await recordEvent(tx, { entityType: "job", entityId: c.job_id, action: "extra_paid", data: { extraId: c.extra_id } });
   } else {
@@ -372,7 +388,7 @@ export async function refundChargeTx(
 
   // Si la liquidación del trabajo todavía no se pagó, se ajusta su neto (con registro del ajuste).
   const [payout] = await tx<{ id: string; status: string; adjustments_minor: number; amount_minor: number }[]>`
-    select id, status, adjustments_minor, amount_minor from payouts where job_id = ${c.job_id} for update`;
+    select id, status, adjustments_minor, amount_minor from payouts where job_id = ${c.job_id} and kind = 'job' for update`;
   if (payout && ["pending", "scheduled", "failed"].includes(payout.status)) {
     const adj = payout.adjustments_minor - providerPartMinor;
     await tx`update payouts set adjustments_minor = ${adj}, amount_minor = gross_minor - fee_minor + ${adj} where id = ${payout.id}`;
@@ -394,30 +410,67 @@ export async function refundChargeTx(
 
 // ───────────────────────── Liquidaciones ─────────────────────────
 
-/** Al completarse un trabajo se genera la liquidación pendiente con el neto de los cobros aprobados. */
+/**
+ * Al completarse un trabajo se genera la liquidación pendiente del profesional:
+ *   bruto (sus importes) − comisión Fixy (0) − reintegros − costos de cobro de la pasarela − recomendación (si la hubo).
+ * Si el trabajo vino por la recomendación de un colega, se genera además la liquidación de ese colega (10 % del neto)
+ * y se asienta el traspaso entre ambos en el registro financiero.
+ */
 export async function createPayoutForJob(tx: Tx, jobId: string) {
-  const [job] = await tx<{ provider_id: string }[]>`select provider_id from jobs where id = ${jobId}`;
+  const [job] = await tx<{ provider_id: string; request_id: string; code: string }[]>`select provider_id, request_id, code from jobs where id = ${jobId}`;
   const charges = await tx<ChargeRow[]>`select * from charges where job_id = ${jobId} and status in ('approved','partially_refunded','refunded')`;
   if (charges.length === 0) return null;
   let gross = 0;
   let fee = 0;
-  let adjustments = 0;
+  let refundsPart = 0;
+  let processing = 0;
   for (const c of charges) {
     gross += c.provider_net_minor + c.provider_fee_minor;
     fee += c.provider_fee_minor;
-    if (c.refunded_minor > 0) adjustments -= splitRefund(c.refunded_minor, c.amount_minor, c.provider_net_minor).providerPartMinor;
+    processing += c.gateway_fee_minor ?? 0;
+    if (c.refunded_minor > 0) refundsPart += splitRefund(c.refunded_minor, c.amount_minor, c.provider_net_minor).providerPartMinor;
   }
+  // Recomendación aceptada por el cliente para este profesional y pedido.
+  const [ref] = await tx<{ id: string; from_provider_id: string; fee_bps: number }[]>`
+    select pr.id, pr.from_provider_id, pr.fee_bps from request_invitations i join provider_referrals pr on pr.id = i.referral_id
+    where i.request_id = ${job.request_id} and i.provider_id = ${job.provider_id} and pr.status = 'accepted' limit 1`;
+  const baseNet = Math.max(0, gross - fee - refundsPart - processing);
+  const referral = ref ? Math.floor((baseNet * ref.fee_bps) / 10000) : 0;
+  const adjustments = -(refundsPart + processing + referral);
   const [{ open }] = await tx<{ open: boolean }[]>`
     select exists (select 1 from disputes where job_id = ${jobId} and status in ('open','in_review','awaiting_response')) as open`;
   const [{ reviewed }] = await tx<{ reviewed: boolean }[]>`select exists (select 1 from reviews where job_id = ${jobId}) as reviewed`;
   const gw = activeGateway();
+  const isTest = charges.some((c) => c.is_test) || gw.isTest;
   const [p] = await tx<{ id: string }[]>`
-    insert into payouts (provider_id, job_id, gateway, is_test, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason, awaiting_review)
-    values (${job.provider_id}, ${jobId}, ${gw.name}, ${gw.isTest}, ${gross}, ${fee}, ${adjustments}, ${gross - fee + adjustments},
+    insert into payouts (provider_id, job_id, kind, gateway, is_test, gross_minor, fee_minor, adjustments_minor, amount_minor, processing_minor, referral_minor, on_hold, hold_reason, awaiting_review)
+    values (${job.provider_id}, ${jobId}, 'job', ${gw.name}, ${isTest}, ${gross}, ${fee}, ${adjustments}, ${gross - fee + adjustments}, ${processing}, ${referral},
             ${open}, ${open ? "Reclamo abierto" : null}, ${!reviewed})
-    on conflict (job_id) do nothing returning id`;
-  if (p) await recordEvent(tx, { entityType: "payout", entityId: p.id, action: "created", to: "pending" });
-  return p?.id ?? null;
+    on conflict (job_id, kind) do nothing returning id`;
+  if (!p) return null;
+  await recordEvent(tx, { entityType: "payout", entityId: p.id, action: "created", to: "pending" });
+  if (ref && referral > 0) {
+    const [rp] = await tx<{ id: string }[]>`
+      insert into payouts (provider_id, job_id, kind, gateway, is_test, gross_minor, fee_minor, adjustments_minor, amount_minor, on_hold, hold_reason, awaiting_review)
+      values (${ref.from_provider_id}, ${jobId}, 'referral', ${gw.name}, ${isTest}, ${referral}, 0, 0, ${referral}, ${open}, ${open ? "Reclamo abierto" : null}, ${!reviewed})
+      on conflict (job_id, kind) do nothing returning id`;
+    if (rp) {
+      await postLedger(
+        tx,
+        [
+          { account: "provider_payable", amount: referral, entryType: "adjustment", providerId: job.provider_id },
+          { account: "provider_payable", amount: -referral, entryType: "adjustment", providerId: ref.from_provider_id },
+        ],
+        { jobId, payoutId: rp.id, isTest, reason: `Recomendación (${ref.fee_bps / 100} %) por el trabajo ${job.code}` },
+      );
+      await recordEvent(tx, { entityType: "payout", entityId: rp.id, action: "created", to: "pending", data: { referralId: ref.id } });
+      await notify(tx, await providerRecipients(tx, ref.from_provider_id), {
+        type: "payout", title: `Ganaste ${formatMoney(referral)} por recomendar · ${job.code}`,
+        body: "Tu colega terminó el trabajo que le recomendaste. Se suma a tu saldo cuando el cliente deje su reseña.", link: "/proveedor/recomendaciones",
+      });
+    }
+  }
+  return p.id;
 }
 
 /**

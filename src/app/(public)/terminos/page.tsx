@@ -94,7 +94,7 @@ export default function Terms() {
       <ul>
         <li>El precio de cada Visita, Presupuesto y adicional lo fija el Profesional.</li>
         <li><strong>{L.brand} cobra al Cliente un cargo de servicio</strong>, que se informa en forma clara y separada antes de confirmar cada pago, junto con los impuestos que correspondan.</li>
-        <li><strong>{L.brand} no cobra comisión a los Profesionales</strong> por los Trabajos realizados a través de la Plataforma. El registro es gratuito y no tiene abono.</li>
+        <li><strong>{L.brand} no cobra comisión a los Profesionales</strong> por los Trabajos realizados a través de la Plataforma. El registro es gratuito y no tiene abono. Los costos de procesamiento del medio de pago y los impuestos del cobro se descuentan de lo que recibe el Profesional.</li>
         <li>Los pagos se procesan a través de proveedores de servicios de pago. {L.brand} no almacena los datos completos de tarjetas. {L.brand} recibe los pagos de los Clientes por cuenta y orden de los Profesionales y los transfiere según la sección 9 de las <Link href="/terminos/profesionales">Condiciones para profesionales</Link>.</li>
         <li>Pago aprobado no significa que el Trabajo esté terminado: el dinero correspondiente al Profesional se libera recién con la conformidad del Cliente, su reseña y sin reclamos abiertos.</li>
         <li>El Profesional es responsable de emitir al Cliente el comprobante fiscal que corresponda por su servicio. {L.brand} emite el comprobante por su cargo de servicio.</li>

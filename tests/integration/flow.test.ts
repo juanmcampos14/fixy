@@ -79,9 +79,9 @@ describe("recorrido principal de punta a punta", () => {
       ],
     });
     const [q] = await sql()<{ total_minor: number; provider_net_minor: number; client_fee_minor: number; provider_fee_minor: number }[]>`select * from quotes where id = ${quoteId}`;
-    expect(q.client_fee_minor).toBe(900_000); // 5 % cliente
+    expect(q.client_fee_minor).toBe(1_800_000); // 10 % cliente
     expect(q.provider_fee_minor).toBe(0); // 0 % al profesional
-    expect(q.total_minor).toBe(18_900_000);
+    expect(q.total_minor).toBe(19_800_000);
     expect(q.provider_net_minor).toBe(18_000_000); // cobra el 100 % del presupuesto
 
     // 5. Cliente acepta y paga en modo de prueba

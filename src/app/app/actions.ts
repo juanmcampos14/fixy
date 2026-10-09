@@ -243,3 +243,19 @@ export async function saveGatedRulesAction(_: ActionState, f: FormData): Promise
       : { error: res.reason };
   });
 }
+
+export async function acceptReferralAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await requests.acceptReferral(await requireActor(), str(f, "referralId"));
+    revalidatePath("/app", "layout");
+    return { ok: true, message: "Listo. Le mandamos tu pedido al profesional recomendado." };
+  });
+}
+
+export async function declineReferralAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await requests.declineReferral(await requireActor(), str(f, "referralId"));
+    revalidatePath("/app", "layout");
+    return { ok: true, message: "Entendido. Podés elegir otro profesional." };
+  });
+}

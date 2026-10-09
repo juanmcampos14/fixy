@@ -257,7 +257,7 @@ export async function getEarnings(userId: string, providerId: string) {
         coalesce((select sum(c.refunded_minor) from charges c where c.job_id = j.id), 0)::bigint as refunded,
         coalesce((select bool_or(c.is_test) from charges c where c.job_id = j.id), false) as any_test,
         p.id as payout_id, p.status as payout_status, p.gross_minor, p.fee_minor, p.adjustments_minor, p.amount_minor, p.on_hold, p.hold_reason, p.paid_at, p.is_test as payout_test, p.awaiting_review
-      from jobs j join service_requests r on r.id = j.request_id left join payouts p on p.job_id = j.id
+      from jobs j join service_requests r on r.id = j.request_id left join payouts p on p.job_id = j.id and p.kind = 'job'
       where j.provider_id = ${providerId}
         and (p.id is not null or exists (select 1 from charges c where c.job_id = j.id and c.status in ('approved','partially_refunded','refunded')))
       order by j.created_at desc`;

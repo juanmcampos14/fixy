@@ -8,8 +8,8 @@ export const LEGAL = {
   address: "",
   /** Email para consultas legales, privacidad y arrepentimiento (completar). Mientras esté vacío se indica el canal de ayuda del sitio. */
   email: "",
-  version: "1.0",
-  effectiveDate: "8 de octubre de 2026",
+  version: "1.1",
+  effectiveDate: "10 de octubre de 2026",
   /** Plazo de transferencia de un retiro (días). Debe coincidir con platform_settings.withdrawals.delay_days. */
   withdrawalDays: 20,
 } as const;

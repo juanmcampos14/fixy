@@ -394,7 +394,7 @@ export async function getDisputeAdmin(userId: string, disputeId: string) {
     const refunds = await tx<{ id: string; amount_minor: number; reason: string; created_at: Date }[]>`
       select id, amount_minor, reason, created_at from refunds where dispute_id = ${disputeId} order by created_at`;
     const [payout] = await tx<{ id: string; status: string; amount_minor: number; on_hold: boolean; hold_reason: string | null; is_test: boolean }[]>`
-      select id, status, amount_minor, on_hold, hold_reason, is_test from payouts where job_id = ${d.job_id}`;
+      select id, status, amount_minor, on_hold, hold_reason, is_test from payouts where job_id = ${d.job_id} and kind = 'job'`;
     const events = await timeline(tx, "dispute", disputeId);
     const audits = await auditFor(tx, "dispute", disputeId);
     return { d, job, messages, charges, refunds, payout: payout ?? null, events, audits };

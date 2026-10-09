@@ -178,8 +178,8 @@ export async function seedBase(db: Db) {
   }
   const [{ n }] = await db<{ n: number }[]>`select count(*)::int as n from commission_rules where active and category_id is null`;
   if (n === 0) {
-    // Por defecto: 0 % al profesional (Fixy no le cobra comisión) + 5 % de cargo de servicio al cliente. Sin impuestos configurados.
-    await db`insert into commission_rules (category_id, provider_rate_bps, client_rate_bps, client_fee_tax_bps) values (null, 0, 500, 0)`;
+    // Por defecto: 0 % al profesional (Fixy no le cobra comisión) + 10 % de cargo de servicio al cliente. Sin impuestos configurados.
+    await db`insert into commission_rules (category_id, provider_rate_bps, client_rate_bps, client_fee_tax_bps) values (null, 0, 1000, 0)`;
   }
   const settings: Record<string, unknown> = {
     "matching.invite_limit": 4,
@@ -194,6 +194,6 @@ export async function seedBase(db: Db) {
     { kind: "privacy", title: "Política de privacidad" },
     { kind: "provider_terms", title: "Condiciones para profesionales" },
   ]) {
-    await db`insert into policy_documents (kind, version, title, is_draft) values (${p.kind}, '1.0', ${p.title}, false) on conflict do nothing`;
+    await db`insert into policy_documents (kind, version, title, is_draft) values (${p.kind}, '1.1', ${p.title}, false) on conflict do nothing`;
   }
 }

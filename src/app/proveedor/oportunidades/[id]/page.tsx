@@ -6,7 +6,9 @@ import { ArrowLeft, Lock } from "lucide-react";
 import { sql } from "@/server/db/client";
 import { getOpportunity, requireProviderContext } from "@/server/queries/provider";
 import { markInvitationViewed, TIME_WINDOWS } from "@/server/modules/requests";
-import { commissionRuleFor } from "@/server/modules/catalog";
+import { commissionRuleFor, getSetting } from "@/server/modules/catalog";
+import { referralCandidates } from "@/server/modules/requests";
+import { DeclineForm } from "@/components/provider/decline-form";
 import { providerEligibility } from "@/server/modules/providers";
 import { modeLabel, propertyKindLabel, quoteStatusLabel, requestStatusLabel, urgencyLabel } from "@/server/domain/labels";
 import { todayInBuenosAires, formatDate, formatDateTime, formatMoney, relativeTime } from "@/lib/format";
@@ -37,7 +39,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
     o = { ...o, inv: { ...o.inv, status: "viewed" } };
   }
   const { inv, request, quote } = o;
-  const [rule, elig] = await Promise.all([commissionRuleFor(sql(), request.category_id), providerEligibility(sql(), provider.id, request.category_id)]);
+  const [rule, elig, colleagues, refFee, referral] = await Promise.all([
+    commissionRuleFor(sql(), request.category_id), providerEligibility(sql(), provider.id, request.category_id),
+    referralCandidates(sql(), request.id, provider.id), getSetting<number>(sql(), "referrals.fee_bps", 1000),
+    sql()<{ from_name: string; fee_bps: number; note: string | null }[]>`
+      select p.display_name as from_name, pr.fee_bps, pr.note from request_invitations i join provider_referrals pr on pr.id = i.referral_id
+      join providers p on p.id = pr.from_provider_id where i.id = ${inv.id}`,
+  ]);
+  const referralFeePct = Number(refFee) / 100;
   const requestOpen = ["searching", "with_quotes"].includes(request.status);
   const invitationOpen = inv.status === "invited" || inv.status === "viewed";
   const eligible = elig.eligible;
@@ -65,6 +74,12 @@ export default async function OpportunityPage({ params, searchParams }: { params
         description={`Recibida ${relativeTime(inv.created_at)}.`}
         action={<Badge tone={invitationOpen ? "brand" : "neutral"}>{INVITATION_STATUS_LABEL[inv.status] ?? inv.status}</Badge>}
       />
+      {referral[0] && (
+        <Alert tone="info" className="mb-5" title={`Te recomendó ${referral[0].from_name}`}>
+          El cliente aceptó su recomendación. Si hacés este trabajo, {referral[0].from_name} recibe el {referral[0].fee_bps / 100} % de lo que cobres por él (se descuenta de tu liquidación).
+          {referral[0].note && <> Le dijo al cliente: «{referral[0].note}».</>}
+        </Alert>
+      )}
       {enviado && quote && <Alert tone="ok" className="mb-5" title="Enviamos tu presupuesto">El cliente lo va a revisar. Te avisamos si lo acepta.</Alert>}
       {o.jobId && (
         <Alert tone="ok" className="mb-5" title="El cliente aceptó tu presupuesto">
@@ -176,8 +191,8 @@ export default async function OpportunityPage({ params, searchParams }: { params
           )}
           {invitationOpen && requestOpen && !quote && (
             <Card>
-              <CardHeader title="¿No podés tomarla?" description="Avisanos así el cliente no espera tu presupuesto." />
-              <ConfirmAction action={declineInvitationAction} label="No tomar esta oportunidad" variant="secondary" title="No tomar esta oportunidad" description="Contanos el motivo (no se muestra al cliente)." requireReason hidden={{ invitationId: inv.id }} confirmLabel="Confirmar" />
+              <CardHeader title="¿No podés tomarlo?" description="Avisanos así el cliente no espera, y si querés recomendá a un colega." />
+              <DeclineForm action={declineInvitationAction} invitationId={inv.id} colleagues={colleagues} feePct={referralFeePct} />
             </Card>
           )}
           {quote?.status === "accepted" && o.jobId && <ButtonLink href={`/proveedor/trabajos/${o.jobId}`} className="w-full">Ir al trabajo</ButtonLink>}

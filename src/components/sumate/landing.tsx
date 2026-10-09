@@ -41,11 +41,11 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
   const steps = [
     { icon: Search, title: "Te eligen por tu perfil", text: "Los clientes de tu zona ven tus reseñas, verificaciones, el precio de tu visita y tus precios de referencia, y te eligen. Sin subastas con 50 personas." },
     { icon: CalendarCheck, title: "Aceptás y coordinás la visita", text: "Tenés unas horas para aceptar y proponer día y horario por el chat. La dirección se te comparte cuando el cliente confirma." },
-    { icon: Banknote, title: "Presupuestás en el lugar", text: "Ves el problema y armás el presupuesto del arreglo desde la app, con tu precio. Cobrás el 100 %: Fixy no te descuenta nada." },
+    { icon: Banknote, title: "Presupuestás en el lugar", text: "Ves el problema y armás el presupuesto del arreglo desde la app, con tu precio. Fixy no te cobra comisión: cobrás el neto de tu presupuesto." },
     { icon: Star, title: "El cliente aprueba, paga y califica", text: "Todo pasa por Fixy: aprobación, pago, extras y conformidad. Con la reseña del cliente, el monto pasa a tu saldo y lo retirás una vez por mes." },
   ];
   const faqs: [string, string][] = [
-    ["¿Cuánto cuesta sumarme?", "Nada. Ni alta, ni abono, ni comisión: cobrás el 100 % de tu presupuesto. Fixy solo le cobra un cargo de servicio al cliente."],
+    ["¿Cuánto cuesta sumarme?", "Nada. Ni alta, ni abono, ni comisión de Fixy. Cobrás el neto de tu presupuesto: solo se descuentan los costos de cobro de Mercado Pago y los impuestos del pago. Fixy se sostiene con un cargo de servicio que paga el cliente."],
     ["¿Qué necesito para empezar?", `Tu DNI, una descripción de tu trabajo, las zonas y horarios en los que trabajás, fotos de trabajos anteriores (recomendado) y, cuando quieras retirar, tus datos bancarios.${credentials.length ? ` Para este oficio también: ${credentials.map((c) => c.name.toLowerCase()).join(", ")} vigente.` : ""} Nuestro equipo revisa la documentación antes de habilitarte.`],
     ["¿Cobro la visita?", "Vos decidís: podés cobrarla, ofrecerla sin cargo, y descontarla del arreglo si el cliente te contrata. También publicás precios de referencia (\"desde\") para que el cliente sepa qué esperar."],
     ["¿Por qué no comparto mi teléfono?", "Para cuidarte: si todo queda en Fixy (chat, dirección, aprobaciones y pagos), podemos ayudarte ante un problema y tu reputación crece con cada trabajo."],
@@ -79,7 +79,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
               <ButtonLink href="#como-funciona" size="lg" variant="ghost" className="text-white ring-1 ring-inset ring-white/30 hover:bg-white/10">Cómo funciona</ButtonLink>
             </div>
             <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-white/85">
-              {["Alta sin costo", "0 % de comisión: cobrás el 100 %", "Retirás tu saldo una vez por mes"].map((t) => (
+              {["Alta sin costo", "0 % de comisión de Fixy", "Retirás tu saldo una vez por mes"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-200" aria-hidden />{t}</li>
               ))}
             </ul>
@@ -134,17 +134,18 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
       {/* Sin comisión + requisitos */}
       <section className="mx-auto mt-16 grid max-w-6xl gap-4 px-4 sm:px-6 md:grid-cols-2">
         <article aria-labelledby="com-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
-          <h2 id="com-t" className="text-2xl font-extrabold">A vos no te cobramos nada</h2>
-          <p className="mt-2 text-ink-2">Sin costo de alta, sin abono y <strong>sin comisión</strong>. Lo que presupuestás es lo que cobrás.</p>
+          <h2 id="com-t" className="text-2xl font-extrabold">0 % de comisión de Fixy</h2>
+          <p className="mt-2 text-ink-2">Sin costo de alta, sin abono y <strong>sin comisión de Fixy</strong>. Cobrás el neto de tu presupuesto: solo se descuentan los costos de cobro de Mercado Pago y los impuestos del pago.</p>
           <figure className="mt-5 rounded-2xl bg-cream/60 p-4 ring-1 ring-line">
             <figcaption className="mb-2 text-sm font-semibold text-muted">Ejemplo</figcaption>
             <dl className="tabular divide-y divide-line text-[15px]">
               <div className="flex justify-between py-2"><dt>Tu presupuesto</dt><dd>{formatMoney(exampleGross)}</dd></div>
               <div className="flex justify-between py-2"><dt>Comisión Fixy</dt><dd className="font-semibold text-ok">$ 0</dd></div>
-              <div className="flex justify-between py-2.5 text-lg font-bold"><dt>Te queda</dt><dd>{formatMoney(exampleGross)}</dd></div>
+              <div className="flex justify-between py-2"><dt>Costos de Mercado Pago e impuestos del cobro</dt><dd className="text-muted">según medio de pago</dd></div>
+              <div className="flex justify-between py-2.5 text-lg font-bold"><dt>Te queda</dt><dd>el neto</dd></div>
             </dl>
           </figure>
-          <p className="mt-3 text-xs text-muted">Fixy se sostiene con un cargo de servicio que paga el cliente, aparte de tu presupuesto. A vos no te descontamos nada.</p>
+          <p className="mt-3 text-xs text-muted">Fixy se sostiene con un cargo de servicio que paga el cliente, aparte de tu presupuesto. Los costos de Mercado Pago dependen del medio de pago y del plazo de acreditación; los ves en cada cobro.</p>
         </article>
         <article aria-labelledby="req-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
           <h2 id="req-t" className="text-2xl font-extrabold">Qué necesitás</h2>

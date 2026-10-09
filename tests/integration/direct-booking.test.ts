@@ -48,7 +48,7 @@ describe("reserva directa: elegí a tu profesional", () => {
 
     const inv = await invitationFor(reqId, pid);
     const q = await quotes.acceptBooking(lucia, inv, { proposedDate: "2026-12-10", proposedWindow: "Mañana", note: "" });
-    expect(await totalOf(q)).toBe(1_575_000); // visita + cargo de servicio
+    expect(await totalOf(q)).toBe(1_650_000); // visita + cargo de servicio (10 %)
     const res = await quotes.acceptQuote(ana, q, { totalMinor: await totalOf(q), acceptedTerms: true });
     await payPending(res.jobId);
     const [job] = await sql()<{ status: string; visit_code: string }[]>`select status, visit_code from jobs where id = ${res.jobId}`;

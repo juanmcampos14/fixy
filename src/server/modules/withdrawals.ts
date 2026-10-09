@@ -1,6 +1,7 @@
 /**
  * Saldo y retiros de profesionales.
- *  - Fixy no cobra comisión a profesionales: el saldo es el 100 % de lo presupuestado (menos reembolsos).
+ *  - Fixy no cobra comisión a profesionales: el saldo es lo presupuestado menos reintegros, costos de cobro de la pasarela e impuestos,
+ *    y, si el trabajo vino por recomendación, la parte del colega que lo recomendó.
  *  - Una liquidación pasa a "disponible" cuando el trabajo está completado, con reseña y sin reclamos abiertos.
  *  - Una vez por mes calendario (Buenos Aires) se pide retirar TODO el saldo disponible; se transfiere a los 20 días
  *    (platform_settings.withdrawals.delay_days) a la cuenta bancaria cargada.

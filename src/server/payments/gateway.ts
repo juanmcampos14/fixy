@@ -16,6 +16,8 @@ export type GatewayPayment = {
   currency: string;
   status: GatewayPaymentStatus;
   refundedMinor: number;
+  /** Costos de cobro descontados por la pasarela (comisión + impuestos/retenciones). 0 si no aplica. */
+  feesMinor: number;
 };
 
 export type CheckoutRequest = {

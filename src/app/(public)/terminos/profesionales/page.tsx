@@ -63,21 +63,29 @@ export default function ProviderTerms() {
         <li>Respondés por los daños que causes al prestar el servicio. Te recomendamos contar con seguro de responsabilidad civil y de accidentes personales; algunos barrios lo exigen.</li>
       </ul>
 
-      <h2>8. Sin comisión</h2>
+      <h2>8. Sin comisión de {L.brand}</h2>
       <p>
         <strong>{L.brand} no te cobra comisión</strong> por los Trabajos realizados a través de la Plataforma, ni cargo de alta ni abono. {L.brand} se sostiene con un cargo de servicio que paga el Cliente
-        en forma separada. Si en el futuro {L.brand} quisiera cobrarte algún cargo, te lo informará con al menos treinta (30) días de anticipación y no se aplicará a Trabajos ya contratados.
+        en forma separada. Lo que cobrás es el <strong>neto</strong> de tu Visita, Presupuesto y adicionales: se descuentan los costos de procesamiento del medio de pago (por ejemplo, la comisión de
+        Mercado Pago, que varía según el medio y el plazo de acreditación) y los impuestos y retenciones que correspondan a ese cobro. Ves el detalle en cada liquidación. Si en el futuro {L.brand} quisiera cobrarte algún cargo, te lo informará con al menos treinta (30) días de anticipación y no se aplicará a Trabajos ya contratados.
       </p>
 
       <h2>9. Cobros, saldo y retiros</h2>
       <ul>
         <li>Los Clientes pagan dentro de la Plataforma. {L.brand} recibe esos pagos por tu cuenta y orden y los acredita en tu saldo según estas reglas.</li>
-        <li>El importe de cada Trabajo (tu Visita, tu Presupuesto y los adicionales aprobados, menos los reintegros que correspondan) pasa a tu <strong>saldo disponible</strong> cuando el Trabajo está completado, el Cliente dejó su reseña y no hay reclamos abiertos.</li>
+        <li>El importe neto de cada Trabajo (tu Visita, tu Presupuesto y los adicionales aprobados, menos reintegros, costos de procesamiento del pago e impuestos, y la parte de recomendación si corresponde) pasa a tu <strong>saldo disponible</strong> cuando el Trabajo está completado, el Cliente dejó su reseña y no hay reclamos abiertos.</li>
         <li>Podés pedir <strong>un retiro por mes calendario</strong> de todo tu saldo disponible. {L.brand} lo transfiere dentro de los <strong>{L.withdrawalDays} días corridos</strong> desde el pedido, a la cuenta bancaria o virtual que indiques.</li>
         <li>La cuenta de destino tiene que estar a tu nombre o al de tu empresa. Podemos rechazar un retiro si los datos son incorrectos o no coinciden con el titular; en ese caso el saldo vuelve a estar disponible y podés volver a pedirlo ese mismo mes.</li>
         <li>Si se abre un reclamo, el importe del Trabajo queda retenido hasta su resolución. {L.brand} puede descontar de tu saldo los reintegros que correspondan por reclamos resueltos, contracargos o cobros indebidos vinculados a tus Trabajos.</li>
         <li>Tenés que emitir al Cliente el comprobante fiscal que corresponda por tu servicio.</li>
         <li>Mientras la Plataforma indique “Modo de prueba”, los cobros y retiros son simulados y no se mueve dinero real.</li>
+      </ul>
+
+      <h2>9 bis. Recomendación entre colegas</h2>
+      <ul>
+        <li>Si no podés tomar un pedido, podés recomendar a otro Profesional de {L.brand}. El Cliente decide si acepta la recomendación.</li>
+        <li>Si el Cliente acepta y tu colega realiza el Trabajo, recibís el <strong>10 %</strong> del importe neto que cobre tu colega por ese Trabajo. Ese monto se descuenta de su liquidación y se acredita en tu saldo con las mismas reglas (Trabajo completado, reseña y sin reclamos).</li>
+        <li>Si te recomiendan a vos, lo vas a ver antes de aceptar el pedido. Al aceptarlo, aceptás ese descuento para ese Trabajo.</li>
       </ul>
 
       <h2>10. Reseñas y Espíritu Fixy</h2>

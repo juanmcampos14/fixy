@@ -188,17 +188,19 @@ async function transitionRequest(tx: Tx, requestId: string, from: RequestStatus,
   await recordEvent(tx, { entityType: "request", entityId: requestId, action: "status", from, to, actorId: actor?.id ?? null, actorRole: actor?.platformRole ?? side, reason });
 }
 
-async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, source: "matching" | "client" | "operator", invitedBy: string | null, rank?: { position: number; score: number; reasons: string[] }, respondBy?: Date | null, verified = true) {
+async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, source: "matching" | "client" | "operator", invitedBy: string | null, rank?: { position: number; score: number; reasons: string[] }, respondBy?: Date | null, verified = true, referralId?: string) {
   const inserted = await tx<{ id: string }[]>`
-    insert into request_invitations (request_id, provider_id, source, invited_by, rank_position, rank_score, rank_reasons, respond_by)
-    values (${requestId}, ${providerId}, ${source}, ${invitedBy}, ${rank?.position ?? null}, ${rank?.score ?? null}, ${tx.json((rank?.reasons ?? []) as never)}, ${respondBy ?? null})
+    insert into request_invitations (request_id, provider_id, source, invited_by, rank_position, rank_score, rank_reasons, respond_by, referral_id)
+    values (${requestId}, ${providerId}, ${source}, ${invitedBy}, ${rank?.position ?? null}, ${rank?.score ?? null}, ${tx.json((rank?.reasons ?? []) as never)}, ${respondBy ?? null}, ${referralId ?? null})
     on conflict (request_id, provider_id) do nothing returning id`;
   if (!inserted.length) return null;
   await tx`insert into conversations (request_id, provider_id) values (${requestId}, ${providerId}) on conflict do nothing`;
   const [r] = await tx<{ code: string; title: string }[]>`select code, title from service_requests where id = ${requestId}`;
+  const [refInfo] = referralId ? await tx<{ from_name: string; fee_bps: number }[]>`
+    select p.display_name as from_name, pr.fee_bps from provider_referrals pr join providers p on p.id = pr.from_provider_id where pr.id = ${referralId}` : [];
   await notify(tx, await providerRecipients(tx, providerId), {
     type: "invitation",
-    title: source === "client" ? `Un cliente te eligió · ${r.code}` : `Nueva oportunidad · ${r.code}`,
+    title: refInfo ? `${refInfo.from_name} te recomendó y el cliente te eligió · ${r.code}` : source === "client" ? `Un cliente te eligió · ${r.code}` : `Nueva oportunidad · ${r.code}`,
     body: verified
       ? (source === "client" ? `${r.title}. Respondé para coordinar la visita.` : r.title)
       : `${r.title}. Para aceptarlo, primero verificá tu cuenta: cargá tu DNI y enviá tu perfil a revisión. Te damos prioridad.`,
@@ -412,7 +414,7 @@ export async function markInvitationViewed(actor: Actor, invitationId: string) {
   });
 }
 
-export async function declineInvitation(actor: Actor, invitationId: string, reason: string) {
+export async function declineInvitation(actor: Actor, invitationId: string, reason: string, referral?: { toProviderId: string; note?: string } | null) {
   return systemTx(async (tx) => {
     const [i] = await tx<{ provider_id: string; status: string; request_id: string }[]>`select provider_id, status, request_id from request_invitations where id = ${invitationId} for update`;
     if (!i) throw notFound();
@@ -421,6 +423,7 @@ export async function declineInvitation(actor: Actor, invitationId: string, reas
     await tx`update request_invitations set status = 'declined', decline_reason = ${reason || null}, responded_at = now() where id = ${invitationId}`;
     await recordEvent(tx, { entityType: "request", entityId: i.request_id, action: "invitation_declined", actorId: actor.id, data: { providerId: i.provider_id } });
     const [r] = await tx<{ status: string; request_mode: string; code: string }[]>`select status, request_mode, code from service_requests where id = ${i.request_id}`;
+    if (referral?.toProviderId) await proposeReferralTx(tx, actor, i.request_id, i.provider_id, referral.toProviderId, referral.note ?? "", r.code);
     if (r.request_mode === "direct") {
       // Reserva directa: el cliente elige otro profesional.
       await notify(tx, await clientRecipients(tx, i.request_id), {
@@ -449,7 +452,7 @@ async function respondBy(db: Db, urgency: string, providerVerified = true) {
 }
 
 /** El cliente elige (otro) profesional para su pedido. Solo si no hay otra reserva activa. */
-export async function chooseProvider(actor: Actor, requestId: string, providerId: string) {
+export async function chooseProvider(actor: Actor, requestId: string, providerId: string, referralId?: string) {
   return systemTx(async (tx) => {
     if (!(await check(tx, "is_request_client", actor, requestId))) throw forbidden();
     const [r] = await tx<{ status: RequestStatus; urgency: string; request_mode: string }[]>`select status, urgency, request_mode from service_requests where id = ${requestId} for update`;
@@ -457,13 +460,24 @@ export async function chooseProvider(actor: Actor, requestId: string, providerId
     const [{ active }] = await tx<{ active: number }[]>`
       select count(*)::int as active from request_invitations where request_id = ${requestId} and status in ('invited','viewed')`;
     if (r.request_mode === "direct" && active > 0) throw invalid("Ya hay un profesional evaluando tu pedido. Esperá su respuesta o el vencimiento del plazo.");
-    const target = (await findCandidates(tx, requestId, { excludeInvited: true })).find((c) => c.providerId === providerId);
+    let target: { verified: boolean } | undefined = (await findCandidates(tx, requestId, { excludeInvited: true })).find((c) => c.providerId === providerId);
+    if (!target && referralId) {
+      // Recomendado por un colega: alcanza con que ofrezca el rubro (validado al recomendar), aunque no tenga la zona cargada.
+      const [rp] = await tx<{ verified: boolean }[]>`
+        select (p.status = 'approved' and p.identity_status = 'verified') as verified from provider_referrals pr join providers p on p.id = pr.to_provider_id
+        where pr.id = ${referralId} and pr.request_id = ${requestId} and pr.to_provider_id = ${providerId} and pr.status = 'proposed'
+          and p.status in ('pending','in_review','approved') and p.accepting_jobs`;
+      target = rp;
+    }
     if (!target) throw invalid("Ese profesional no está disponible para este pedido.");
     // Si había un presupuesto de visita de otro profesional sin confirmar, se descarta.
     const old = await tx<{ id: string }[]>`update quotes set status = 'rejected', decided_at = now() where request_id = ${requestId} and status = 'sent' returning id`;
     for (const q of old) await recordEvent(tx, { entityType: "quote", entityId: q.id, action: "status", from: "sent", to: "rejected", reason: "El cliente eligió otro profesional" });
     await tx`update service_requests set request_mode = 'direct', target_provider_id = ${providerId}, needs_review = false where id = ${requestId}`;
-    await inviteProviderTx(tx, requestId, providerId, "client", actor.id, undefined, await respondBy(tx, r.urgency, target.verified), target.verified);
+    const invId = await inviteProviderTx(tx, requestId, providerId, "client", actor.id, undefined, await respondBy(tx, r.urgency, target.verified), target.verified, referralId);
+    if (referralId && invId) {
+      await tx`update provider_referrals set status = 'accepted', decided_at = now() where id = ${referralId} and request_id = ${requestId} and to_provider_id = ${providerId}`;
+    }
     if (r.status !== "searching") {
       if (r.status === "with_quotes") await tx`update service_requests set status = 'searching' where id = ${requestId}`;
       else await transitionRequest(tx, requestId, r.status, "searching", "system", null, "El cliente eligió profesional");
@@ -539,4 +553,56 @@ export async function notifyRequestUpdate(tx: Tx, requestId: string, code: strin
       link: p.job_id ? `/proveedor/trabajos/${p.job_id}` : `/proveedor/oportunidades/${p.inv_id}`,
     });
   }
+}
+
+// ───────────────────────── Recomendación entre colegas ─────────────────────────
+
+/** Colegas que se pueden recomendar para un pedido: cubren el rubro, no están rechazados ni suspendidos. */
+export async function referralCandidates(db: Db, requestId: string, fromProviderId: string) {
+  return db<{ id: string; display_name: string; verified: boolean; covers_zone: boolean }[]>`
+    select p.id, p.display_name, (p.status = 'approved' and p.identity_status = 'verified') as verified,
+      exists (select 1 from provider_zones pz join properties pr on pr.zone_id = pz.zone_id join service_requests r on r.property_id = pr.id
+        where r.id = ${requestId} and pz.provider_id = p.id) as covers_zone
+    from providers p join service_requests r on r.id = ${requestId}
+    where p.id <> ${fromProviderId} and p.status in ('pending','in_review','approved') and p.accepting_jobs
+      and exists (select 1 from provider_categories pc where pc.provider_id = p.id and pc.category_id = r.category_id)
+    order by covers_zone desc, verified desc, p.display_name limit 100`;
+}
+
+async function proposeReferralTx(tx: Tx, actor: Actor, requestId: string, fromProviderId: string, toProviderId: string, note: string, code: string) {
+  const candidates = await referralCandidates(tx as unknown as Db, requestId, fromProviderId);
+  const to = candidates.find((c) => c.id === toProviderId);
+  if (!to) throw invalid("Ese colega no puede recibir este pedido (tiene que ofrecer el mismo rubro).");
+  const feeBps = Number(await getSetting<number>(tx, "referrals.fee_bps", 1000));
+  const [ref] = await tx<{ id: string }[]>`
+    insert into provider_referrals (request_id, from_provider_id, to_provider_id, note, fee_bps, created_by)
+    values (${requestId}, ${fromProviderId}, ${toProviderId}, ${note.trim().slice(0, 500) || null}, ${feeBps}, ${actor.id})
+    on conflict (request_id, from_provider_id) do update set to_provider_id = excluded.to_provider_id, note = excluded.note, status = 'proposed', decided_at = null
+    returning id`;
+  const [names] = await tx<{ from_name: string; to_name: string }[]>`
+    select (select display_name from providers where id = ${fromProviderId}) as from_name, (select display_name from providers where id = ${toProviderId}) as to_name`;
+  await recordEvent(tx, { entityType: "request", entityId: requestId, action: "referral_proposed", actorId: actor.id, data: { referralId: ref.id, toProviderId } });
+  await notify(tx, await clientRecipients(tx, requestId), {
+    type: "request_received", title: `${names.from_name} no puede, pero te recomienda a ${names.to_name} · ${code}`,
+    body: `${to.verified ? "" : "Todavía no verificó su identidad. "}Podés aceptar la recomendación o elegir otro profesional.`,
+    link: `/app/solicitudes/${requestId}`,
+  });
+}
+
+/** El cliente acepta la recomendación: se invita al colega recomendado (con el aviso del 10 % para quien recomendó). */
+export async function acceptReferral(actor: Actor, referralId: string) {
+  const [ref] = await sql()<{ request_id: string; to_provider_id: string; status: string }[]>`select request_id, to_provider_id, status from provider_referrals where id = ${referralId}`;
+  if (!ref) throw notFound();
+  if (ref.status !== "proposed") throw invalid("Esta recomendación ya no está disponible.");
+  await chooseProvider(actor, ref.request_id, ref.to_provider_id, referralId);
+}
+
+export async function declineReferral(actor: Actor, referralId: string) {
+  return systemTx(async (tx) => {
+    const [ref] = await tx<{ request_id: string; status: string }[]>`select request_id, status from provider_referrals where id = ${referralId} for update`;
+    if (!ref) throw notFound();
+    if (!(await check(tx, "is_request_client", actor, ref.request_id))) throw forbidden();
+    if (ref.status !== "proposed") throw invalid("Esta recomendación ya no está disponible.");
+    await tx`update provider_referrals set status = 'declined', decided_at = now() where id = ${referralId}`;
+  });
 }

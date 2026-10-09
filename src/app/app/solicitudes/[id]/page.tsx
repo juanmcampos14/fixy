@@ -6,6 +6,7 @@ import { requireActor } from "@/server/auth/session";
 import { getClientRequest } from "@/server/queries/client";
 import { modeLabel, quoteStatusLabel, requestStatusLabel, urgencyLabel } from "@/server/domain/labels";
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
+import { ProviderAvatar } from "@/components/domain/provider-avatar";
 import { Badge, DemoBadge, StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { ButtonLink } from "@/components/ui/button";
@@ -15,7 +16,8 @@ import { ClientPriceBreakdown } from "@/components/domain/price";
 import { MessageThread } from "@/components/domain/messages";
 import { Timeline } from "@/components/domain/timeline";
 import { formatDate, formatMoney } from "@/lib/format";
-import { acceptQuoteAction, cancelRequestAction, rejectQuoteAction } from "../../actions";
+import { acceptQuoteAction, acceptReferralAction, cancelRequestAction, declineReferralAction, rejectQuoteAction } from "../../actions";
+import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { TIME_WINDOWS } from "@/server/modules/requests";
 import { DirectBooking, listOtherProviders } from "./direct-booking";
 
@@ -48,6 +50,24 @@ export default async function RequestDetail({ params, searchParams }: { params: 
         action={<StatusBadge status={r.status} labels={r.request_mode === "direct" ? { ...requestStatusLabel, searching: "Esperando al profesional", with_quotes: "Visita propuesta" } : requestStatusLabel} className="text-sm" />}
       />
 
+      {data.referrals.map((ref) => (
+        <Card key={ref.id} className="mb-6 ring-2 ring-fixy-500/30">
+          <p className="text-sm font-semibold text-fixy-800">Recomendación</p>
+          <h2 className="mt-1 text-lg font-bold">{ref.from_name} no puede tomarlo, pero te recomienda a un colega</h2>
+          <div className="mt-3 flex items-center gap-3">
+            <ProviderAvatar url={ref.to_avatar} name={ref.to_name} className="h-12 w-12 text-base" />
+            <div>
+              <Link href={`/profesionales/${ref.to_slug}`} className="font-bold hover:underline">{ref.to_name}</Link>
+              <p className="text-sm">{ref.to_verified ? <span className="text-ok">Verificado</span> : <span className="text-warn">Todavía sin verificar: le pedimos que se verifique antes de aceptar.</span>}</p>
+            </div>
+          </div>
+          {ref.note && <p className="mt-3 rounded-xl bg-cream px-3 py-2 text-[15px]">«{ref.note}»</p>}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <ActionForm action={acceptReferralAction}><input type="hidden" name="referralId" value={ref.id} /><SubmitButton pendingText="Enviando…">Pedírselo a {ref.to_name.split(" ")[0]}</SubmitButton></ActionForm>
+            <ActionForm action={declineReferralAction}><input type="hidden" name="referralId" value={ref.id} /><SubmitButton variant="ghost">Prefiero elegir otro</SubmitButton></ActionForm>
+          </div>
+        </Card>
+      ))}
       {nueva && <Alert tone="ok" className="mb-6" title="¡Listo! Recibimos tu pedido">{r.request_mode === "direct" ? "Le avisamos al profesional que elegiste. Te avisamos por acá y por email cuando responda." : "Te avisamos por acá y por email cuando lleguen presupuestos."}</Alert>}
       {r.gated_community && r.gated_status !== "ready" && !job && (
         <Alert tone="warn" className="mb-6" title="Es un barrio cerrado: cargá el reglamento de ingreso">

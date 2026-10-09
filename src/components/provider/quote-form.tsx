@@ -145,7 +145,7 @@ export function QuoteForm({ invitationId, rule, allowFixed, windows, defaultDate
             </div>
           </dl>
         )}
-        <p className="mt-2 text-xs text-muted">Fixy no te cobra comisión: el cargo de servicio lo paga el cliente aparte. El importe final se confirma al enviar.</p>
+        <p className="mt-2 text-xs text-muted">Fixy no te cobra comisión (el cargo de servicio lo paga el cliente aparte). De lo que cobres se descuentan los costos de Mercado Pago e impuestos del cobro. El importe final se confirma al enviar.</p>
       </section>
 
       <SubmitButton size="lg" pendingText="Enviando presupuesto…" className="w-full sm:w-auto">Enviar presupuesto</SubmitButton>
