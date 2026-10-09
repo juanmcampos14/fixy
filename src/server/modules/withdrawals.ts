@@ -68,6 +68,9 @@ export async function providerBalance(db: Db | Tx, providerId: string) {
     select to_char(now() at time zone ${TZ}, 'YYYY-MM') as period, (now() at time zone ${TZ})::date::text as today`;
   const [a] = await db<{ available: number; n: number }[]>`
     select coalesce(sum(po.amount_minor), 0)::bigint as available, count(*)::int as n from payouts po where ${availableWhere(db, providerId)}`;
+  // Lo que el profesional cobró de más por reembolsos posteriores: se descuenta del próximo retiro.
+  const [rec] = await db<{ owed: number }[]>`
+    select coalesce(sum(amount_minor), 0)::bigint as owed from provider_recoveries where provider_id = ${providerId} and status = 'open'`;
   const [w] = await db<{ waiting_review: number; on_hold: number }[]>`
     select coalesce(sum(amount_minor) filter (where awaiting_review and not on_hold), 0)::bigint as waiting_review,
            coalesce(sum(amount_minor) filter (where on_hold), 0)::bigint as on_hold
@@ -88,7 +91,9 @@ export async function providerBalance(db: Db | Tx, providerId: string) {
     select holder_name, holder_tax_id, cbu, alias, bank_name from provider_bank_accounts where provider_id = ${providerId}`;
   const delayDays = Number(await getSetting(db as Db, "withdrawals.delay_days", 20));
   return {
-    availableMinor: a.available,
+    availableMinor: Math.max(0, Number(a.available) - Number(rec.owed)),
+    grossAvailableMinor: Number(a.available),
+    recoveryMinor: Number(rec.owed),
     availableJobs: a.n,
     waitingReviewMinor: w.waiting_review,
     onHoldMinor: w.on_hold,
@@ -97,7 +102,7 @@ export async function providerBalance(db: Db | Tx, providerId: string) {
     paidMinor: withdrawals.filter((x) => x.status === "paid").reduce((s, x) => s + x.amount_minor, 0),
     withdrawals,
     thisMonth,
-    canRequest: !thisMonth && a.available > 0,
+    canRequest: !thisMonth && Number(a.available) - Number(rec.owed) > 0,
     nextRequestFrom: thisMonth ? nextMonth : today,
     delayDays,
     bank: bank ?? null,
@@ -122,8 +127,15 @@ export async function requestWithdrawal(actor: Actor, providerId: string, bankIn
     if (dup) throw invalid("Ya pediste un retiro este mes. Podés pedir el próximo desde el 1.º del mes que viene.");
     const payouts = await tx<{ id: string; amount_minor: number; is_test: boolean }[]>`
       select po.id, po.amount_minor, po.is_test from payouts po where ${availableWhere(tx, providerId)} for update of po`;
-    const amount = payouts.reduce((s, p) => s + p.amount_minor, 0);
-    if (amount <= 0) throw invalid("Todavía no tenés saldo disponible para retirar.");
+    const recoveries = await tx<{ id: string; amount_minor: number }[]>`
+      select id, amount_minor from provider_recoveries where provider_id = ${providerId} and status = 'open' order by created_at for update`;
+    const owed = recoveries.reduce((s, r) => s + Number(r.amount_minor), 0);
+    const amount = payouts.reduce((s, p) => s + Number(p.amount_minor), 0) - owed;
+    if (amount <= 0) {
+      throw invalid(owed > 0
+        ? `Tenés ${formatMoney(owed)} a descontar por reembolsos a clientes: se cubren con tus próximos trabajos antes de poder retirar.`
+        : "Todavía no tenés saldo disponible para retirar.");
+    }
     const delay = Number(await getSetting(tx as unknown as Db, "withdrawals.delay_days", 20));
     const snapshot: BankSnapshot = { holderName: bank.holder_name, holderTaxId: bank.holder_tax_id, cbu: bank.cbu, alias: bank.alias, bankName: bank.bank_name };
     const isTest = paymentsAreTestMode() || payouts.some((p) => p.is_test);
@@ -136,7 +148,10 @@ export async function requestWithdrawal(actor: Actor, providerId: string, bankIn
       await tx`update payouts set status = 'scheduled', withdrawal_id = ${w.id}, scheduled_for = ${w.scheduled_for} where id = ${p.id}`;
       await recordEvent(tx, { entityType: "payout", entityId: p.id, action: "status", from: "pending", to: "scheduled", actorId: actor.id, reason: "Incluida en un retiro" });
     }
-    await recordEvent(tx, { entityType: "withdrawal", entityId: w.id, action: "created", to: "requested", actorId: actor.id, data: { amountMinor: amount, payouts: payouts.length } });
+    if (recoveries.length) {
+      await tx`update provider_recoveries set status = 'applied', withdrawal_id = ${w.id} where id in ${tx(recoveries.map((r) => r.id))}`;
+    }
+    await recordEvent(tx, { entityType: "withdrawal", entityId: w.id, action: "created", to: "requested", actorId: actor.id, data: { amountMinor: amount, payouts: payouts.length, recoveredMinor: owed } });
     await audit(tx, actor, "withdrawal.request", "withdrawal", w.id, null, { amountMinor: amount, payouts: payouts.length });
     const when = new Date(`${w.scheduled_for}T12:00:00-03:00`).toLocaleDateString("es-AR", { day: "numeric", month: "long" });
     await notify(tx, await providerRecipients(tx, providerId), {
@@ -163,8 +178,10 @@ export async function markWithdrawalPaid(actor: Actor, withdrawalId: string, ext
     const payouts = await tx<{ id: string; job_id: string; amount_minor: number; status: string; on_hold: boolean }[]>`
       select id, job_id, amount_minor, status, on_hold from payouts where withdrawal_id = ${w.id} for update`;
     if (payouts.some((p) => p.on_hold)) throw invalid("Hay un trabajo con reclamo abierto dentro de este retiro: resolvelo o rechazá el retiro.");
-    const total = payouts.reduce((s, p) => s + p.amount_minor, 0);
-    if (total !== w.amount_minor) throw invalid("El monto del retiro no coincide con sus liquidaciones. Revisalo antes de pagar.");
+    const recoveries = await tx<{ id: string; job_id: string | null; amount_minor: number }[]>`
+      select id, job_id, amount_minor from provider_recoveries where withdrawal_id = ${w.id} and status = 'applied' for update`;
+    const total = payouts.reduce((s, p) => s + Number(p.amount_minor), 0) - recoveries.reduce((s, r) => s + Number(r.amount_minor), 0);
+    if (total !== Number(w.amount_minor)) throw invalid("El monto del retiro no coincide con sus liquidaciones. Revisalo antes de pagar.");
     for (const p of payouts) {
       for (const [from, to] of [["scheduled", "processing"], ["processing", "paid"]] as const) {
         assertTransition(payoutMachine, from, to, "system");
@@ -179,6 +196,18 @@ export async function markWithdrawalPaid(actor: Actor, withdrawalId: string, ext
         ],
         { jobId: p.job_id, payoutId: p.id, providerId: w.provider_id, isTest: w.is_test, externalRef: ref, reason: `Retiro ${w.is_test ? "simulado " : ""}al profesional`, actorId: actor.id },
       );
+    }
+    // Lo descontado por recuperos no se transfiere: queda saldada la deuda del profesional.
+    for (const r of recoveries) {
+      await postLedger(
+        tx,
+        [
+          { account: "provider_payable", amount: -Number(r.amount_minor), entryType: "adjustment" },
+          { account: "gateway_clearing", amount: Number(r.amount_minor), entryType: "adjustment" },
+        ],
+        { jobId: r.job_id, providerId: w.provider_id, isTest: w.is_test, externalRef: ref, reason: "Recupero descontado del retiro", actorId: actor.id },
+      );
+      await tx`update provider_recoveries set status = 'settled', settled_at = now() where id = ${r.id}`;
     }
     await tx`update withdrawals set status = 'paid', paid_at = now(), external_ref = ${ref}, processed_by = ${actor.id} where id = ${w.id}`;
     await recordEvent(tx, { entityType: "withdrawal", entityId: w.id, action: "status", from: "requested", to: "paid", actorId: actor.id, reason: ref });
@@ -204,6 +233,7 @@ export async function rejectWithdrawal(actor: Actor, withdrawalId: string, reaso
       await tx`update payouts set status = 'pending', withdrawal_id = null, scheduled_for = null where id = ${p.id}`;
       await recordEvent(tx, { entityType: "payout", entityId: p.id, action: "status", from: "scheduled", to: "pending", actorId: actor.id, reason: "Retiro rechazado" });
     }
+    await tx`update provider_recoveries set status = 'open', withdrawal_id = null where withdrawal_id = ${w.id} and status = 'applied'`;
     await tx`update withdrawals set status = 'rejected', reject_reason = ${reason.trim()}, processed_by = ${actor.id} where id = ${w.id}`;
     await recordEvent(tx, { entityType: "withdrawal", entityId: w.id, action: "status", from: "requested", to: "rejected", actorId: actor.id, reason });
     await audit(tx, actor, "withdrawal.reject", "withdrawal", w.id, reason);

@@ -51,8 +51,12 @@ export type OwnProvider = {
 export async function getOwnProvider(userId: string, providerId: string): Promise<OwnProvider | null> {
   return asUser(userId, async (tx) => {
     const [p] = await tx<OwnProvider[]>`
-      select id, slug, kind, display_name, legal_name, tax_id, responsible_name, contact_email, contact_phone, description,
-        years_experience, billing_info, accepting_jobs, max_active_jobs, base_zone_id, status, identity_status, payouts_status,
+      select id, slug, kind, display_name,
+        -- Datos fiscales y de facturación: solo para quien administra el perfil (no para los técnicos).
+        case when app.provider_role(${userId}, id) = 'admin' then legal_name end as legal_name,
+        case when app.provider_role(${userId}, id) = 'admin' then tax_id end as tax_id,
+        responsible_name, contact_email, contact_phone, description,
+        years_experience, case when app.provider_role(${userId}, id) = 'admin' then billing_info end as billing_info, accepting_jobs, max_active_jobs, base_zone_id, status, identity_status, payouts_status,
         payout_provider, review_note, submitted_at, approved_at, is_demo, avatar_file_id
       from providers where id = ${providerId}`;
     return p ?? null;

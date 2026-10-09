@@ -7,7 +7,12 @@ import type { Db } from "@/server/db/client";
 
 export type GatewayName = "mock" | "mercadopago";
 
-export type GatewayPaymentStatus = "pending" | "approved" | "rejected" | "refunded" | "partially_refunded";
+export type GatewayPaymentStatus =
+  | "pending" | "approved" | "rejected" | "refunded" | "partially_refunded"
+  /** El cliente abrió un reclamo en la pasarela: el dinero queda retenido hasta que se resuelva. */
+  | "in_mediation"
+  /** El banco devolvió el pago al cliente (contracargo). */
+  | "charged_back";
 
 export type GatewayPayment = {
   id: string;

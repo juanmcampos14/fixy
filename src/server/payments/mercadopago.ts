@@ -48,8 +48,12 @@ function mapStatus(p: { status: string; status_detail?: string; transaction_amou
     case "rejected":
     case "cancelled":
       return "rejected";
+    case "in_mediation":
+      return "in_mediation";
+    case "charged_back":
+      return "charged_back";
     default:
-      // pending, in_process, authorized, in_mediation, charged_back: no cambian el estado aprobado ya registrado.
+      // pending, in_process, authorized: no cambian el estado aprobado ya registrado.
       return "pending";
   }
 }

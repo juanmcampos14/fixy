@@ -5,6 +5,7 @@ import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as providers from "@/server/modules/providers";
 import * as disputes from "@/server/modules/disputes";
+import { refundCharge } from "@/server/modules/payments";
 import { actor, catId, invitationFor, ledgerBalance, payPending, propertyOf, providerId, totalOf, visitCode } from "./helpers";
 
 describe("recomendación entre colegas y neto del profesional", () => {
@@ -52,5 +53,17 @@ describe("recomendación entre colegas y neto del profesional", () => {
     await disputes.createReview(ana, jobId, { rating: 5, comment: "Muy bien" });
     const after = await sql()<{ awaiting_review: boolean }[]>`select awaiting_review from payouts where job_id = ${jobId}`;
     expect(after.every((p) => !p.awaiting_review)).toBe(true);
+
+    // Reembolso total al cliente: la recomendación se recalcula (sin neto no hay 10 %) y los costos de cobro
+    // que ya pagó Fixy quedan como recupero del profesional.
+    const [c] = await sql()<{ id: string; amount_minor: number }[]>`select id, amount_minor from charges where job_id = ${jobId} and status = 'approved'`;
+    await refundCharge(await actor("operador"), { chargeId: c.id, amountMinor: c.amount_minor, reason: "Reembolso total por reclamo" });
+    const rebalanced = await sql()<{ kind: string; amount_minor: number; referral_minor: number }[]>`
+      select kind, amount_minor, referral_minor from payouts where job_id = ${jobId} order by kind`;
+    expect(rebalanced.find((p) => p.kind === "job")).toMatchObject({ amount_minor: 0, referral_minor: 0 });
+    expect(rebalanced.find((p) => p.kind === "referral")).toMatchObject({ amount_minor: 0 });
+    const [rec] = await sql()<{ amount_minor: number }[]>`select amount_minor from provider_recoveries where job_id = ${jobId} and provider_id = ${norte}`;
+    expect(Number(rec.amount_minor)).toBe(150_000);
+    expect(await ledgerBalance()).toBe(0);
   });
 });
