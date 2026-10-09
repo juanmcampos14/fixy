@@ -327,7 +327,7 @@ export function ChatRequest(props: {
         {stage >= 4 && !pickCategory && (
           <Bot wide>
             {chosenPro
-              ? <>Listo. Le mando tu pedido a <strong>{chosenPro.displayName}</strong>: tiene unas horas para aceptar y proponerte día y horario. <strong>No pagás nada hasta confirmar la visita</strong>{chosenPro.visitFeeMinor > 0 ? ` (${formatMoney(chosenPro.visitFeeMinor)}${chosenPro.visitFeeCredited ? ", se descuenta si contratás el arreglo" : ""})` : " (sin cargo)"}.</>
+              ? <>Listo. Le mando tu pedido a <strong>{chosenPro.displayName}</strong>: {chosenPro.verified ? "tiene unas horas para aceptar y proponerte día y horario." : "todavía no verificó su identidad, así que le pedimos que se verifique antes de aceptar (le damos hasta 48 h). Si preferís no esperar, podés elegir a otro."} <strong>No pagás nada hasta confirmar la visita</strong>{chosenPro.visitFeeMinor > 0 ? ` (${formatMoney(chosenPro.visitFeeMinor)}${chosenPro.visitFeeCredited ? ", se descuenta si contratás el arreglo" : ""})` : " (sin cargo)"}.</>
               : <>Listo. {pros.length ? "Invitamos a un grupo de profesionales de tu zona y te llegan sus presupuestos para comparar." : "Nuestro equipo busca un profesional para vos y te avisa."} Pedir es gratis.</>}
             <form action={formAction} className="mt-4 space-y-4">
               <input type="hidden" name="payload" value={JSON.stringify(payload)} />
@@ -461,7 +461,7 @@ function ProCard({ p, onChoose }: { p: BookableProviderCard; onChoose: () => voi
           <p className="text-lg font-bold leading-tight">{p.displayName}</p>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             {p.reviews ? <span className="inline-flex items-center gap-1 font-semibold"><Star className="h-4 w-4 fill-spark text-spark" aria-hidden />{p.rating} <span className="font-normal text-muted">({p.reviews} reseñas)</span></span> : <span className="text-muted">Nuevo en Fixy</span>}
-            {p.identityVerified && <span className="inline-flex items-center gap-1 text-ok"><BadgeCheck className="h-4 w-4" aria-hidden />Verificado</span>}
+            {p.verified ? <span className="inline-flex items-center gap-1 text-ok"><BadgeCheck className="h-4 w-4" aria-hidden />Verificado</span> : <span className="rounded-full bg-warn-bg px-2 py-0.5 text-xs font-semibold text-warn">Todavía sin verificar</span>}
             {p.isDemo && <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-muted">Demostración</span>}
           </p>
         </div>

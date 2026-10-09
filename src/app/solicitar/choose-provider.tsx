@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/format";
 
 export type BookableProviderCard = {
   slug: string; displayName: string; kind: string; isDemo: boolean; description: string; yearsExperience: number | null;
-  rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; credentials: string[];
+  rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; verified: boolean; credentials: string[];
   visitFeeMinor: number; visitFeeCredited: boolean; priceRefs: { title: string; fromMinor: number; note: string }[];
   availabilityMatch: boolean; sameZone: boolean; avatarUrl: string | null;
 };
@@ -66,7 +66,7 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
                 </span>
               </span>
               <span className="mt-2 flex flex-wrap gap-1.5">
-                {p.identityVerified && <span className="inline-flex items-center gap-1 rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-ok"><BadgeCheck className="h-3.5 w-3.5" aria-hidden />Identidad verificada</span>}
+                {p.verified ? <span className="inline-flex items-center gap-1 rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-ok"><BadgeCheck className="h-3.5 w-3.5" aria-hidden />Identidad verificada</span> : <span className="inline-flex items-center gap-1 rounded-full bg-warn-bg px-2 py-0.5 text-xs font-semibold text-warn">Todavía sin verificar</span>}
                 {p.credentials.map((c) => <span key={c} className="inline-flex items-center gap-1 rounded-full bg-ok-bg px-2 py-0.5 text-xs font-semibold text-ok"><BadgeCheck className="h-3.5 w-3.5" aria-hidden />{c}</span>)}
                 {p.availabilityMatch && <span className="inline-flex items-center gap-1 rounded-full bg-info-bg px-2 py-0.5 text-xs font-semibold text-info"><CalendarCheck className="h-3.5 w-3.5" aria-hidden />Disponible en tus horarios</span>}
                 {p.sameZone && <span className="inline-flex items-center gap-1 rounded-full bg-info-bg px-2 py-0.5 text-xs font-semibold text-info"><MapPin className="h-3.5 w-3.5" aria-hidden />De tu zona</span>}

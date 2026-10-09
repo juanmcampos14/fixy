@@ -61,10 +61,10 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     if (!inv) throw notFound();
     await assertProviderAdmin(tx, actor, inv.provider_id);
     if (!["invited", "viewed"].includes(inv.status)) throw invalid("Esta oportunidad ya no admite presupuestos.");
-    const elig = await providerEligibility(tx, inv.provider_id);
-    if (!elig.eligible) throw new DomainError("not_eligible", elig.reasons.join(" "));
     const [req] = await tx<{ status: RequestStatus; category_id: string | null; code: string; service_id: string | null; request_mode: string }[]>`
       select status, category_id, code, service_id, request_mode from service_requests where id = ${inv.request_id} for update`;
+    const elig = await providerEligibility(tx, inv.provider_id, req.category_id);
+    if (!elig.eligible) throw new DomainError("not_eligible", `Para aceptar este pedido primero verificá tu cuenta. ${elig.reasons.join(" ")}`);
     if (!["searching", "with_quotes"].includes(req.status)) throw invalid("La solicitud ya no recibe presupuestos.");
     if (await check(tx, "is_request_client", actor, inv.request_id)) throw invalid("No podés cotizar una solicitud propia.");
     if (d.mode === "fixed") {

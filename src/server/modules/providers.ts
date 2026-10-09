@@ -337,17 +337,26 @@ export async function reviewDocument(actor: Actor, documentId: string, decision:
 }
 
 /** Datos que habilitan recibir oportunidades (también usados por el matching). */
-export async function providerEligibility(db: Db | Tx, providerId: string) {
+export async function providerEligibility(db: Db | Tx, providerId: string, categoryId?: string | null) {
   const [p] = await db<{ status: string; identity_status: string; payouts_status: string; accepting_jobs: boolean }[]>`
     select status, identity_status, payouts_status, accepting_jobs from providers where id = ${providerId}`;
   const expired = await db<{ name: string; expires_on: string }[]>`
     select ct.name, d.expires_on from provider_documents d join credential_types ct on ct.id = d.credential_type_id
     where d.provider_id = ${providerId} and d.status = 'approved' and d.expires_on < current_date`;
   const reasons: string[] = [];
-  if (p.status !== "approved") reasons.push("El perfil todavía no está aprobado.");
-  if (p.identity_status !== "verified") reasons.push("Falta verificar la identidad.");
+  if (p.status === "pending") reasons.push("Completá tu alta y enviá tu perfil a revisión.");
+  else if (p.status === "in_review") reasons.push("Tu perfil está en revisión: el equipo de Fixy lo aprueba en breve.");
+  else if (p.status !== "approved") reasons.push("El perfil todavía no está aprobado.");
+  if (p.identity_status !== "verified") reasons.push("Falta verificar tu identidad (cargá tu DNI en el alta).");
   if (!p.accepting_jobs) reasons.push("Pausaste la recepción de trabajos.");
   for (const e of expired) reasons.push(`Credencial vencida: ${e.name}.`);
+  if (categoryId) {
+    const missing = await db<{ name: string }[]>`
+      select ct.name from category_required_credentials rc join credential_types ct on ct.id = rc.credential_type_id
+      where rc.category_id = ${categoryId} and not exists (select 1 from provider_documents d where d.provider_id = ${providerId}
+        and d.credential_type_id = rc.credential_type_id and d.status = 'approved' and (d.expires_on is null or d.expires_on >= current_date))`;
+    for (const m of missing) reasons.push(`Para este rubro necesitás ${m.name.toLowerCase()} aprobada.`);
+  }
   return { eligible: reasons.length === 0, reasons };
 }
 

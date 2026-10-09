@@ -49,6 +49,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
               {p.kind === "company" ? <><Building2 className="h-3.5 w-3.5" aria-hidden /> Empresa</> : <><UserRound className="h-3.5 w-3.5" aria-hidden /> Profesional independiente</>}
             </Badge>
             {p.is_demo && <DemoBadge />}
+            {!(p.status === "approved" && p.identity_status === "verified") && <Badge tone="warn" icon={false}>Todavía sin verificar</Badge>}
           </div>
           <div className="mt-3 flex items-center gap-4">
             <ProviderAvatar url={p.avatarUrl} name={p.display_name} className="h-20 w-20 text-2xl sm:h-24 sm:w-24" />

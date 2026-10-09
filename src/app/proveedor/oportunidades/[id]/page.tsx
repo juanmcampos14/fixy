@@ -4,9 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
 import { sql } from "@/server/db/client";
-import { getOnboardingState, getOpportunity, requireProviderContext } from "@/server/queries/provider";
+import { getOpportunity, requireProviderContext } from "@/server/queries/provider";
 import { markInvitationViewed, TIME_WINDOWS } from "@/server/modules/requests";
 import { commissionRuleFor } from "@/server/modules/catalog";
+import { providerEligibility } from "@/server/modules/providers";
 import { modeLabel, propertyKindLabel, quoteStatusLabel, requestStatusLabel, urgencyLabel } from "@/server/domain/labels";
 import { todayInBuenosAires, formatDate, formatDateTime, formatMoney, relativeTime } from "@/lib/format";
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
@@ -36,10 +37,19 @@ export default async function OpportunityPage({ params, searchParams }: { params
     o = { ...o, inv: { ...o.inv, status: "viewed" } };
   }
   const { inv, request, quote } = o;
-  const [rule, state] = await Promise.all([commissionRuleFor(sql(), request.category_id), getOnboardingState(actor.id, provider.id)]);
+  const [rule, elig] = await Promise.all([commissionRuleFor(sql(), request.category_id), providerEligibility(sql(), provider.id, request.category_id)]);
   const requestOpen = ["searching", "with_quotes"].includes(request.status);
   const invitationOpen = inv.status === "invited" || inv.status === "viewed";
-  const eligible = state?.eligibility.eligible ?? false;
+  const eligible = elig.eligible;
+  const verifyFirst = (
+    <Card className="ring-2 ring-warn/30">
+      <CardHeader title={request.request_mode === "direct" ? "Un cliente te eligió: verificá tu cuenta para aceptar" : "Verificá tu cuenta para responder"}
+        description={inv.respond_by ? `Tenés tiempo hasta el ${formatDateTime(inv.respond_by)}. El equipo de Fixy revisa tu documentación con prioridad.` : "El equipo de Fixy revisa tu documentación con prioridad."} />
+      <p className="text-[15px] text-ink-2">Pedimos verificar la identidad de cada profesional para cuidar a los clientes y a vos. Te falta:</p>
+      <ul className="mt-2 list-disc pl-5 text-[15px]">{elig.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+      <ButtonLink href="/proveedor/alta#documentacion" className="mt-4">Completar la verificación</ButtonLink>
+    </Card>
+  );
   const windows = (request.preferred_windows ?? []).map((w) => TIME_WINDOWS.find((t) => t.key === w)?.label ?? w);
   const answers = Object.entries(request.answers ?? {}).filter(([, v]) => v !== "" && v != null);
   const labelFor = (k: string) => o!.questions.find((q) => q.key === k)?.label ?? k;
@@ -122,22 +132,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
                 <CardHeader title="Este cliente te eligió" description={inv.respond_by ? `Respondé antes del ${formatDateTime(inv.respond_by)}. Si no respondés, el cliente elige a otro profesional.` : "Respondé lo antes posible."} />
                 <AcceptBookingForm invitationId={inv.id} visitFeeMinor={visitFee.visit_fee_minor} visitFeeCredited={visitFee.visit_fee_credited} windows={TIME_WINDOWS.map((w) => w.label)} defaultDate={todayInBuenosAires()} gated={!!o.access} />
               </Card>
-            ) : (
-              <Alert tone="warn" title="Todavía no podés tomar pedidos">
-                <ul className="list-disc pl-5">{state?.eligibility.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-              </Alert>
-            )
+            ) : verifyFirst
           ) : invitationOpen && requestOpen ? (
             eligible ? (
               <Card>
                 <CardHeader title="Armá tu presupuesto" description="Revisá qué incluye antes de enviarlo. Una vez enviado, no se puede editar: podés retirarlo y enviar otro si la oportunidad sigue abierta." />
                 <QuoteForm invitationId={inv.id} rule={rule} allowFixed={o.service?.pricing_mode === "fixed"} windows={TIME_WINDOWS.map((w) => ({ key: w.key, label: w.label }))} defaultDate={todayInBuenosAires()} />
               </Card>
-            ) : (
-              <Alert tone="warn" title="Todavía no podés cotizar">
-                <ul className="list-disc pl-5">{state?.eligibility.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
-              </Alert>
-            )
+            ) : verifyFirst
           ) : (
             <Alert tone="info" title="Esta oportunidad ya no admite presupuestos">
               {inv.status === "declined" ? `Indicaste que no la tomás${inv.decline_reason ? `: ${inv.decline_reason}` : "."}` : `Estado de la solicitud: ${requestStatusLabel[request.status] ?? request.status}.`}

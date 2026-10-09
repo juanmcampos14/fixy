@@ -302,9 +302,9 @@ export async function getDisputeForProvider(userId: string, disputeId: string) {
 /** Solo columnas públicas; solo proveedores aprobados. */
 export async function getPublicProfile(slug: string) {
   const db = sql();
-  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null; avatar_file_id: string | null }[]>`
-    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at, avatar_file_id
-    from provider_public where slug = ${slug} and status = 'approved'`;
+  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null; avatar_file_id: string | null; status: string }[]>`
+    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at, avatar_file_id, status
+    from provider_public where slug = ${slug} and status in ('pending','in_review','approved')`;
   if (!p) return null;
   const [categories, zones, portfolio, credentials, reviews] = await Promise.all([
     db<{ id: string; name: string; icon: string }[]>`

@@ -77,6 +77,8 @@ export type Candidate = {
   activeJobs: number;
   reviews: number;
   rating: number | null;
+  /** Aprobado, con identidad verificada y las credenciales que exige el rubro. Si no, puede recibir el pedido pero debe verificarse para aceptarlo. */
+  verified: boolean;
 };
 
 /**
@@ -85,27 +87,31 @@ export type Candidate = {
  * Orden: disponibilidad, reputación (con prior: los nuevos no quedan excluidos), carga, cercanía,
  * y como desempate, menos invitaciones recientes (rotación justa).
  */
-export async function findCandidates(db: Db, requestId: string, opts: { excludeInvited?: boolean } = {}): Promise<Candidate[]> {
+export async function findCandidates(db: Db, requestId: string, opts: { excludeInvited?: boolean; verifiedOnly?: boolean } = {}): Promise<Candidate[]> {
   const [r] = await db<{ category_id: string | null; zone_id: string; region: string; preferred_windows: string[] }[]>`
     select r.category_id, p.zone_id, z.region, r.preferred_windows
     from service_requests r join properties p on p.id = r.property_id join zones z on z.id = p.zone_id where r.id = ${requestId}`;
   if (!r || !r.category_id) return [];
-  return findCandidatesFor(db, { categoryId: r.category_id, zoneId: r.zone_id, region: r.region, preferredWindows: r.preferred_windows ?? [], excludeInvitedFor: opts.excludeInvited ? requestId : undefined });
+  return findCandidatesFor(db, { categoryId: r.category_id, zoneId: r.zone_id, region: r.region, preferredWindows: r.preferred_windows ?? [], excludeInvitedFor: opts.excludeInvited ? requestId : undefined, verifiedOnly: opts.verifiedOnly });
 }
 
 /** Matching sin solicitud previa (para que el cliente elija profesional antes de enviar el pedido). */
 export async function findCandidatesFor(
   db: Db,
-  q: { categoryId: string; zoneId: string; region: string; preferredWindows: string[]; excludeInvitedFor?: string },
+  q: { categoryId: string; zoneId: string; region: string; preferredWindows: string[]; excludeInvitedFor?: string; verifiedOnly?: boolean },
 ): Promise<Candidate[]> {
   const r = { category_id: q.categoryId, zone_id: q.zoneId, region: q.region, preferred_windows: q.preferredWindows };
   const requestId = q.excludeInvitedFor ?? null;
   const rows = await db<{
     id: string; display_name: string; base_zone_id: string | null; base_region: string | null; max_active_jobs: number;
-    active_jobs: number; reviews: number; rating_sum: number; recent_invites: number;
+    active_jobs: number; reviews: number; rating_sum: number; recent_invites: number; verified: boolean;
     slots: { weekday: number; start_minute: number; end_minute: number }[];
   }[]>`
     select p.id, p.display_name, p.base_zone_id, bz.region as base_region, p.max_active_jobs,
+      (p.status = 'approved' and p.identity_status = 'verified' and not exists (
+        select 1 from category_required_credentials rc where rc.category_id = ${r.category_id}
+        and not exists (select 1 from provider_documents d where d.provider_id = p.id and d.credential_type_id = rc.credential_type_id
+          and d.status = 'approved' and (d.expires_on is null or d.expires_on >= current_date)))) as verified,
       (select count(*)::int from jobs j where j.provider_id = p.id and j.status in ('pending_confirmation','confirmed','on_the_way','in_progress','pending_approval')) as active_jobs,
       (select count(*)::int from reviews_published v where v.provider_id = p.id) as reviews,
       (select coalesce(sum(rating), 0)::int from reviews_published v where v.provider_id = p.id) as rating_sum,
@@ -114,19 +120,16 @@ export async function findCandidatesFor(
          from provider_availability a where a.provider_id = p.id) as slots
     from providers p
     left join zones bz on bz.id = p.base_zone_id
-    where p.status = 'approved' and p.identity_status = 'verified' and p.accepting_jobs
+    -- Se muestran todos los que cubren rubro y zona (verificados o no); rechazados y suspendidos no.
+    where p.status in ('pending','in_review','approved') and p.accepting_jobs
       and exists (select 1 from provider_categories pc where pc.provider_id = p.id and pc.category_id = ${r.category_id})
       and exists (select 1 from provider_zones pz where pz.provider_id = p.id and pz.zone_id = ${r.zone_id})
-      and exists (select 1 from provider_availability a where a.provider_id = p.id)
-      and not exists (
-        select 1 from category_required_credentials rc where rc.category_id = ${r.category_id}
-        and not exists (select 1 from provider_documents d where d.provider_id = p.id and d.credential_type_id = rc.credential_type_id
-          and d.status = 'approved' and (d.expires_on is null or d.expires_on >= current_date)))
       ${requestId ? db`and not exists (select 1 from request_invitations i where i.request_id = ${requestId} and i.provider_id = p.id)` : db``}`;
 
   const prefs = r.preferred_windows ?? [];
-  const facts = await profileFacts(db, rows.map((p) => p.id));
-  const candidates = rows.map((p) => {
+  const pool = q.verifiedOnly ? rows.filter((p) => p.verified) : rows;
+  const facts = await profileFacts(db, pool.map((p) => p.id));
+  const candidates = pool.map((p) => {
     const reasons: string[] = [];
     // Disponibilidad declarada vs franjas preferidas
     const overlaps = prefs.length === 0
@@ -160,6 +163,7 @@ export async function findCandidatesFor(
     const strength = f ? profileStrength(f).score : 0;
     const completeness = rankingBoost(strength);
     reasons.push(`Perfil completo al ${strength}%`);
+    reasons.push(p.verified ? "Identidad verificada" : "Todavía no verificó su identidad");
     return {
       providerId: p.id,
       displayName: p.display_name,
@@ -169,10 +173,12 @@ export async function findCandidatesFor(
       reviews: p.reviews,
       rating: p.reviews ? Math.round((p.rating_sum / p.reviews) * 10) / 10 : null,
       recentInvites: p.recent_invites,
+      verified: p.verified,
     };
   });
-  candidates.sort((a, b) => b.score - a.score || a.recentInvites - b.recentInvites || a.providerId.localeCompare(b.providerId));
-  return candidates.map((c) => ({ providerId: c.providerId, displayName: c.displayName, score: c.score, reasons: c.reasons, activeJobs: c.activeJobs, reviews: c.reviews, rating: c.rating }));
+  // Primero los verificados; dentro de cada grupo, por puntaje.
+  candidates.sort((a, b) => Number(b.verified) - Number(a.verified) || b.score - a.score || a.recentInvites - b.recentInvites || a.providerId.localeCompare(b.providerId));
+  return candidates.map((c) => ({ providerId: c.providerId, displayName: c.displayName, score: c.score, reasons: c.reasons, activeJobs: c.activeJobs, reviews: c.reviews, rating: c.rating, verified: c.verified }));
 }
 
 async function transitionRequest(tx: Tx, requestId: string, from: RequestStatus, to: RequestStatus, side: ActorSide, actor: Actor | null, reason?: string) {
@@ -182,7 +188,7 @@ async function transitionRequest(tx: Tx, requestId: string, from: RequestStatus,
   await recordEvent(tx, { entityType: "request", entityId: requestId, action: "status", from, to, actorId: actor?.id ?? null, actorRole: actor?.platformRole ?? side, reason });
 }
 
-async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, source: "matching" | "client" | "operator", invitedBy: string | null, rank?: { position: number; score: number; reasons: string[] }, respondBy?: Date | null) {
+async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, source: "matching" | "client" | "operator", invitedBy: string | null, rank?: { position: number; score: number; reasons: string[] }, respondBy?: Date | null, verified = true) {
   const inserted = await tx<{ id: string }[]>`
     insert into request_invitations (request_id, provider_id, source, invited_by, rank_position, rank_score, rank_reasons, respond_by)
     values (${requestId}, ${providerId}, ${source}, ${invitedBy}, ${rank?.position ?? null}, ${rank?.score ?? null}, ${tx.json((rank?.reasons ?? []) as never)}, ${respondBy ?? null})
@@ -193,9 +199,18 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
   await notify(tx, await providerRecipients(tx, providerId), {
     type: "invitation",
     title: source === "client" ? `Un cliente te eligió · ${r.code}` : `Nueva oportunidad · ${r.code}`,
-    body: source === "client" ? `${r.title}. Respondé para coordinar la visita.` : r.title,
+    body: verified
+      ? (source === "client" ? `${r.title}. Respondé para coordinar la visita.` : r.title)
+      : `${r.title}. Para aceptarlo, primero verificá tu cuenta: cargá tu DNI y enviá tu perfil a revisión. Te damos prioridad.`,
     link: `/proveedor/oportunidades/${inserted[0].id}`,
   });
+  if (!verified) {
+    const [p] = await tx<{ display_name: string }[]>`select display_name from providers where id = ${providerId}`;
+    await notify(tx, await staffRecipients(tx), {
+      type: "invitation", title: `Verificación prioritaria: ${p.display_name} tiene un pedido (${r.code})`,
+      body: "Un cliente lo eligió y todavía no está verificado. Revisá su documentación lo antes posible.", link: `/admin/proveedores/${providerId}`, email: false,
+    });
+  }
   return inserted[0].id;
 }
 
@@ -203,7 +218,9 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
 export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | null): Promise<number> {
   const [r] = await tx<{ status: RequestStatus; code: string }[]>`select status, code from service_requests where id = ${requestId} for update`;
   const limit = await getSetting<number>(tx, "matching.invite_limit", 4);
-  const candidates = await findCandidates(tx, requestId, { excludeInvited: true });
+  // Pedido de presupuestos: se invita primero a verificados; si no hay, a los demás (deberán verificarse para responder).
+  const verified = await findCandidates(tx, requestId, { excludeInvited: true, verifiedOnly: true });
+  const candidates = verified.length ? verified : await findCandidates(tx, requestId, { excludeInvited: true });
   const chosen = candidates.slice(0, limit);
   let invited = 0;
   for (const [i, c] of chosen.entries()) {
@@ -310,9 +327,9 @@ export async function createRequest(actor: Actor, input: RequestInput, photos: {
     }
     if (d.targetProviderId) {
       // Pedido a un proveedor concreto: se invita solo si es elegible para esta categoría y zona.
-      const eligible = (await findCandidates(tx, req.id)).some((c) => c.providerId === d.targetProviderId);
-      if (eligible) {
-        await inviteProviderTx(tx, req.id, d.targetProviderId, "client", actor.id, undefined, await respondBy(tx, d.urgency));
+      const target = (await findCandidates(tx, req.id)).find((c) => c.providerId === d.targetProviderId);
+      if (target) {
+        await inviteProviderTx(tx, req.id, d.targetProviderId, "client", actor.id, undefined, await respondBy(tx, d.urgency, target.verified), target.verified);
         await transitionRequest(tx, req.id, "submitted", "searching", "system", null);
       } else {
         await tx`update service_requests set needs_review = true, review_reason = 'El profesional elegido no cubre esta zona o categoría' where id = ${req.id}`;
@@ -422,7 +439,9 @@ export async function declineInvitation(actor: Actor, invitationId: string, reas
 
 // ───────────────────────── Reserva directa ─────────────────────────
 
-async function respondBy(db: Db, urgency: string) {
+async function respondBy(db: Db, urgency: string, providerVerified = true) {
+  // Si el profesional todavía tiene que verificarse, le damos más tiempo para hacerlo y responder.
+  if (!providerVerified) return new Date(Date.now() + Number(await getSetting<number>(db, "booking.respond_hours_unverified", 48)) * 3600_000);
   const hours = urgency === "urgent"
     ? await getSetting<number>(db, "booking.respond_hours_urgent", 2)
     : await getSetting<number>(db, "booking.respond_hours", 4);
@@ -438,13 +457,13 @@ export async function chooseProvider(actor: Actor, requestId: string, providerId
     const [{ active }] = await tx<{ active: number }[]>`
       select count(*)::int as active from request_invitations where request_id = ${requestId} and status in ('invited','viewed')`;
     if (r.request_mode === "direct" && active > 0) throw invalid("Ya hay un profesional evaluando tu pedido. Esperá su respuesta o el vencimiento del plazo.");
-    const eligible = (await findCandidates(tx, requestId, { excludeInvited: true })).some((c) => c.providerId === providerId);
-    if (!eligible) throw invalid("Ese profesional no está disponible para este pedido.");
+    const target = (await findCandidates(tx, requestId, { excludeInvited: true })).find((c) => c.providerId === providerId);
+    if (!target) throw invalid("Ese profesional no está disponible para este pedido.");
     // Si había un presupuesto de visita de otro profesional sin confirmar, se descarta.
     const old = await tx<{ id: string }[]>`update quotes set status = 'rejected', decided_at = now() where request_id = ${requestId} and status = 'sent' returning id`;
     for (const q of old) await recordEvent(tx, { entityType: "quote", entityId: q.id, action: "status", from: "sent", to: "rejected", reason: "El cliente eligió otro profesional" });
     await tx`update service_requests set request_mode = 'direct', target_provider_id = ${providerId}, needs_review = false where id = ${requestId}`;
-    await inviteProviderTx(tx, requestId, providerId, "client", actor.id, undefined, await respondBy(tx, r.urgency));
+    await inviteProviderTx(tx, requestId, providerId, "client", actor.id, undefined, await respondBy(tx, r.urgency, target.verified), target.verified);
     if (r.status !== "searching") {
       if (r.status === "with_quotes") await tx`update service_requests set status = 'searching' where id = ${requestId}`;
       else await transitionRequest(tx, requestId, r.status, "searching", "system", null, "El cliente eligió profesional");

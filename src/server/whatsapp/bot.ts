@@ -42,7 +42,7 @@ type State = {
   urgency?: RequestPayload["urgency"];
   propertyId?: string | null;
   address?: Partial<AddressValue>;
-  pros?: { slug: string; name: string; visitFeeMinor: number }[];
+  pros?: { slug: string; name: string; visitFeeMinor: number; verified?: boolean }[];
   chosen?: string | null; // slug | "quotes"
   extra?: string;
   /** Fotos recibidas por WhatsApp para este pedido (ids de archivos privados). */
@@ -323,7 +323,7 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
   const [cat] = await sql()<{ id: string; requires_review: boolean; name: string }[]>`select id, requires_review, name from categories where slug = ${s.categorySlug ?? "otro"}`;
   if (!cat || cat.requires_review) return confirm({ ...s, chosen: "quotes", pros: [] }, ctx);
   const list = await listBookableProviders(sql(), { categoryId: cat.id, zoneId, preferredWindows: [], limit: 9 });
-  const pros = list.map((p) => ({ slug: p.slug, name: p.displayName, visitFeeMinor: p.visitFeeMinor }));
+  const pros = list.map((p) => ({ slug: p.slug, name: p.displayName, visitFeeMinor: p.visitFeeMinor, verified: p.verified }));
   if (!list.length) return confirm({ ...s, chosen: "quotes", pros }, ctx);
   ctx.out.push({
     kind: "list",
@@ -335,7 +335,7 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
         rows: list.map((p) => ({
           id: `pro:${p.slug}`,
           title: p.displayName,
-          description: [p.visitFeeMinor > 0 ? `Visita ${formatMoney(p.visitFeeMinor)}` : "Visita sin cargo", p.reviews ? `${p.rating}★ (${p.reviews})` : "Nuevo", p.identityVerified ? "Verificado" : ""].filter(Boolean).join(" · "),
+          description: [p.visitFeeMinor > 0 ? `Visita ${formatMoney(p.visitFeeMinor)}` : "Visita sin cargo", p.reviews ? `${p.rating}★ (${p.reviews})` : "Nuevo", p.verified ? "Verificado" : "Sin verificar"].filter(Boolean).join(" · "),
         })),
       },
       { title: "Otra opción", rows: [{ id: "quotes", title: "Presupuestos varios", description: "Invitamos a varios y comparás" }] },
@@ -396,7 +396,7 @@ async function send(s: State, ctx: Ctx): Promise<State> {
       const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
       ctx.out.push({
         kind: "text", previewUrl: false,
-        text: `Listo, pedido *${r.code}* enviado. ${pro ? `${pro.name} tiene unas horas para aceptar y proponerte día y horario; te aviso por acá.` : "Te aviso por acá cuando haya novedades."}\n\nSeguilo en: ${base}/app/solicitudes/${id}`,
+        text: `Listo, pedido *${r.code}* enviado. ${pro ? (pro.verified === false ? `${pro.name} todavía no verificó su identidad: le pedimos que se verifique antes de aceptar. Te aviso por acá apenas responda.` : `${pro.name} tiene unas horas para aceptar y proponerte día y horario; te aviso por acá.`) : "Te aviso por acá cuando haya novedades."}\n\nSeguilo en: ${base}/app/solicitudes/${id}`,
       });
       return { step: "done" };
     } catch (e) {
