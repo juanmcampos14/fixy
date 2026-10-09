@@ -14,6 +14,12 @@ describe("zona desde la dirección de Google", () => {
     expect(matchZone([{ long_name: "Villa Adelina", types: ["locality"] }, { long_name: "Partido de San Isidro", types: ["administrative_area_level_2"] }, pba], zones)?.code).toBe("gba-san-isidro");
     expect(matchZone([{ long_name: "Olivos", types: ["locality"] }, { long_name: "Vicente López Partido", types: ["administrative_area_level_2"] }, pba], zones)?.code).toBe("gba-vicente-lopez");
   });
+  it("GBA Norte: Escobar, Pilar, San Fernando y Tigre / Nordelta", () => {
+    expect(matchZone([{ long_name: "Puertos", types: ["neighborhood"] }, { long_name: "Belén de Escobar", types: ["locality"] }, { long_name: "Partido de Escobar", types: ["administrative_area_level_2"] }, pba], zones)?.code).toBe("gba-escobar");
+    expect(matchZone([{ long_name: "Del Viso", types: ["locality"] }, { long_name: "Pilar", types: ["administrative_area_level_2"] }, pba], zones)?.code).toBe("gba-pilar");
+    expect(matchZone([{ long_name: "Victoria", types: ["locality"] }, { long_name: "San Fernando", types: ["administrative_area_level_2"] }, pba], zones)?.code).toBe("gba-san-fernando");
+    expect(matchZone([{ long_name: "Nordelta", types: ["locality"] }, pba], zones)?.code).toBe("gba-tigre");
+  });
   it("fuera de cobertura", () => {
     expect(matchZone([{ long_name: "La Plata", types: ["locality"] }, { long_name: "La Plata", types: ["administrative_area_level_2"] }, pba], zones)).toBeNull();
     expect(matchZone([{ long_name: "Rosario", types: ["locality"] }, { long_name: "Santa Fe", types: ["administrative_area_level_1"] }], zones)).toBeNull();
