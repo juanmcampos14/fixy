@@ -18,7 +18,7 @@ export default async function ConfirmWhatsAppLink({ params }: { params: Promise<
   const link = await peekWhatsAppLink(token);
   return (
     <article className="mx-auto max-w-xl px-4 py-12 sm:px-6">
-      <h1 className="text-3xl font-extrabold">Terminá tu pedido de WhatsApp</h1>
+      <h1 className="text-3xl font-extrabold">{link?.hasRequest === false ? "Vinculá tu WhatsApp" : "Terminá tu pedido de WhatsApp"}</h1>
       <Card className="mt-6">
         {!link ? (
           <Alert tone="warn" title="El link venció o no es válido">Escribinos de nuevo por WhatsApp y te mandamos uno nuevo.</Alert>
@@ -27,7 +27,7 @@ export default async function ConfirmWhatsAppLink({ params }: { params: Promise<
         ) : (
           <div className="space-y-4">
             <p className="text-[15px]">
-              Vas a vincular el WhatsApp terminado en <strong className="tabular">{link.phoneTail}</strong> a tu cuenta <strong>{actor.email}</strong> y abrir el pedido que empezaste por ahí.
+              Vas a vincular el WhatsApp terminado en <strong className="tabular">{link.phoneTail}</strong> a tu cuenta <strong>{actor.email}</strong>{link.hasRequest ? " y abrir el pedido que empezaste por ahí" : ": vas a poder ver tus pedidos y sumarles fotos o datos desde WhatsApp"}.
             </p>
             <p className="text-sm text-muted">Si no reconocés ese número o no empezaste un pedido por WhatsApp, no sigas: cerrá esta página.</p>
             <ActionForm action={linkWhatsAppAction}>

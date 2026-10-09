@@ -17,7 +17,7 @@ export function intentByRules(text: string): Intent {
   if (!t) return "other";
   if (/^(hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hey|que tal)[\s!.,]*$/.test(t)) return "greeting";
   if (/(agreg|sum(o|ar)|adjunt|subir|mand(o|ar) (una |unas )?foto|foto(s)? (del|de mi|para (el|mi)) pedido|mas detalle|otro dato|me olvide|cambi(o|ar) (algo|la descripcion))/.test(t)) return "add_details";
-  if (/(novedad|como va|como viene|estado|encontr|candidat|alguien|respond|acept|ya hay|que paso con|seguimiento|cuando (viene|llega)|mi pedido)/.test(t)) return "status";
+  if (/(novedad|como va|como viene|estado|encontr|candidat|alguien|respond|acept|ya hay|que paso con|seguimiento|cuando (viene|llega)|mis? pedidos?)/.test(t)) return "status";
   if (t.length >= 12) return "new_request";
   return "other";
 }

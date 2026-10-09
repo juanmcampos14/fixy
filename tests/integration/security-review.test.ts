@@ -56,7 +56,7 @@ describe("revisión de seguridad", () => {
     const token = randomBytes(24).toString("base64url");
     const phone = `54911${String(Date.now()).slice(-8)}`;
     await sql()`insert into whatsapp_links (token_hash, phone, data) values (${createHash("sha256").update(token).digest("hex")}, ${phone}, ${sql().json({} as never)})`;
-    expect(await peekWhatsAppLink(token)).toEqual({ phoneTail: phone.slice(-4), usedBy: null });
+    expect(await peekWhatsAppLink(token)).toEqual({ phoneTail: phone.slice(-4), usedBy: null, hasRequest: false });
     const email = `con.wa.${Date.now()}@test.local`;
     const id = await registerUser({ fullName: "Ya Vinculada", email, password: "password-123", acceptTerms: true });
     await sql()`update users set whatsapp_phone = ${`54911${String(Date.now() + 7).slice(-8)}`} where id = ${id}`;

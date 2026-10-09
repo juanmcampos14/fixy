@@ -18,7 +18,8 @@ import { formatMoney } from "@/lib/format";
 import { geocodeAddress, reverseGeocode } from "@/server/geo";
 import { nearestZoneCode } from "@/lib/zone-centroids";
 import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client";
-import { classifyIntent } from "./intent";
+import { classifyIntent, type OpenRequest } from "./intent";
+import { looksLikeAddress, looksLikeQuestion, parseBudget, understand, type Expecting, type Understood } from "./understand";
 import { addRequestDetails, notifyRequestUpdate } from "@/server/modules/requests";
 import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
@@ -37,7 +38,7 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = "idle" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = "idle" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
   description?: string;
@@ -47,7 +48,9 @@ type State = {
   propertyId?: string | null;
   address?: Partial<AddressValue>;
   pros?: { slug: string; name: string; visitFeeMinor: number; verified?: boolean }[];
-  chosen?: string | null; // slug | "quotes"
+  chosen?: string | null; // slug | "quotes" | "budget"
+  /** Pedido con presupuesto: lo que la persona quiere pagar (centavos). */
+  budgetMinor?: number;
   extra?: string;
   /** Fotos recibidas por WhatsApp para este pedido (ids de archivos privados). */
   photos?: string[];
@@ -110,10 +113,13 @@ export async function handleInbound(msg: Inbound): Promise<void> {
   await systemTx(async (tx) => {
     await tx`select pg_advisory_xact_lock(hashtext(${"wa:" + msg.from}))`;
     await tx`insert into whatsapp_conversations (phone, profile_name) values (${msg.from}, ${msg.profileName ?? null}) on conflict (phone) do nothing`;
-    const [conv] = await tx<{ state: State; profile_name: string | null }[]>`select state, profile_name from whatsapp_conversations where phone = ${msg.from} for update`;
+    const [conv] = await tx<{ state: State; profile_name: string | null; stale: boolean }[]>`
+      select state, profile_name, updated_at < now() - interval '12 hours' as stale from whatsapp_conversations where phone = ${msg.from} for update`;
     const [user] = await tx<{ id: string; full_name: string }[]>`select id, full_name from users where whatsapp_phone = ${msg.from} and disabled_at is null`;
     const ctx: Ctx = { phone: msg.from, name: (user?.full_name ?? msg.profileName ?? conv.profile_name ?? "").split(" ")[0], userId: user?.id ?? null, out };
-    const next = await step(conv.state ?? { step: "idle" }, msg, ctx);
+    // Una conversación a medias de hace horas no sigue: el mensaje nuevo se interpreta desde cero.
+    const current: State = !conv.state || (conv.stale && !["idle", "done"].includes(conv.state.step)) ? { step: "idle" } : conv.state;
+    const next = await step(current, msg, ctx);
     await tx`update whatsapp_conversations set state = ${tx.json(next as never)}, profile_name = coalesce(${msg.profileName ?? null}, profile_name),
       last_inbound_at = now(), updated_at = now() where phone = ${msg.from}`;
   });
@@ -140,8 +146,14 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     ctx.out.push({ kind: "text", text: `Para hablar con una persona del equipo de Fixy, escribinos a ${SUPPORT_EMAIL} y te respondemos por mail. Si querés, mientras tanto sigo ayudándote por acá con tu pedido.` });
     return s;
   }
+  if (reply === "link_account") return sendLinkOnly(s, ctx);
+  if (reply === "new_req" && !ctx.userId) {
+    ctx.out.push({ kind: "text", text: "Dale. Contame qué problema tenés y te muestro profesionales que pueden ir." });
+    return { step: "problem" };
+  }
   // Pedidos existentes (solo con número vinculado a una cuenta)
   if (ctx.userId) {
+    if (reply === "draft_send") return sendPendingDraft(ctx);
     if (reply === "my_requests") return showStatus(s, ctx);
     if (reply === "add_details") return askWhichRequest({ ...s, step: "pick_request" }, ctx);
     if (reply === "new_req") {
@@ -165,25 +177,16 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
   switch (s.step) {
     case "idle":
     case "done":
-    case "awaiting_account":
+    case "awaiting_account": {
       if (s.step === "awaiting_account" && !text) return s;
-      if (ctx.userId && text) {
-        const open = await openRequests(ctx.userId);
-        if (open.length) {
-          const { intent, requestId } = await classifyIntent(text, open);
-          if (intent === "status") return showStatus(s, ctx);
-          if (intent === "add_details") return requestId ? startAddTo(s, requestId, ctx) : askWhichRequest({ ...s, step: "pick_request" }, ctx);
-          if (intent === "new_request") return onProblem({ step: "problem" }, text, ctx);
-          ctx.out.push({
-            kind: "buttons", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, ¿en qué te ayudo? Tenés ${open.length === 1 ? `el pedido *${open[0].code}* abierto` : `${open.length} pedidos abiertos`}.`,
-            buttons: [{ id: "my_requests", title: "Cómo van mis pedidos" }, { id: "add_details", title: "Sumar fotos o datos" }, { id: "new_req", title: "Pedido nuevo" }],
-          });
-          return { step: "done" };
-        }
-      }
-      if (msg.type === "text" && text.length >= 12 && !isGreeting(text)) return onProblem({ step: "problem" }, text, ctx);
-      ctx.out.push({ kind: "text", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, soy Fixy. Contame qué problema tenés (por ejemplo: «gotea la canilla de la cocina») y te muestro profesionales que pueden ir. Si querés, mandame fotos: se suman al pedido.` });
-      return { step: "problem" };
+      if (!text) return s;
+      const open = ctx.userId ? await openRequests(ctx.userId) : [];
+      const draft = ctx.userId ? await pendingDraft(ctx.userId, ctx.phone) : null;
+      if (isGreeting(text)) return greet(ctx, open, draft);
+      const u = await understand(text, { expecting: "nothing", open, linked: !!ctx.userId, draftTitle: draft?.title ?? null });
+      if (u.kind === "new_request" || u.kind === "data") return onProblem({ step: "problem" }, text, ctx);
+      return handleOffScript(u, { step: "idle" }, ctx, open, draft);
+    }
 
     case "pick_request":
       return askWhichRequest(s, ctx);
@@ -193,6 +196,11 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
       if (/^(listo|nada mas|nada más|eso es todo|gracias|ok)$/.test(t)) {
         ctx.out.push({ kind: "text", text: "Perfecto. Te aviso por acá cuando haya novedades." });
         return { step: "done" };
+      }
+      if (looksLikeQuestion(text)) {
+        const open = await openRequests(ctx.userId!);
+        const u = await understand(text, { expecting: "details", open, linked: true });
+        if (u.kind !== "data") return handleOffScript(u, s, ctx, open, null, "Si querés sumar algo más al pedido, escribilo o mandá fotos.");
       }
       try {
         const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
@@ -205,6 +213,11 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     }
 
     case "problem":
+      if (text && (looksLikeQuestion(text) || isGreeting(text))) {
+        const open = ctx.userId ? await openRequests(ctx.userId) : [];
+        const u = await understand(text, { expecting: "problem", open, linked: !!ctx.userId });
+        if (u.kind !== "data" && u.kind !== "new_request") return handleOffScript(u, s, ctx, open, null, "Cuando quieras, contame en una oración qué problema tenés.");
+      }
       if (text.length < 10) {
         ctx.out.push({ kind: "text", text: "Contame un poco más, con una oración alcanza. Por ejemplo: «se corta la luz cuando prendo el horno»." });
         return s;
@@ -215,12 +228,14 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
       if (reply.startsWith("prop:")) return goPros({ ...s, propertyId: reply.slice(5), address: undefined }, ctx);
       if (reply === "loc:new") return askLocationRequest(s, ctx);
       if (msg.type === "location" && msg.location) return onLocation(s, msg.location, ctx);
-      if (text.length >= 5) return onAddressText(s, text, ctx);
+      if (text && !looksLikeAddress(text)) return offScriptAt(s, text, "address", ctx, `Seguimos con tu pedido: ¿dónde es? Tocá *Enviar ubicación* o escribí calle, altura y localidad. ${PRIVACY}`);
+      if (text.length >= 3) return onAddressText(s, text, ctx);
       ctx.out.push({ kind: "location_request", text: `Para mostrarte profesionales cerca necesito saber dónde es. Tocá *Enviar ubicación* o escribí la dirección (calle, altura y localidad). ${PRIVACY}` });
       return s;
 
     case "address":
       if (msg.type === "location" && msg.location) return onLocation(s, msg.location, ctx);
+      if (text && !looksLikeAddress(text)) return offScriptAt(s, text, "address", ctx, "Seguimos: escribime la calle y la altura (por ejemplo: Av. Cabildo 2000).");
       if (text.length < 5) {
         ctx.out.push({ kind: "text", text: "Escribime la calle y la altura (por ejemplo: Av. Cabildo 2000)." });
         return s;
@@ -228,6 +243,7 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
       return onAddressText(s, text, ctx, true);
 
     case "street":
+      if (text && !looksLikeAddress(text)) return offScriptAt(s, text, "address", ctx, "Seguimos: ¿calle y altura? (por ejemplo: Av. Cabildo 2000).");
       if (text.length < 5) {
         ctx.out.push({ kind: "text", text: "Escribime la calle y la altura (por ejemplo: Av. Cabildo 2000)." });
         return s;
@@ -247,7 +263,23 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
 
     case "pros":
       if (reply.startsWith("pro:") || reply === "quotes") return confirm({ ...s, chosen: reply === "quotes" ? "quotes" : reply.slice(4) }, ctx);
+      if (reply === "budget") return askBudget(s, ctx);
+      if (text && looksLikeQuestion(text)) return offScriptAt(s, text, "nothing", ctx, "Elegí un profesional de la lista, pedí presupuestos varios o decí cuánto querés pagar.");
       return goPros(s, ctx);
+
+    case "budget": {
+      const amount = parseBudget(text);
+      if (amount == null) {
+        if (text && looksLikeQuestion(text)) return offScriptAt(s, text, "budget", ctx, "¿Cuánto querés pagar por el trabajo? Por ejemplo: 60.000.");
+        ctx.out.push({ kind: "text", text: "No entendí el monto. Escribilo en pesos, por ejemplo: *60.000* o *60 mil*." });
+        return s;
+      }
+      if (amount < 500_000) {
+        ctx.out.push({ kind: "text", text: "El presupuesto mínimo es de $ 5.000. ¿Cuánto querés pagar?" });
+        return s;
+      }
+      return confirm({ ...s, chosen: "budget", budgetMinor: amount }, ctx);
+    }
 
     case "confirm":
       if (reply === "send" || /^(enviar|si|sí|dale|ok|listo)$/.test(t)) return send(s, ctx);
@@ -256,9 +288,24 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
         return { ...s, step: "details" };
       }
       if (reply === "change_pro") return goPros(s, ctx);
+      if (text && !reply) {
+        const u = await understand(text, { expecting: "confirmation", open: ctx.userId ? await openRequests(ctx.userId) : [], linked: !!ctx.userId });
+        if (u.kind === "data" && !looksLikeQuestion(text)) return confirm({ ...s, extra: [s.extra, text].filter(Boolean).join("\n").slice(0, 1000) }, ctx);
+        if (u.kind === "question" || u.kind === "greeting" || u.kind === "human") {
+          await answerOffScript(u, ctx);
+          return confirm(s, ctx);
+        }
+      }
       return confirm(s, ctx);
 
     case "details":
+      if (text && looksLikeQuestion(text)) {
+        const u = await understand(text, { expecting: "details", open: ctx.userId ? await openRequests(ctx.userId) : [], linked: !!ctx.userId });
+        if (u.kind !== "data") {
+          await answerOffScript(u, ctx);
+          return confirm(s, ctx);
+        }
+      }
       if (text) return confirm({ ...s, extra: [s.extra, text].filter(Boolean).join("\n").slice(0, 1000) }, ctx);
       return s;
   }
@@ -387,7 +434,7 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
   if (!list.length) return confirm({ ...s, chosen: "quotes", pros }, ctx);
   ctx.out.push({
     kind: "list",
-    text: `Estos profesionales de ${cat.name.toLowerCase()} pueden ir. Elegí uno: coordinan la visita por Fixy y te presupuesta el arreglo en el lugar.`,
+    text: `Estos profesionales de ${cat.name.toLowerCase()} pueden ir. Elegí uno (coordinan la visita por Fixy y te presupuesta en el lugar), pedí presupuestos varios o decí cuánto querés pagar.`,
     button: "Ver profesionales",
     sections: [
       {
@@ -398,7 +445,10 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
           description: [p.visitFeeMinor > 0 ? `Visita ${formatMoney(p.visitFeeMinor)}` : "Visita sin cargo", p.reviews ? `${p.rating}★ (${p.reviews})` : "Nuevo", p.verified ? "Verificado" : "Sin verificar"].filter(Boolean).join(" · "),
         })),
       },
-      { title: "Otra opción", rows: [{ id: "quotes", title: "Presupuestos varios", description: "Invitamos a varios y comparás" }] },
+      { title: "Otras opciones", rows: [
+        { id: "quotes", title: "Presupuestos varios", description: "Invitamos a varios y comparás" },
+        { id: "budget", title: "Digo cuánto pago", description: "Se anotan por tu precio o te ofrecen menos" },
+      ] },
     ],
   });
   return { ...s, step: "pros", pros };
@@ -409,7 +459,7 @@ async function confirm(s: State, ctx: Ctx): Promise<State> {
     ctx.out.push({ kind: "text", text: `Último dato: ¿calle y altura? (por ejemplo: Av. Cabildo 2000). ${PRIVACY}` });
     return { ...s, step: "street" };
   }
-  const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
+  const pro = s.chosen && s.chosen !== "quotes" && s.chosen !== "budget" ? s.pros?.find((p) => p.slug === s.chosen) : null;
   const where = s.propertyId
     ? (await sql()<{ label: string; zone_name: string }[]>`select p.label, z.name as zone_name from properties p join zones z on z.id = p.zone_id where p.id = ${s.propertyId}`)[0]
     : null;
@@ -418,7 +468,9 @@ async function confirm(s: State, ctx: Ctx): Promise<State> {
     "*Tu pedido*",
     `Problema: ${s.title ?? s.description}`,
     `Dónde: ${where ? `${where.label} (${where.zone_name})` : `${s.address?.addressLine ?? ""}${zoneName ? ` (${zoneName})` : ""}`}`,
-    pro ? `Profesional: ${pro.name} · ${pro.visitFeeMinor > 0 ? `visita ${formatMoney(pro.visitFeeMinor)}` : "visita sin cargo"}` : s.pros?.length ? "Recibís presupuestos de varios profesionales." : "Te conectamos con un profesional de tu zona y te avisamos por acá.",
+    pro ? `Profesional: ${pro.name} · ${pro.visitFeeMinor > 0 ? `visita ${formatMoney(pro.visitFeeMinor)}` : "visita sin cargo"}`
+      : s.chosen === "budget" && s.budgetMinor ? `Ofrecés hasta ${formatMoney(s.budgetMinor)}: los profesionales de tu zona se anotan por ese precio o te ofrecen menos, y vos elegís. (Al contratar se suma el cargo de servicio de Fixy.)`
+      : s.pros?.length ? "Recibís presupuestos de varios profesionales." : "Te conectamos con un profesional de tu zona y te avisamos por acá.",
     s.extra ? `Detalles: ${s.extra}` : "",
     s.photos?.length ? `Fotos: ${s.photos.length}` : "",
     "",
@@ -440,7 +492,8 @@ function payloadOf(s: State): RequestPayload {
       kind: "home", label: "Casa", addressLine: s.address?.addressLine ?? "", addressExtra: "", zoneId: s.address?.zoneId ?? "",
       lat: s.address?.lat ?? "", lng: s.address?.lng ?? "", placeId: s.address?.placeId ?? "", formattedAddress: s.address?.formattedAddress ?? "",
     },
-    accessInfo: s.extra ?? "", targetProviderSlug: s.chosen && s.chosen !== "quotes" ? s.chosen : null, previousJobId: null,
+    accessInfo: s.extra ?? "", targetProviderSlug: s.chosen && s.chosen !== "quotes" && s.chosen !== "budget" ? s.chosen : null, previousJobId: null,
+    budgetMinor: s.chosen === "budget" && s.budgetMinor ? s.budgetMinor : null,
   };
 }
 
@@ -453,10 +506,10 @@ async function send(s: State, ctx: Ctx): Promise<State> {
       await attachWhatsAppPhotos(id, { phone: ctx.phone, fileIds: s.photos ?? [] });
       await sql()`update service_requests set channel = 'whatsapp' where id = ${id}`;
       const [r] = await sql()<{ code: string }[]>`select code from service_requests where id = ${id}`;
-      const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
+      const pro = s.chosen && s.chosen !== "quotes" && s.chosen !== "budget" ? s.pros?.find((p) => p.slug === s.chosen) : null;
       ctx.out.push({
         kind: "text", previewUrl: false,
-        text: `Listo, pedido *${r.code}* enviado. ${pro ? (pro.verified === false ? `${pro.name} todavía no verificó su identidad: le pedimos que se verifique antes de aceptar. Te aviso por acá apenas responda.` : `${pro.name} tiene unas horas para aceptar y proponerte día y horario; te aviso por acá.`) : "Te aviso por acá cuando haya novedades."}\n\nSeguilo en: ${base}/app/solicitudes/${id}`,
+        text: `Listo, pedido *${r.code}* enviado. ${pro ? (pro.verified === false ? `${pro.name} todavía no verificó su identidad: le pedimos que se verifique antes de aceptar. Te aviso por acá apenas responda.` : `${pro.name} tiene unas horas para aceptar y proponerte día y horario; te aviso por acá.`) : s.chosen === "budget" ? "Les avisamos a los profesionales de tu zona; te aviso por acá cuando lleguen ofertas." : "Te aviso por acá cuando haya novedades."}\n\nSeguilo en: ${base}/app/solicitudes/${id}`,
       });
       return { step: "done" };
     } catch (e) {
@@ -473,6 +526,139 @@ async function send(s: State, ctx: Ctx): Promise<State> {
   return { ...s, step: "awaiting_account" };
 }
 
+// ───────────────────────── Fuera del guion: preguntas, estado, sumar datos ─────────────────────────
+
+type Draft = { linkId: string; title: string; data: RequestPayload };
+
+/** Pedido armado por WhatsApp que quedó sin enviar en la web después de vincular la cuenta (últimos 7 días). */
+async function pendingDraft(userId: string, phone: string): Promise<Draft | null> {
+  const [l] = await sql()<{ id: string; data: RequestPayload }[]>`
+    select l.id, l.data from whatsapp_links l
+    where l.phone = ${phone} and l.used_by = ${userId} and l.used_at > now() - interval '7 days' and coalesce(l.data->>'description', '') <> ''
+      and not exists (select 1 from service_requests r where r.created_by = ${userId} and r.created_at > l.created_at)
+    order by l.created_at desc limit 1`;
+  return l ? { linkId: l.id, title: l.data.title || l.data.description.slice(0, 60), data: l.data } : null;
+}
+
+async function sendPendingDraft(ctx: Ctx): Promise<State> {
+  const draft = await pendingDraft(ctx.userId!, ctx.phone);
+  if (!draft) {
+    ctx.out.push({ kind: "text", text: "Ese pedido ya se envió o venció. Contame qué problema tenés y armamos uno nuevo." });
+    return { step: "problem" };
+  }
+  try {
+    const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
+    const id = await submitRequestPayload(actor!, draft.data);
+    await attachWhatsAppPhotos(id, { claimedBy: ctx.userId! });
+    await sql()`update service_requests set channel = 'whatsapp' where id = ${id}`;
+    const [r] = await sql()<{ code: string }[]>`select code from service_requests where id = ${id}`;
+    ctx.out.push({ kind: "text", previewUrl: false, text: `Listo, pedido *${r.code}* enviado (${draft.title}). Te aviso por acá cuando haya novedades.\n\nSeguilo en: ${env().APP_URL.replace(/\/$/, "")}/app/solicitudes/${id}` });
+    return { step: "done" };
+  } catch (e) {
+    ctx.out.push({ kind: "text", text: `No pude enviarlo: ${isDomainError(e) ? e.message : "hubo un error"}. Contame el problema y lo armamos de nuevo.` });
+    return { step: "problem" };
+  }
+}
+
+/** Link para vincular este WhatsApp a una cuenta existente, sin pedido (para ver y actualizar pedidos por acá). */
+async function sendLinkOnly(s: State, ctx: Ctx): Promise<State> {
+  if (ctx.userId) {
+    ctx.out.push({ kind: "text", text: "Tu WhatsApp ya está vinculado a tu cuenta de Fixy." });
+    return s;
+  }
+  const token = randomBytes(24).toString("base64url");
+  await sql()`insert into whatsapp_links (token_hash, phone, data) values (${hash(token)}, ${ctx.phone}, ${sql().json({} as never)})`;
+  ctx.out.push({
+    kind: "text", previewUrl: true,
+    text: `Ingresá a tu cuenta desde este link y confirmá que este WhatsApp es tuyo. Después vas a poder ver tus pedidos y sumarles fotos o datos por acá.\n\n${env().APP_URL.replace(/\/$/, "")}/wa/${token}`,
+  });
+  return { ...s, step: "idle" };
+}
+
+function greet(ctx: Ctx, open: OpenRequest[], draft: Draft | null): State {
+  const hi = `Hola${ctx.name ? ` ${ctx.name}` : ""}`;
+  if (draft) return offerDraft(ctx, draft, `${hi}, ¿en qué te ayudo?`);
+  if (open.length) {
+    ctx.out.push({
+      kind: "buttons", text: `${hi}, ¿en qué te ayudo? Tenés ${open.length === 1 ? `el pedido *${open[0].code}* abierto` : `${open.length} pedidos abiertos`}.`,
+      buttons: [{ id: "my_requests", title: "Cómo van mis pedidos" }, { id: "add_details", title: "Sumar fotos o datos" }, { id: "new_req", title: "Pedido nuevo" }],
+    });
+    return { step: "done" };
+  }
+  ctx.out.push({ kind: "text", text: `${hi}, soy Fixy. Contame qué problema tenés (por ejemplo: «gotea la canilla de la cocina») y te muestro profesionales que pueden ir. Si querés, mandame fotos: se suman al pedido.` });
+  return { step: "problem" };
+}
+
+function offerDraft(ctx: Ctx, draft: Draft, lead: string): State {
+  ctx.out.push({
+    kind: "buttons", text: `${lead} Tu pedido «${draft.title}» quedó armado pero sin enviar. ¿Lo envío ahora?`,
+    buttons: [{ id: "draft_send", title: "Sí, enviarlo" }, { id: "new_req", title: "Es otro pedido" }],
+  });
+  return { step: "done" };
+}
+
+async function answerOffScript(u: Understood, ctx: Ctx) {
+  if (u.kind === "human") {
+    ctx.out.push({ kind: "text", text: `Para hablar con una persona del equipo de Fixy, escribinos a ${SUPPORT_EMAIL} y te respondemos por mail.` });
+    return;
+  }
+  const answer = u.answer ?? (u.kind === "greeting" ? null : `Te ayudo por acá a hacer un pedido, ver cómo van tus pedidos o sumarles fotos y detalles. Para hablar con una persona del equipo, escribinos a ${SUPPORT_EMAIL}.`);
+  if (answer) ctx.out.push({ kind: "text", text: answer });
+}
+
+/**
+ * El mensaje no es el dato que esperábamos: respondemos la pregunta o atendemos lo que pide (estado, sumar datos)
+ * y, si veníamos armando un pedido, se lo recordamos sin perder lo que ya cargó.
+ */
+async function handleOffScript(u: Understood, s: State, ctx: Ctx, open: OpenRequest[], draft: Draft | null, reprompt?: string): Promise<State> {
+  const midFlow = !["idle", "done", "awaiting_account"].includes(s.step);
+  if (u.kind === "status" || u.kind === "add_details") {
+    if (!ctx.userId) {
+      ctx.out.push({
+        kind: "buttons", text: "Todavía no tengo este WhatsApp vinculado a una cuenta de Fixy, así que no puedo ver tus pedidos. Si ya tenés cuenta, vinculalo y te los muestro por acá.",
+        buttons: [{ id: "link_account", title: "Vincular mi cuenta" }, { id: "new_req", title: "Pedido nuevo" }],
+      });
+      return midFlow ? s : { step: "idle" };
+    }
+    if (!open.length) {
+      if (draft) return offerDraft(ctx, draft, "No veo pedidos enviados con este número.");
+      ctx.out.push({ kind: "text", text: `No veo pedidos abiertos con este número.${midFlow && reprompt ? ` ${reprompt}` : " Contame qué problema tenés y armamos uno."}` });
+      return midFlow ? s : { step: "problem" };
+    }
+    if (u.kind === "status") return showStatus(s, ctx);
+    return u.requestId ? startAddTo(s, u.requestId, ctx) : askWhichRequest({ ...s, step: "pick_request" }, ctx);
+  }
+  await answerOffScript(u, ctx);
+  if (midFlow) {
+    if (reprompt) ctx.out.push({ kind: "text", text: reprompt });
+    return s;
+  }
+  if (draft) return offerDraft(ctx, draft, "Por cierto:");
+  if (open.length) {
+    ctx.out.push({ kind: "buttons", text: "¿Querés hacer algo más?", buttons: [{ id: "my_requests", title: "Cómo van mis pedidos" }, { id: "add_details", title: "Sumar fotos o datos" }, { id: "new_req", title: "Pedido nuevo" }] });
+    return { step: "done" };
+  }
+  if (u.kind !== "greeting") ctx.out.push({ kind: "text", text: "Si necesitás un profesional, contame qué problema tenés y te muestro quiénes pueden ir." });
+  return { step: "problem" };
+}
+
+/** En un paso que espera un dato (dirección, presupuesto…) llegó otra cosa: lo entendemos y volvemos a pedir el dato. */
+async function offScriptAt(s: State, text: string, expecting: Expecting, ctx: Ctx, reprompt: string): Promise<State> {
+  const open = ctx.userId ? await openRequests(ctx.userId) : [];
+  const u = await understand(text, { expecting, open, linked: !!ctx.userId });
+  if (u.kind === "data" && expecting === "address" && !looksLikeQuestion(text)) return onAddressText(s, text, ctx, s.step === "address");
+  if (u.kind === "data") {
+    ctx.out.push({ kind: "text", text: reprompt });
+    return s;
+  }
+  return handleOffScript(u, s, ctx, open, null, reprompt);
+}
+
+function askBudget(s: State, ctx: Ctx): State {
+  ctx.out.push({ kind: "text", text: "¿Cuánto querés pagar por el trabajo (mano de obra y materiales)? Escribilo en pesos, por ejemplo *60.000* o *60 mil*. Al contratar se suma el cargo de servicio de Fixy (10 %)." });
+  return { ...s, step: "budget" };
+}
+
 async function allZones(): Promise<Zone[]> {
   return sql()<Zone[]>`select id, code, name, region, match_names from zones where active order by sort, name`;
 }
@@ -485,10 +671,10 @@ export function wantsHuman(t: string): boolean {
 // ───────────────────────── Vinculación desde el link ─────────────────────────
 
 /** Datos para la pantalla de confirmación: solo los últimos dígitos del número, nunca el pedido. */
-export async function peekWhatsAppLink(token: string): Promise<{ phoneTail: string; usedBy: string | null } | null> {
-  const [l] = await sql()<{ phone: string; used_by: string | null }[]>`
-    select phone, used_by from whatsapp_links where token_hash = ${hash(token)} and created_at > now() - interval '7 days'`;
-  return l ? { phoneTail: l.phone.slice(-4), usedBy: l.used_by } : null;
+export async function peekWhatsAppLink(token: string): Promise<{ phoneTail: string; usedBy: string | null; hasRequest: boolean } | null> {
+  const [l] = await sql()<{ phone: string; used_by: string | null; has_request: boolean }[]>`
+    select phone, used_by, coalesce(data->>'description', '') <> '' as has_request from whatsapp_links where token_hash = ${hash(token)} and created_at > now() - interval '7 days'`;
+  return l ? { phoneTail: l.phone.slice(-4), usedBy: l.used_by, hasRequest: l.has_request } : null;
 }
 
 /**
