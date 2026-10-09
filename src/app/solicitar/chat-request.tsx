@@ -169,7 +169,6 @@ export function ChatRequest(props: {
 
   function chooseProperty(id: string) {
     setPropertyId(id);
-    setOutside(props.zones.find((z) => z.id === props.properties.find((p) => p.id === id)?.zone_id)?.code === "otra-zona");
     setLocationDone(true);
     setChosen(null);
   }
@@ -179,7 +178,6 @@ export function ChatRequest(props: {
     if (!newProp.zoneId) return setLocError("Elegí la zona.");
     setLocError(null);
     setPropertyId(null);
-    setOutside(props.zones.find((z) => z.id === newProp.zoneId)?.code === "otra-zona");
     setLocationDone(true);
     setTyping(false);
     setChosen(null);
