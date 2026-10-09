@@ -8,7 +8,8 @@
  *  4. Enviás. Los detalles (fotos, horarios, preguntas del oficio) son opcionales.
  */
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowUp, BadgeCheck, Camera, ChevronDown, LoaderCircle, LocateFixed, MapPin, Pencil, Star, TriangleAlert } from "lucide-react";
+import { ArrowUp, BadgeCheck, Camera, ChevronDown, HandCoins, LoaderCircle, LocateFixed, MapPin, Pencil, Star, TriangleAlert } from "lucide-react";
+import { parseArsToMinor } from "@/server/domain/money";
 import type { TriageResult } from "@/server/assistant/rules";
 import { bookableProvidersAction, submitRequestAction, triageAction, type RequestPayload } from "./actions";
 import type { BookableProviderCard } from "./choose-provider";
@@ -75,7 +76,12 @@ export function ChatRequest(props: {
   const [typing, setTyping] = useState(false);
   // 3. Profesional
   const [prosState, setProsState] = useState<{ key: string | null; list: BookableProviderCard[] }>({ key: null, list: [] });
-  const [chosen, setChosen] = useState<string | null>(d ? d.targetProviderSlug ?? "quotes" : null);
+  const [chosen, setChosen] = useState<string | null>(d ? d.targetProviderSlug ?? (d.budgetMinor ? "budget" : "quotes") : null);
+  // Pedido con presupuesto: el cliente dice cuánto quiere pagar y los profesionales se anotan u ofrecen menos.
+  const [budgetText, setBudgetText] = useState(d?.budgetMinor ? String(d.budgetMinor / 100) : "");
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const budgetMinor = budgetText.trim() ? parseArsToMinor(budgetText) : null;
+  const budgetValid = budgetMinor != null && budgetMinor >= 500_000;
   // 4. Detalles opcionales
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(d?.answers ?? {});
@@ -189,11 +195,13 @@ export function ChatRequest(props: {
     setPropertyId(null);
   }
 
-  const chosenPro = pick && pick !== "quotes" ? pros.find((p) => p.slug === pick) ?? null : null;
+  const chosenPro = pick && pick !== "quotes" && pick !== "budget" ? pros.find((p) => p.slug === pick) ?? null : null;
+  const budgetMode = pick === "budget" && budgetValid;
   const payload: RequestPayload = {
     description: text, title: title || text.slice(0, 80), categorySlug: categorySlug ?? "otro", serviceId: null, answers, urgency, windows,
     propertyId, newProperty: propertyId ? null : newProp, organizationId: null,
     responsibleUserId: property?.organization_id ? responsible : null, accessInfo, targetProviderSlug: chosenPro?.slug ?? null, previousJobId: props.previous?.id ?? null,
+    budgetMinor: budgetMode ? budgetMinor : null,
   };
 
   return (
@@ -314,13 +322,35 @@ export function ChatRequest(props: {
             <ul className="mt-3 space-y-3">
               {pros.map((p) => <li key={p.slug}><ProCard p={p} onChoose={() => setChosen(p.slug)} /></li>)}
             </ul>
+            <div className="mt-3 rounded-2xl border border-dashed border-[#c6d4d1] p-3">
+              {!budgetOpen ? (
+                <button type="button" onClick={() => setBudgetOpen(true)} className="w-full text-left">
+                  <span className="flex items-center gap-2 font-semibold text-fixy-800"><HandCoins className="h-4 w-4" aria-hidden />Decir cuánto quiero pagar</span>
+                  <span className="block text-sm text-muted">Los profesionales de tu zona se anotan por ese precio o te ofrecen menos. Vos elegís.</span>
+                </button>
+              ) : (
+                <form onSubmit={(e) => { e.preventDefault(); if (budgetValid) setChosen("budget"); }} className="space-y-2">
+                  <label htmlFor="budget" className="block font-semibold">¿Cuánto querés pagar por el trabajo?</label>
+                  <div className="flex gap-2">
+                    <span className="relative flex-1">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">$</span>
+                      <Input id="budget" inputMode="decimal" autoFocus value={budgetText} onChange={(e) => setBudgetText(e.target.value)} placeholder="60.000" className="pl-7" aria-describedby="budget-hint" />
+                    </span>
+                    <button type="submit" disabled={!budgetValid} className="min-h-12 rounded-full bg-fixy-700 px-5 font-semibold text-white disabled:opacity-40">Listo</button>
+                  </div>
+                  <p id="budget-hint" className="text-sm text-muted">
+                    {budgetText.trim() && !budgetValid ? "Indicá un monto desde $ 5.000." : "Mano de obra y materiales. Al contratar se suma el cargo de servicio de Fixy (10 %)."}
+                  </p>
+                </form>
+              )}
+            </div>
             <button type="button" onClick={() => setChosen("quotes")}
               className={cn("mt-3 w-full rounded-2xl px-4 py-3 text-left font-semibold", pros.length ? "border border-dashed border-[#c6d4d1] text-fixy-800" : "bg-fixy-700 text-center text-white")}>
               {pros.length ? "Prefiero que me manden presupuestos varios" : "Hacer el pedido igual"}
             </button>
           </Bot>
         ) : (
-          <Me onEdit={() => setChosen(null)}>{chosenPro ? `Elijo a ${chosenPro.displayName}` : pros.length ? "Quiero recibir presupuestos de varios" : "Hago el pedido igual"}</Me>
+          <Me onEdit={() => setChosen(null)}>{chosenPro ? `Elijo a ${chosenPro.displayName}` : budgetMode ? `Quiero pagar hasta ${formatMoney(budgetMinor!)}` : pros.length ? "Quiero recibir presupuestos de varios" : "Hago el pedido igual"}</Me>
         ))}
 
         {/* 4. Confirmar (detalles opcionales) */}
@@ -328,7 +358,9 @@ export function ChatRequest(props: {
           <Bot wide>
             {chosenPro
               ? <>Listo. Le mando tu pedido a <strong>{chosenPro.displayName}</strong>: {chosenPro.verified ? "tiene unas horas para aceptar y proponerte día y horario." : "todavía no verificó su identidad, así que le pedimos que se verifique antes de aceptar (le damos hasta 48 h). Si preferís no esperar, podés elegir a otro."} <strong>No pagás nada hasta confirmar la visita</strong>{chosenPro.visitFeeMinor > 0 ? ` (${formatMoney(chosenPro.visitFeeMinor)}${chosenPro.visitFeeCredited ? ", se descuenta si contratás el arreglo" : ""})` : " (sin cargo)"}.</>
-              : <>Listo. {pros.length ? "Invitamos a un grupo de profesionales de tu zona y te llegan sus presupuestos para comparar." : "Nuestro equipo busca un profesional para vos y te avisa."} Pedir es gratis.</>}
+              : budgetMode
+                ? <>Listo. Le avisamos a los profesionales de tu zona que ofrecés <strong>{formatMoney(budgetMinor!)}</strong>: se anotan por ese precio o te ofrecen menos, y vos elegís por precio, reseñas y experiencia. Pedir es gratis.</>
+                : <>Listo. {pros.length ? "Invitamos a un grupo de profesionales de tu zona y te llegan sus presupuestos para comparar." : "Nuestro equipo busca un profesional para vos y te avisa."} Pedir es gratis.</>}
             <form action={formAction} className="mt-4 space-y-4">
               <input type="hidden" name="payload" value={JSON.stringify(payload)} />
               {state.error && <p role="alert" className="text-sm text-danger">{state.error}</p>}

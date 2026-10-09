@@ -21,6 +21,7 @@ export const requestPayloadSchema = z.object({
   accessInfo: z.string().optional(),
   targetProviderSlug: z.string().nullable().optional(),
   previousJobId: z.string().nullable().optional(),
+  budgetMinor: z.number().int().positive().nullable().optional(),
 });
 export type RequestPayload = z.infer<typeof requestPayloadSchema>;
 
@@ -47,6 +48,7 @@ export async function submitRequestPayload(actor: Actor, payload: RequestPayload
       targetProviderId: prov?.id ?? null,
       previousJobId: payload.previousJobId ?? null,
       responsibleUserId: payload.responsibleUserId ?? null,
+      budgetMinor: payload.targetProviderSlug ? null : payload.budgetMinor ?? null,
     },
     photos,
   );

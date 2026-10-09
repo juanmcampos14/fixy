@@ -50,7 +50,7 @@ export async function getClientRequest(userId: string, requestId: string) {
       id: string; code: string; title: string; description: string; status: string; urgency: string; preferred_windows: string[]; answers: Record<string, unknown>;
       needs_review: boolean; review_reason: string | null; safety_flag: string | null; created_at: Date; submitted_at: Date | null; cancel_reason: string | null; request_mode: string;
       property_id: string; property_label: string; zone_name: string; category_id: string | null; category_name: string | null; organization_id: string | null; is_client: boolean;
-      service_name: string | null; target_provider_id: string | null; gated_community: boolean; gated_status: string;
+      service_name: string | null; target_provider_id: string | null; gated_community: boolean; gated_status: string; budget_minor: number | null;
     }[]>`
       select r.*, p.label as property_label, p.gated_community, p.gated_requirements_status as gated_status, z.name as zone_name, c.name as category_name, s.name as service_name,
         app.is_request_client(${userId}, r.id) as is_client

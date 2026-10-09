@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/contact";
 import { LEGAL } from "@/lib/legal";
 import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
@@ -17,6 +18,8 @@ export function PublicFooter() {
             <li><Link className="hover:underline" href="/solicitar">Pedir presupuesto</Link></li>
             <li><Link className="hover:underline" href="/#como-funciona">Cómo funciona</Link></li>
             <li><Link className="hover:underline" href="/#empresas">Oficinas y empresas</Link></li>
+            <li><Link className="hover:underline" href="/#trabajos-grandes">Trabajos grandes y obras</Link></li>
+            <li><a className="hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></li>
           </ul>
         </div>
         <div>

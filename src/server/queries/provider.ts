@@ -161,8 +161,9 @@ export async function getDashboard(userId: string, providerId: string, isAdmin: 
 
 export async function listInvitations(userId: string, providerId: string) {
   return asUser(userId, (tx) =>
-    tx<{ id: string; status: string; created_at: Date; code: string; title: string; urgency: string; request_status: string; category_name: string | null; category_icon: string | null; quote_status: string | null }[]>`
+    tx<{ id: string; status: string; created_at: Date; code: string; title: string; urgency: string; request_status: string; category_name: string | null; category_icon: string | null; quote_status: string | null; budget_minor: number | null }[]>`
       select i.id, i.status, i.created_at, r.code, r.title, r.urgency, r.status as request_status, c.name as category_name, c.icon as category_icon,
+        case when r.request_mode = 'budget' then r.budget_minor::int end as budget_minor,
         (select q.status from quotes q where q.invitation_id = i.id order by q.created_at desc limit 1) as quote_status
       from request_invitations i join service_requests r on r.id = i.request_id left join categories c on c.id = r.category_id
       where i.provider_id = ${providerId}
@@ -175,8 +176,9 @@ export async function getOpportunity(userId: string, providerId: string, invitat
     const [inv] = await tx<{ id: string; request_id: string; provider_id: string; status: string; created_at: Date; decline_reason: string | null; respond_by: Date | null; source: string }[]>`
       select id, request_id, provider_id, status, created_at, decline_reason, respond_by, source from request_invitations where id = ${invitationId} and provider_id = ${providerId}`;
     if (!inv) return null;
-    const [request] = await tx<{ id: string; code: string; title: string; description: string; answers: Record<string, string | boolean>; urgency: string; preferred_windows: string[]; status: string; category_id: string | null; service_id: string | null; created_at: Date; request_mode: string }[]>`
-      select id, code, title, description, answers, urgency, preferred_windows, status, category_id, service_id, created_at, request_mode
+    const [request] = await tx<{ id: string; code: string; title: string; description: string; answers: Record<string, string | boolean>; urgency: string; preferred_windows: string[]; status: string; category_id: string | null; service_id: string | null; created_at: Date; request_mode: string; budget_minor: number | null; best_offer_minor: number | null }[]>`
+      select id, code, title, description, answers, urgency, preferred_windows, status, category_id, service_id, created_at, request_mode,
+        budget_minor::int as budget_minor, app.best_offer_minor(id)::int as best_offer_minor
       from service_requests where id = ${inv.request_id}`;
     if (!request) return null;
     const [category] = request.category_id

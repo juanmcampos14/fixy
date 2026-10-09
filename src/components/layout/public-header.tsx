@@ -16,6 +16,7 @@ export async function PublicHeader() {
         <nav aria-label="Principal" className="hidden items-center gap-1 text-[15px] font-medium lg:flex">
           <Link href="/#como-funciona" className="rounded-full px-3 py-2 hover:bg-ink/5">Cómo funciona</Link>
           <Link href="/#empresas" className="rounded-full px-3 py-2 hover:bg-ink/5">Oficinas y empresas</Link>
+          <Link href="/#trabajos-grandes" className="rounded-full px-3 py-2 hover:bg-ink/5">Trabajos grandes</Link>
           <Link href="/sumate" className="rounded-full px-3 py-2 hover:bg-ink/5">Ofrecé tus servicios</Link>
           <Link href="/#preguntas" className="rounded-full px-3 py-2 hover:bg-ink/5">Preguntas</Link>
         </nav>

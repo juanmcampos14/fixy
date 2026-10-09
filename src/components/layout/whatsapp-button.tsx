@@ -50,7 +50,7 @@ export function WhatsAppButton() {
             Escribir por WhatsApp
           </a>
           <div className="mt-4 border-t border-line pt-3 text-sm">
-            <p className="text-muted">¿Preferís hablar con una persona del equipo?</p>
+            <p className="text-muted">¿Un trabajo grande, una obra o preferís hablar con una persona del equipo?</p>
             <a href={`mailto:${SUPPORT_EMAIL}`} className="mt-1 inline-flex items-center gap-1.5 font-semibold text-fixy-800 underline">
               <Mail className="h-4 w-4" aria-hidden />
               {SUPPORT_EMAIL}

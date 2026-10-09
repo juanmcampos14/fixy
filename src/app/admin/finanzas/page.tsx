@@ -13,8 +13,8 @@ import { EmptyState } from "@/components/ui/empty";
 import { ConfirmAction } from "@/components/ui/form";
 import { DataTable, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import { listPendingWithdrawals } from "@/server/modules/withdrawals";
-import { payWithdrawalAction, rejectWithdrawalAction, executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction } from "../actions";
+import { listChargebacks, listPendingWithdrawals, listRecoveries } from "@/server/modules/withdrawals";
+import { payWithdrawalAction, rejectWithdrawalAction, executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction, settleRecoveryAction, waiveRecoveryAction } from "../actions";
 
 export const metadata = { title: "Finanzas" };
 
@@ -23,6 +23,7 @@ const TABS = [
   { key: "cobros", label: "Cobros" },
   { key: "liquidaciones", label: "Liquidaciones" },
   { key: "reembolsos", label: "Reembolsos" },
+  { key: "recuperos", label: "Recuperos" },
   { key: "contracargos", label: "Contracargos" },
   { key: "conciliacion", label: "Conciliación" },
   { key: "registro", label: "Registro financiero" },
@@ -64,12 +65,8 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
       {tab === "cobros" && <Charges userId={actor.id} status={STATUS_FILTER.includes(sp.estado ?? "") ? sp.estado : undefined} />}
       {tab === "liquidaciones" && <Payouts userId={actor.id} />}
       {tab === "reembolsos" && <Refunds userId={actor.id} />}
-      {tab === "contracargos" && (
-        <EmptyState
-          title="Contracargos: pendiente de integración"
-          description="Los contracargos (desconocimientos de pago iniciados por el banco del cliente) llegan desde la pasarela real. Con la pasarela simulada no se generan; cuando se integre Mercado Pago se van a registrar acá, con su asiento en el registro financiero y la retención de la liquidación correspondiente."
-        />
-      )}
+      {tab === "recuperos" && <Recoveries all={sp.estado === "todos"} canWaive={isPlatformAdmin(actor)} />}
+      {tab === "contracargos" && <Chargebacks />}
       {tab === "conciliacion" && <Reconciliation />}
       {tab === "registro" && <Ledger userId={actor.id} canAdjust={isPlatformAdmin(actor)} />}
     </>
@@ -255,6 +252,86 @@ async function Refunds({ userId }: { userId: string }) {
             <Td className="tabular font-semibold">{formatMoney(r.amount_minor)}<div className="text-xs font-normal text-muted">{r.status === "approved" ? "Aprobado" : r.status === "failed" ? "Fallido" : "Pendiente"}</div></Td>
             <Td className="max-w-72 text-sm">{r.reason}</Td>
             <Td className="text-sm">{r.requested_by_name ?? "—"}</Td>
+          </tr>
+        ))}
+      </tbody>
+    </DataTable>
+  );
+}
+
+const RECOVERY_STATUS: Record<string, { label: string; tone: "warn" | "info" | "ok" | "neutral" }> = {
+  open: { label: "Pendiente", tone: "warn" },
+  applied: { label: "En un retiro", tone: "info" },
+  settled: { label: "Saldado", tone: "ok" },
+  waived: { label: "Condonado", tone: "neutral" },
+};
+
+async function Recoveries({ all, canWaive }: { all: boolean; canWaive: boolean }) {
+  const rows = await listRecoveries(sql(), all ? "all" : "pending");
+  const pending = rows.filter((r) => r.status === "open" || r.status === "applied").reduce((s, r) => s + Number(r.amount_minor), 0);
+  return (
+    <>
+      <p className="mb-3 text-[15px] text-ink-2">
+        Lo que un profesional cobró de más por un reembolso o contracargo posterior. Se descuenta solo de su próximo retiro; también podés registrar que lo devolvió por transferencia
+        {canWaive ? " o condonarlo si el error fue de Fixy" : ""}.
+      </p>
+      <nav aria-label="Filtrar recuperos" className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <Link href="/admin/finanzas?tab=recuperos" className={!all ? "font-bold underline" : "text-fixy-800 hover:underline"}>Pendientes</Link>
+        <Link href="/admin/finanzas?tab=recuperos&estado=todos" className={all ? "font-bold underline" : "text-fixy-800 hover:underline"}>Todos</Link>
+        {pending > 0 && <span className="ml-auto font-semibold">Pendiente de recuperar: <span className="tabular">{formatMoney(pending)}</span></span>}
+      </nav>
+      {rows.length === 0 ? <EmptyState title="Sin recuperos pendientes" description="Aparecen cuando se reembolsa un trabajo que el profesional ya cobró." /> : (
+        <DataTable caption="Recuperos" minWidth={960}>
+          <thead><tr><Th>Fecha</Th><Th>Profesional</Th><Th>Trabajo</Th><Th>Importe</Th><Th>Estado</Th><Th>Motivo</Th><Th>Acciones</Th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="align-top">
+                <Td className="text-sm">{formatDateTime(r.created_at)}{r.settled_at && <div className="text-xs text-muted">Cerrado {formatDateTime(r.settled_at)}</div>}</Td>
+                <Td><Link href={`/admin/proveedores/${r.provider_id}`} className="font-semibold hover:underline">{r.provider_name}</Link>{r.payout_kind === "referral" && <div className="text-xs text-muted">Por recomendación</div>}</Td>
+                <Td>{r.job_id ? <Link href={`/admin/trabajos/${r.job_id}`} className="font-semibold text-fixy-800 hover:underline">{r.job_code}</Link> : "—"}</Td>
+                <Td className="tabular font-semibold">{formatMoney(Number(r.amount_minor))}{r.is_test && <div><TestModeBadge /></div>}</Td>
+                <Td><Badge tone={RECOVERY_STATUS[r.status].tone} icon={false}>{RECOVERY_STATUS[r.status].label}</Badge></Td>
+                <Td className="max-w-72 text-sm text-ink-2">{r.reason}</Td>
+                <Td>
+                  {r.status === "open" ? (
+                    <div className="flex flex-col items-start gap-2">
+                      <ConfirmAction action={settleRecoveryAction} label="Registrar devolución" size="sm" variant="secondary" title="El profesional devolvió el importe"
+                        description={`Confirmá que recibiste ${formatMoney(Number(r.amount_minor))} de ${r.provider_name}. Deja de descontarse de sus retiros.`}
+                        requireReason reasonLabel="Referencia de la transferencia recibida" hidden={{ recoveryId: r.id }} confirmLabel="Registrar" />
+                      {canWaive && (
+                        <ConfirmAction action={waiveRecoveryAction} label="Condonar" size="sm" variant="ghost" title="Condonar recupero"
+                          description="Fixy absorbe el importe y no se descuenta al profesional. Queda auditado. Solo administradores."
+                          requireReason reasonLabel="Motivo (mínimo 10 caracteres)" hidden={{ recoveryId: r.id }} confirmLabel="Condonar" />
+                      )}
+                    </div>
+                  ) : <span className="text-sm text-muted">{r.status === "applied" ? "Se salda al transferir el retiro" : "—"}</span>}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
+    </>
+  );
+}
+
+async function Chargebacks() {
+  const rows = await listChargebacks(sql());
+  if (!rows.length) {
+    return <EmptyState title="Sin contracargos ni reclamos" description="Cuando un cliente abre un reclamo o desconoce un pago en Mercado Pago, aparece acá: retenemos la liquidación del profesional y registramos el reembolso si el banco lo devuelve." />;
+  }
+  return (
+    <DataTable caption="Contracargos y reclamos en la pasarela" minWidth={820}>
+      <thead><tr><Th>Fecha</Th><Th>Tipo</Th><Th>Trabajo</Th><Th>Profesional</Th><Th>Importe</Th><Th>Liquidación</Th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={`${r.kind}-${r.id}`}>
+            <Td className="text-sm">{formatDateTime(r.created_at)}</Td>
+            <Td>{r.kind === "chargeback" ? <Badge tone="danger">Contracargo</Badge> : <Badge tone="warn">Reclamo abierto</Badge>}{r.is_test && <div className="mt-1"><TestModeBadge /></div>}</Td>
+            <Td><Link href={`/admin/trabajos/${r.job_id}`} className="font-semibold text-fixy-800 hover:underline">{r.job_code}</Link></Td>
+            <Td className="text-sm">{r.provider_name}</Td>
+            <Td className="tabular font-semibold">{formatMoney(Number(r.amount_minor))}</Td>
+            <Td className="text-sm">{r.on_hold ? "Retenida" : "Liberada"}</Td>
           </tr>
         ))}
       </tbody>

@@ -20,6 +20,7 @@ import { ConfirmAction } from "@/components/ui/form";
 import { MessageThread } from "@/components/domain/messages";
 import { ProviderNetBreakdown } from "@/components/domain/price";
 import { QuoteForm } from "@/components/provider/quote-form";
+import { BidForm } from "@/components/provider/bid-form";
 import { AcceptBookingForm } from "@/components/provider/accept-booking-form";
 import { AccessRequirementsView } from "@/components/domain/access-requirements";
 import { INVITATION_STATUS_LABEL, ITEM_KIND_LABEL, REGION_LABEL } from "@/components/provider/constants";
@@ -59,6 +60,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
       <ButtonLink href="/proveedor/alta#documentacion" className="mt-4">Completar la verificación</ButtonLink>
     </Card>
   );
+  const budgetMode = request.request_mode === "budget" && !!request.budget_minor;
   const windows = (request.preferred_windows ?? []).map((w) => TIME_WINDOWS.find((t) => t.key === w)?.label ?? w);
   const answers = Object.entries(request.answers ?? {}).filter(([, v]) => v !== "" && v != null);
   const labelFor = (k: string) => o!.questions.find((q) => q.key === k)?.label ?? k;
@@ -80,7 +82,12 @@ export default async function OpportunityPage({ params, searchParams }: { params
           {referral[0].note && <> Le dijo al cliente: «{referral[0].note}».</>}
         </Alert>
       )}
-      {enviado && quote && <Alert tone="ok" className="mb-5" title="Enviamos tu presupuesto">El cliente lo va a revisar. Te avisamos si lo acepta.</Alert>}
+      {enviado && quote && <Alert tone="ok" className="mb-5" title={budgetMode ? "Enviamos tu oferta" : "Enviamos tu presupuesto"}>El cliente lo va a revisar. Te avisamos si lo acepta.</Alert>}
+      {budgetMode && (
+        <Alert tone="info" className="mb-5" title={`El cliente ofrece ${formatMoney(request.budget_minor!)} por este trabajo`}>
+          Anotate por ese precio u ofrecé menos para ganarlo. {request.best_offer_minor ? <>La oferta más baja hasta ahora es <strong>{formatMoney(request.best_offer_minor)}</strong>.</> : "Todavía nadie ofertó: podés ser el primero."}
+        </Alert>
+      )}
       {o.jobId && (
         <Alert tone="ok" className="mb-5" title="El cliente aceptó tu presupuesto">
           <Link href={`/proveedor/trabajos/${o.jobId}`}>Ver el trabajo</Link>
@@ -115,7 +122,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
 
           {quote ? (
             <Card>
-              <CardHeader title="Tu presupuesto" action={<StatusBadge status={quote.status} labels={quoteStatusLabel} />} />
+              <CardHeader title={budgetMode ? "Tu oferta" : "Tu presupuesto"} action={<StatusBadge status={quote.status} labels={quoteStatusLabel} />} />
               <DefinitionList items={[
                 ["Tipo", modeLabel[quote.mode] ?? quote.mode],
                 ["Fecha propuesta", quote.proposed_date ? `${formatDate(quote.proposed_date)}${quote.proposed_window ? ` · ${quote.proposed_window}` : ""}` : "A coordinar"],
@@ -135,6 +142,13 @@ export default async function OpportunityPage({ params, searchParams }: { params
               </ul>
               <ProviderNetBreakdown className="mt-3" grossMinor={quote.subtotal_minor} feeMinor={quote.provider_fee_minor} netMinor={quote.provider_net_minor} rateBps={quote.provider_rate_bps} />
               <p className="mt-1 text-sm text-muted">El cliente paga {formatMoney(quote.total_minor)} en total (incluye su cargo de servicio).</p>
+              {quote.status === "sent" && budgetMode && requestOpen && (
+                <div className="mt-5 border-t border-line pt-4">
+                  <h3 className="mb-3 font-semibold">¿Querés mejorar tu oferta?</h3>
+                  <BidForm invitationId={inv.id} budgetMinor={request.budget_minor!} bestOfferMinor={request.best_offer_minor} replacing={quote.id} currentMinor={quote.subtotal_minor}
+                    windows={TIME_WINDOWS.map((w) => w.label)} defaultDate={todayInBuenosAires()} />
+                </div>
+              )}
               {quote.status === "sent" && (
                 <div className="mt-4">
                   <ConfirmAction action={withdrawQuoteAction} label="Retirar presupuesto" variant="danger" title="¿Retirar el presupuesto?" description="El cliente deja de verlo como opción. No se puede deshacer." requireReason hidden={{ quoteId: quote.id }} confirmLabel="Retirar" />
@@ -146,6 +160,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
               <Card className="ring-2 ring-fixy-500/30">
                 <CardHeader title="Este cliente te eligió" description={inv.respond_by ? `Respondé antes del ${formatDateTime(inv.respond_by)}. Si no respondés, el cliente elige a otro profesional.` : "Respondé lo antes posible."} />
                 <AcceptBookingForm invitationId={inv.id} visitFeeMinor={visitFee.visit_fee_minor} visitFeeCredited={visitFee.visit_fee_credited} windows={TIME_WINDOWS.map((w) => w.label)} defaultDate={todayInBuenosAires()} gated={!!o.access} />
+              </Card>
+            ) : verifyFirst
+          ) : invitationOpen && requestOpen && budgetMode ? (
+            eligible ? (
+              <Card className="ring-2 ring-fixy-500/30">
+                <CardHeader title="Tu oferta" description="El cliente compara las ofertas por precio, reseñas y experiencia, y elige una." />
+                <BidForm invitationId={inv.id} budgetMinor={request.budget_minor!} bestOfferMinor={request.best_offer_minor}
+                  windows={TIME_WINDOWS.map((w) => w.label)} defaultDate={todayInBuenosAires()} />
               </Card>
             ) : verifyFirst
           ) : invitationOpen && requestOpen ? (

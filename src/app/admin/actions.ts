@@ -16,7 +16,7 @@ import type { JobStatus } from "@/server/domain/state-machines";
 import { reviewDocument, reviewProvider, type ReviewAction } from "@/server/modules/providers";
 import { cancelRequest, operatorInvite, operatorRunMatching, operatorSetCategory } from "@/server/modules/requests";
 import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
-import { markWithdrawalPaid, rejectWithdrawal } from "@/server/modules/withdrawals";
+import { markWithdrawalPaid, rejectWithdrawal, settleRecoveryManually, waiveRecovery } from "@/server/modules/withdrawals";
 import { resolveRevocation } from "@/server/modules/revocations";
 import { createTemplate, listTemplates } from "@/server/whatsapp/client";
 import { WA_LANGUAGE, WA_TEMPLATES, templateDefinition, type WaTemplateKey } from "@/server/whatsapp/templates";
@@ -452,6 +452,24 @@ export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promi
     await rejectWithdrawal(actor, str(f, "withdrawalId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Retiro rechazado. El saldo volvió a estar disponible para el profesional." };
+  });
+}
+
+export async function settleRecoveryAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("finanzas", "manage")).actor;
+    await settleRecoveryManually(actor, str(f, "recoveryId"), str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Recupero saldado." };
+  });
+}
+
+export async function waiveRecoveryAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("finanzas", "manage")).actor;
+    await waiveRecovery(actor, str(f, "recoveryId"), str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Recupero condonado: Fixy absorbe el importe." };
   });
 }
 

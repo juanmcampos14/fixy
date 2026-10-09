@@ -1,4 +1,5 @@
 /** Solicitudes, borradores anónimos, matching e invitaciones. */
+import { formatMoney } from "@/lib/format";
 import { maskContactInfo } from "@/server/domain/contact-guard";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
@@ -37,6 +38,8 @@ export const requestSchema = z.object({
   targetProviderId: z.string().uuid().optional().nullable(),
   previousJobId: z.string().uuid().optional().nullable(),
   responsibleUserId: z.string().uuid().optional().nullable(),
+  /** Pedido con presupuesto: lo que el cliente quiere pagar por el trabajo (sin el cargo de servicio). */
+  budgetMinor: z.coerce.number().int().min(500_000, "El presupuesto mínimo es de $ 5.000.").max(100_000_000_00).optional().nullable(),
 });
 export type RequestInput = z.infer<typeof requestSchema>;
 
@@ -196,14 +199,16 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
     on conflict (request_id, provider_id) do nothing returning id`;
   if (!inserted.length) return null;
   await tx`insert into conversations (request_id, provider_id) values (${requestId}, ${providerId}) on conflict do nothing`;
-  const [r] = await tx<{ code: string; title: string }[]>`select code, title from service_requests where id = ${requestId}`;
+  const [r] = await tx<{ code: string; title: string; request_mode: string; budget_minor: number | null }[]>`select code, title, request_mode, budget_minor from service_requests where id = ${requestId}`;
+  const budget = r.request_mode === "budget" && r.budget_minor ? Number(r.budget_minor) : null;
   const [refInfo] = referralId ? await tx<{ from_name: string; fee_bps: number }[]>`
     select p.display_name as from_name, pr.fee_bps from provider_referrals pr join providers p on p.id = pr.from_provider_id where pr.id = ${referralId}` : [];
   await notify(tx, await providerRecipients(tx, providerId), {
     type: "invitation",
-    title: refInfo ? `${refInfo.from_name} te recomendó y el cliente te eligió · ${r.code}` : source === "client" ? `Un cliente te eligió · ${r.code}` : `Nueva oportunidad · ${r.code}`,
+    title: refInfo ? `${refInfo.from_name} te recomendó y el cliente te eligió · ${r.code}` : source === "client" ? `Un cliente te eligió · ${r.code}`
+      : budget ? `Un cliente ofrece ${formatMoney(budget)} · ${r.code}` : `Nueva oportunidad · ${r.code}`,
     body: verified
-      ? (source === "client" ? `${r.title}. Respondé para coordinar la visita.` : r.title)
+      ? (source === "client" ? `${r.title}. Respondé para coordinar la visita.` : budget ? `${r.title}. Anotate por ese precio u ofrecé menos para ganarlo.` : r.title)
       : `${r.title}. Para aceptarlo, primero verificá tu cuenta: cargá tu DNI y enviá tu perfil a revisión. Te damos prioridad.`,
     link: `/proveedor/oportunidades/${inserted[0].id}`,
   });
@@ -219,8 +224,11 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
 
 /** Corre el matching e invita a un grupo acotado. Devuelve cuántos proveedores se invitaron. */
 export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | null): Promise<number> {
-  const [r] = await tx<{ status: RequestStatus; code: string }[]>`select status, code from service_requests where id = ${requestId} for update`;
-  const limit = await getSetting<number>(tx, "matching.invite_limit", 4);
+  const [r] = await tx<{ status: RequestStatus; code: string; request_mode: string }[]>`select status, code, request_mode from service_requests where id = ${requestId} for update`;
+  // Con presupuesto del cliente se abre a más profesionales de la zona: compiten por precio.
+  const limit = r.request_mode === "budget"
+    ? Number(await getSetting<number>(tx, "matching.budget_invite_limit", 15))
+    : await getSetting<number>(tx, "matching.invite_limit", 4);
   // Pedido de presupuestos: se invita primero a verificados; si no hay, a los demás (deberán verificarse para responder).
   const verified = await findCandidates(tx, requestId, { excludeInvited: true, verifiedOnly: true });
   const candidates = verified.length ? verified : await findCandidates(tx, requestId, { excludeInvited: true });
@@ -304,11 +312,12 @@ export async function createRequest(actor: Actor, input: RequestInput, photos: {
 
     const [req] = await tx<{ id: string; code: string }[]>`
       insert into service_requests (created_by, organization_id, responsible_user_id, property_id, category_id, service_id, title, description,
-        answers, urgency, preferred_windows, status, needs_review, review_reason, safety_flag, target_provider_id, previous_job_id, request_mode)
+        answers, urgency, preferred_windows, status, needs_review, review_reason, safety_flag, target_provider_id, previous_job_id, request_mode, budget_minor)
       values (${actor.id}, ${orgId}, ${responsible}, ${d.propertyId}, ${categoryId}, ${serviceId}, ${maskContactInfo(d.title).text}, ${maskContactInfo(d.description).text},
         ${tx.json(d.answers as never)}, ${d.urgency}, ${tx.json(d.preferredWindows as never)}, 'draft',
         ${requiresReview}, ${reviewReason}, ${triage.safety?.level !== "none" ? triage.safety?.level ?? null : null},
-        ${d.targetProviderId ?? null}, ${d.previousJobId ?? null}, ${d.targetProviderId ? "direct" : "quotes"})
+        ${d.targetProviderId ?? null}, ${d.previousJobId ?? null}, ${d.targetProviderId ? "direct" : d.budgetMinor ? "budget" : "quotes"},
+        ${d.targetProviderId ? null : d.budgetMinor ?? null})
       returning id, code`;
     await tx`insert into request_private (request_id, access_info) values (${req.id}, ${d.accessInfo || null})`;
     for (const ph of photos) {

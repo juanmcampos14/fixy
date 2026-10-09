@@ -8,7 +8,7 @@ import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { CategoryIcon } from "@/components/category-icon";
 import { INVITATION_STATUS_LABEL } from "@/components/provider/constants";
-import { relativeTime } from "@/lib/format";
+import { formatMoney, relativeTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Oportunidades" };
 
@@ -55,6 +55,7 @@ function Section({ title, rows, empty }: { title: string; rows: Awaited<ReturnTy
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{r.title}</span>
                     <Badge tone={TONE[r.status] ?? "neutral"}>{INVITATION_STATUS_LABEL[r.status] ?? r.status}</Badge>
+                    {r.budget_minor && <Badge tone="brand" icon={false}>El cliente ofrece {formatMoney(r.budget_minor)}</Badge>}
                     {r.quote_status && r.status === "quoted" && <Badge tone="neutral" icon={false}>Presupuesto: {quoteStatusLabel[r.quote_status] ?? r.quote_status}</Badge>}
                   </span>
                   <span className="mt-0.5 block text-sm text-muted">

@@ -250,3 +250,87 @@ export async function listPendingWithdrawals(db: Db) {
       w.scheduled_for <= (now() at time zone ${TZ})::date as due, (select count(*)::int from payouts po where po.withdrawal_id = w.id) as jobs
     from withdrawals w join providers p on p.id = w.provider_id where w.status = 'requested' order by w.scheduled_for, w.requested_at`;
 }
+
+// ───────── Recuperos (lo que un profesional cobró de más por reembolsos posteriores) ─────────
+
+export type RecoveryRow = {
+  id: string; provider_id: string; provider_name: string; job_id: string | null; job_code: string | null; payout_kind: "job" | "referral";
+  amount_minor: number; reason: string; status: "open" | "applied" | "settled" | "waived"; is_test: boolean; created_at: Date; settled_at: Date | null;
+  withdrawal_id: string | null;
+};
+
+export async function listRecoveries(db: Db, filter: "pending" | "all" = "pending") {
+  return db<RecoveryRow[]>`
+    select r.id, r.provider_id, p.display_name as provider_name, r.job_id, j.code as job_code, r.payout_kind, r.amount_minor::bigint as amount_minor,
+      r.reason, r.status, r.is_test, r.created_at, r.settled_at, r.withdrawal_id
+    from provider_recoveries r join providers p on p.id = r.provider_id left join jobs j on j.id = r.job_id
+    where ${filter === "pending" ? db`r.status in ('open','applied')` : db`true`}
+    order by r.status in ('open','applied') desc, r.created_at desc limit 300`;
+}
+
+/** El profesional devolvió el importe por su cuenta (transferencia a Fixy): se salda sin esperar un retiro. */
+export async function settleRecoveryManually(actor: Actor, recoveryId: string, externalRef: string) {
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
+  const ref = externalRef.trim();
+  if (ref.length < 3) throw invalid("Indicá la referencia de la transferencia recibida.");
+  return systemTx(async (tx) => {
+    const [r] = await tx<{ id: string; provider_id: string; job_id: string | null; amount_minor: number; status: string; is_test: boolean }[]>`
+      select id, provider_id, job_id, amount_minor, status, is_test from provider_recoveries where id = ${recoveryId} for update`;
+    if (!r) throw notFound();
+    if (r.status !== "open") throw invalid("Solo se saldan recuperos pendientes (si ya está en un retiro, se salda al transferirlo).");
+    await postLedger(
+      tx,
+      [
+        { account: "provider_payable", amount: -Number(r.amount_minor), entryType: "adjustment" },
+        { account: "gateway_clearing", amount: Number(r.amount_minor), entryType: "adjustment" },
+      ],
+      { jobId: r.job_id, providerId: r.provider_id, isTest: r.is_test, externalRef: ref, reason: "Recupero devuelto por el profesional", actorId: actor.id },
+    );
+    await tx`update provider_recoveries set status = 'settled', settled_at = now() where id = ${r.id}`;
+    await audit(tx, actor, "recovery.settled", "provider", r.provider_id, ref, { recoveryId: r.id, amountMinor: Number(r.amount_minor) });
+    await notify(tx, await providerRecipients(tx, r.provider_id), {
+      type: "payout", title: `Registramos tu devolución de ${formatMoney(Number(r.amount_minor))}`, body: `Referencia: ${ref}. Ya no se descuenta de tus retiros.`, link: "/proveedor/cobros",
+    });
+  });
+}
+
+/** Excepción: Fixy absorbe el importe (por ejemplo, el reembolso fue por un error de la plataforma). Solo administradores. */
+export async function waiveRecovery(actor: Actor, recoveryId: string, reason: string) {
+  if (!isPlatformAdmin(actor)) throw forbidden();
+  if (reason.trim().length < 10) throw invalid("Explicá por qué Fixy absorbe este importe (mínimo 10 caracteres).");
+  return systemTx(async (tx) => {
+    const [r] = await tx<{ id: string; provider_id: string; job_id: string | null; amount_minor: number; status: string; is_test: boolean }[]>`
+      select id, provider_id, job_id, amount_minor, status, is_test from provider_recoveries where id = ${recoveryId} for update`;
+    if (!r) throw notFound();
+    if (r.status !== "open") throw invalid("Solo se condonan recuperos pendientes.");
+    // La deuda del profesional pasa a ser un costo de Fixy.
+    await postLedger(
+      tx,
+      [
+        { account: "provider_payable", amount: -Number(r.amount_minor), entryType: "adjustment" },
+        { account: "platform_revenue", amount: Number(r.amount_minor), entryType: "adjustment" },
+      ],
+      { jobId: r.job_id, providerId: r.provider_id, isTest: r.is_test, reason: `Recupero condonado: ${reason.trim()}`, actorId: actor.id },
+    );
+    await tx`update provider_recoveries set status = 'waived', settled_at = now() where id = ${r.id}`;
+    await audit(tx, actor, "recovery.waived", "provider", r.provider_id, reason.trim(), { recoveryId: r.id, amountMinor: Number(r.amount_minor) });
+    await notify(tx, await providerRecipients(tx, r.provider_id), {
+      type: "payout", title: `No te vamos a descontar ${formatMoney(Number(r.amount_minor))}`, body: "Fixy se hizo cargo de ese importe: ya no se descuenta de tus retiros.", link: "/proveedor/cobros",
+    });
+  });
+}
+
+/** Contracargos y reclamos recibidos desde la pasarela. */
+export async function listChargebacks(db: Db) {
+  return db<{ kind: "chargeback" | "mediation"; id: string; job_id: string; job_code: string; provider_name: string; amount_minor: number; created_at: Date; is_test: boolean; on_hold: boolean }[]>`
+    select 'chargeback' as kind, r.id::text as id, j.id as job_id, j.code as job_code, p.display_name as provider_name, r.amount_minor, r.created_at, c.is_test,
+      exists (select 1 from payouts po where po.job_id = j.id and po.on_hold) as on_hold
+    from refunds r join charges c on c.id = r.charge_id join jobs j on j.id = c.job_id join providers p on p.id = j.provider_id
+    where r.source = 'chargeback'
+    union all
+    select 'mediation', a.id::text, j.id, j.code, p.display_name, c.amount_minor, a.created_at, c.is_test,
+      exists (select 1 from payouts po where po.job_id = j.id and po.on_hold)
+    from audit_log a join charges c on c.id = a.entity_id join jobs j on j.id = c.job_id join providers p on p.id = j.provider_id
+    where a.action = 'charge.mediation'
+    order by created_at desc limit 200`;
+}

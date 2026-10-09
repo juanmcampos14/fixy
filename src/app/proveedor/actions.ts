@@ -9,7 +9,7 @@ import type { Actor } from "@/server/auth/actor";
 import { forbidden, invalid } from "@/server/domain/errors";
 import { parseArsToMinor } from "@/server/domain/money";
 import { declineInvitation } from "@/server/modules/requests";
-import { acceptBooking, createQuote, quoteSchema, withdrawQuote } from "@/server/modules/quotes";
+import { acceptBooking, createQuote, placeBid, quoteSchema, withdrawQuote } from "@/server/modules/quotes";
 import {
   addEvidence, assignTechnician, cancelJob, confirmJob, decideReschedule, finishJob, markOnTheWay, proposeExtra, proposeReschedule,
   startJob, withdrawExtra,
@@ -70,6 +70,28 @@ export async function createQuoteAction(_: ActionState, f: FormData): Promise<Ac
       return { error: [...new Set(parsed.error.issues.map((i) => i.message))].slice(0, 3).join(" ") };
     }
     await createQuote(actor, parsed.data);
+    revalidatePath("/proveedor", "layout");
+    return { ok: true };
+  });
+  if (r.ok) redirect(`/proveedor/oportunidades/${invitationId}?enviado=1`);
+  return r;
+}
+
+/** Pedido con presupuesto del cliente: anotarse por ese precio, ofrecer menos o mejorar la propia oferta. */
+export async function placeBidAction(_: ActionState, f: FormData): Promise<ActionState> {
+  const invitationId = str(f, "invitationId");
+  const r = await act(async () => {
+    const actor = await requireActor();
+    const amountMinor = str(f, "choice") === "budget" ? Number(str(f, "budgetMinor")) : money(str(f, "amount"), "tu oferta");
+    await placeBid(actor, {
+      invitationId,
+      amountMinor,
+      materialsIncluded: str(f, "materialsIncluded") === "yes",
+      note: str(f, "note"),
+      proposedDate: str(f, "proposedDate"),
+      proposedWindow: str(f, "proposedWindow"),
+      replacing: str(f, "replacing"),
+    });
     revalidatePath("/proveedor", "layout");
     return { ok: true };
   });

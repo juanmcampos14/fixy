@@ -1,4 +1,5 @@
 /** Presupuestos: creación por el proveedor, comparación y aceptación atómica por el cliente. */
+import { maskContactInfo } from "@/server/domain/contact-guard";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import type { Tx } from "@/server/db/client";
@@ -47,7 +48,7 @@ export const quoteSchema = z.object({
 });
 export type QuoteInput = z.infer<typeof quoteSchema>;
 
-export async function createQuote(actor: Actor, input: QuoteInput) {
+export async function createQuote(actor: Actor, input: QuoteInput, opts: { replacing?: string } = {}) {
   const d = quoteSchema.parse(input);
   if (d.mode === "diagnostic" && d.items.some((i) => i.kind !== "visit")) {
     throw invalid("La visita de diagnóstico solo incluye el costo de la visita. La reparación se cotiza después como adicional.");
@@ -60,9 +61,15 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
       select id, provider_id, request_id, status from request_invitations where id = ${d.invitationId} for update`;
     if (!inv) throw notFound();
     await assertProviderAdmin(tx, actor, inv.provider_id);
-    if (!["invited", "viewed"].includes(inv.status)) throw invalid("Esta oportunidad ya no admite presupuestos.");
-    const [req] = await tx<{ status: RequestStatus; category_id: string | null; code: string; service_id: string | null; request_mode: string }[]>`
-      select status, category_id, code, service_id, request_mode from service_requests where id = ${inv.request_id} for update`;
+    // Mejorar una oferta: reemplaza la anterior (que tiene que seguir vigente) por una más baja.
+    const [prev] = opts.replacing
+      ? await tx<{ id: string; status: QuoteStatus; subtotal_minor: number }[]>`
+          select id, status, subtotal_minor from quotes where id = ${opts.replacing} and invitation_id = ${inv.id} for update`
+      : [];
+    if (opts.replacing && (!prev || prev.status !== "sent")) throw invalid("Tu oferta anterior ya no está vigente.");
+    if (!["invited", "viewed"].includes(inv.status) && !(prev && inv.status === "quoted")) throw invalid("Esta oportunidad ya no admite presupuestos.");
+    const [req] = await tx<{ status: RequestStatus; category_id: string | null; code: string; service_id: string | null; request_mode: string; budget_minor: number | null }[]>`
+      select status, category_id, code, service_id, request_mode, budget_minor from service_requests where id = ${inv.request_id} for update`;
     const elig = await providerEligibility(tx, inv.provider_id, req.category_id);
     if (!elig.eligible) throw new DomainError("not_eligible", `Para aceptar este pedido primero verificá tu cuenta. ${elig.reasons.join(" ")}`);
     if (!["searching", "with_quotes"].includes(req.status)) throw invalid("La solicitud ya no recibe presupuestos.");
@@ -76,6 +83,15 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     const rule = await commissionRuleFor(tx, req.category_id);
     const b = computeBreakdown({ laborMinor: sum("labor"), materialsMinor: sum("materials"), visitMinor: sum("visit") }, rule);
     if (b.subtotalMinor <= 0 && d.mode !== "diagnostic") throw invalid("El total debe ser mayor a cero.");
+    if (req.request_mode === "budget" && req.budget_minor && b.subtotalMinor > Number(req.budget_minor)) {
+      throw invalid(`El cliente ofrece hasta ${formatMoney(Number(req.budget_minor))}: tu oferta no puede superarlo.`);
+    }
+    if (prev) {
+      if (b.subtotalMinor >= Number(prev.subtotal_minor)) throw invalid(`Para mejorar tu oferta tiene que ser menor a ${formatMoney(Number(prev.subtotal_minor))}.`);
+      assertTransition(quoteMachine, "sent", "withdrawn", "provider");
+      await tx`update quotes set status = 'withdrawn', decided_at = now() where id = ${prev.id}`;
+      await recordEvent(tx, { entityType: "quote", entityId: prev.id, action: "status", from: "sent", to: "withdrawn", actorId: actor.id, reason: "Reemplazada por una oferta más baja" });
+    }
 
     const validUntil = new Date(Date.now() + d.validDays * 86400_000);
     const [q] = await tx<{ id: string }[]>`
@@ -103,13 +119,18 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     }
     await recordEvent(tx, { entityType: "request", entityId: inv.request_id, action: "quote_received", data: { quoteId: q.id, providerId: inv.provider_id } });
     const direct = req.request_mode === "direct";
+    const budget = req.request_mode === "budget";
     const [prov] = await tx<{ display_name: string }[]>`select display_name from providers where id = ${inv.provider_id}`;
     const when = d.proposedDate ? `${weekdayDate(d.proposedDate)}${d.proposedWindow ? ` (${d.proposedWindow.toLowerCase()})` : ""}` : "día a coordinar";
     await notify(tx, await clientRecipients(tx, inv.request_id), {
       type: "quote_received",
-      title: direct ? `El profesional aceptó tu pedido · ${req.code}` : `Recibiste un presupuesto · ${req.code}`,
+      title: direct ? `El profesional aceptó tu pedido · ${req.code}`
+        : prev ? `${prov.display_name} bajó su oferta · ${req.code}`
+        : budget ? (b.subtotalMinor < Number(req.budget_minor) ? `${prov.display_name} te ofrece hacerlo por menos · ${req.code}` : `${prov.display_name} se anotó por tu presupuesto · ${req.code}`)
+        : `Recibiste un presupuesto · ${req.code}`,
       body: direct
         ? `Propone visitarte${d.proposedDate ? ` el ${d.proposedDate}` : ""}. ${b.totalMinor > 0 ? `Visita: ${formatMoney(b.totalMinor)}.` : "La visita es sin cargo."} Confirmala en Fixy.`
+        : budget ? `Oferta: ${formatMoney(b.subtotalMinor)} (total con cargo de servicio: ${formatMoney(b.totalMinor)}). Compará y elegí en Fixy.`
         : `Total: ${formatMoney(b.totalMinor)}. Revisá qué incluye antes de confirmar.`,
       link: `/app/solicitudes/${inv.request_id}`,
       whatsapp: direct
@@ -120,6 +141,52 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     });
     return q.id;
   });
+}
+
+export const bidSchema = z.object({
+  invitationId: z.string().uuid(),
+  amountMinor: z.coerce.number().int().min(100_000, "La oferta mínima es de $ 1.000."),
+  materialsIncluded: z.boolean().default(true),
+  note: z.string().trim().max(1000).default(""),
+  proposedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  proposedWindow: z.string().trim().max(60).optional().or(z.literal("")),
+  replacing: z.string().uuid().optional().or(z.literal("")),
+});
+
+/**
+ * Oferta en un pedido con presupuesto del cliente: el profesional se anota por ese precio u ofrece menos.
+ * Queda como un presupuesto común (un concepto de mano de obra), así contratar, pagar y liquidar sigue igual.
+ */
+export async function placeBid(actor: Actor, input: z.input<typeof bidSchema>) {
+  const d = bidSchema.parse(input);
+  const [r] = await sql()<{ request_mode: string; budget_minor: number | null }[]>`
+    select r.request_mode, r.budget_minor from request_invitations i join service_requests r on r.id = i.request_id where i.id = ${d.invitationId}`;
+  if (!r) throw notFound();
+  if (r.request_mode !== "budget" || !r.budget_minor) throw invalid("Este pedido no es por presupuesto del cliente: cotizalo con el formulario de presupuesto.");
+  const atBudget = d.amountMinor === Number(r.budget_minor);
+  // Al bajar la oferta se mantienen el alcance, los materiales y la fecha que ya había propuesto.
+  const [prev] = d.replacing
+    ? await sql()<{ scope: string; materials_included: boolean; proposed_date: string | null; proposed_window: string | null }[]>`
+        select scope, materials_included, proposed_date::text, proposed_window from quotes where id = ${d.replacing} and invitation_id = ${d.invitationId}`
+    : [];
+  if (prev) {
+    return createQuote(actor, {
+      invitationId: d.invitationId, mode: "quote", scope: prev.scope, exclusions: "", materialsIncluded: prev.materials_included,
+      proposedDate: prev.proposed_date ?? "", proposedWindow: prev.proposed_window ?? "", validDays: 7,
+      items: [{ kind: "labor", description: prev.materials_included ? "Trabajo completo (mano de obra y materiales)" : "Trabajo completo (mano de obra)", quantity: 1, unitPriceMinor: d.amountMinor }],
+    }, { replacing: d.replacing });
+  }
+  return createQuote(actor, {
+    invitationId: d.invitationId,
+    mode: "quote",
+    scope: d.note.length >= 10 ? maskContactInfo(d.note).text : `Trabajo completo según lo descripto en el pedido${atBudget ? ", por el presupuesto propuesto por el cliente" : ""}.`,
+    exclusions: "",
+    materialsIncluded: d.materialsIncluded,
+    proposedDate: d.proposedDate || "",
+    proposedWindow: d.proposedWindow || "",
+    validDays: 7,
+    items: [{ kind: "labor", description: d.materialsIncluded ? "Trabajo completo (mano de obra y materiales)" : "Trabajo completo (mano de obra)", quantity: 1, unitPriceMinor: d.amountMinor }],
+  }, { replacing: d.replacing || undefined });
 }
 
 export async function withdrawQuote(actor: Actor, quoteId: string, reason: string) {

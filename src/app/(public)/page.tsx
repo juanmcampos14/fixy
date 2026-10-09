@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CalendarCheck, House, MessageCircle, Receipt, ShieldCheck, Search, CircleCheck } from "lucide-react";
+import { ArrowRight, Building2, CalendarCheck, HandCoins, HardHat, House, Mail, MessageCircle, Receipt, ShieldCheck, Search, CircleCheck } from "lucide-react";
+import { SUPPORT_EMAIL, whatsappUrl } from "@/lib/contact";
 import { sql } from "@/server/db/client";
 import { listCategories } from "@/server/modules/catalog";
 import { Mascot } from "@/components/brand/mascot";
@@ -20,6 +21,8 @@ const FAQ = [
   ["¿Cómo elijo al profesional?", "Te mostramos los profesionales que cubren tu zona y tu tipo de trabajo, con reseñas de trabajos reales, verificaciones, cuánto cobran la visita y precios de referencia. Elegís uno; si no puede o no responde a tiempo, elegís otro."],
   ["¿Por qué presupuestan en el lugar?", "Porque casi ningún arreglo se puede cotizar bien sin verlo. El profesional visita, revisa y te manda el presupuesto por la app. Si la visita tiene costo, muchos lo descuentan si contratás el arreglo."],
   ["¿Puedo pedir varios presupuestos?", "Sí. Para obras grandes o trabajos bien definidos, podés pedir presupuestos a varios profesionales y comparar."],
+  ["¿Puedo decir cuánto quiero pagar?", "Sí. Al hacer el pedido elegí «Decir cuánto quiero pagar»: los profesionales de tu zona se anotan por ese precio o te ofrecen menos, y vos elegís por precio, reseñas y experiencia."],
+  ["¿Hacen trabajos grandes u obras?", `Sí. Refacciones, obras, mantenimiento de edificios y consorcios, locales y empresas: escribinos a ${SUPPORT_EMAIL} con tu proyecto y te acercamos a los mejores profesionales y empresas para hacerlo.`],
   ["¿Tengo que pasar mi teléfono o dirección?", "No. Se coordina por el chat de Fixy y la dirección se comparte solo con el profesional que confirmaste. Al llegar, le das tu código de visita."],
   ["¿Cómo se paga?", "El pago se hace dentro de Fixy, a través de una pasarela de pagos. Fixy no guarda datos de tarjetas. En esta versión de prueba los pagos son simulados y no se mueve dinero real."],
   ["¿Fixy retiene el dinero hasta que termine el trabajo?", "No. Hoy no ofrecemos custodia de fondos. Te mostramos con claridad cuándo se cobra cada concepto y cómo funcionan las cancelaciones y los reclamos."],
@@ -38,10 +41,10 @@ export default async function Landing() {
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 pb-14 pt-10 sm:px-6 md:grid-cols-[1.25fr_1fr] md:pb-20 md:pt-16">
           <div className="motion-safe:animate-fade-up">
             <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm font-semibold text-fixy-800 ring-1 ring-line">
-              <span className="h-2 w-2 rounded-full bg-spark" aria-hidden /> Servicios para tu hogar y oficina
+              <span className="h-2 w-2 rounded-full bg-spark" aria-hidden /> Tu centro de soluciones para el hogar, la oficina y la obra
             </p>
             <h1 className="text-[2.6rem] font-extrabold leading-[1.05] sm:text-6xl">De problema a resuelto.</h1>
-            <p className="mt-4 max-w-xl text-lg text-ink-2">Contanos qué pasa y elegí al profesional indicado. Coordinan, presupuesta en el lugar y aprobás y pagás todo desde un solo lugar.</p>
+            <p className="mt-4 max-w-xl text-lg text-ink-2">Desde una canilla que gotea hasta una obra completa: contanos qué necesitás y te acercamos a los mejores profesionales. Coordinás, aprobás y pagás todo desde un solo lugar.</p>
             <form action="/solicitar" method="get" className="mt-7 rounded-[28px] bg-white p-2 shadow-[var(--shadow-lift)] ring-1 ring-line">
               <label htmlFor="hero-q" className="sr-only">¿Qué necesitás resolver hoy?</label>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -52,7 +55,7 @@ export default async function Landing() {
               </div>
             </form>
             <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-ink-2">
-              {["Elegís a quién llamar", "Nada se cobra sin tu aprobación", "Todo queda registrado"].map((t) => (
+              {["Elegís a quién llamar", "O decís cuánto querés pagar", "Nada se cobra sin tu aprobación"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-700" aria-hidden />{t}</li>
               ))}
             </ul>
@@ -120,10 +123,10 @@ export default async function Landing() {
         <figure className="rounded-[var(--radius-card)] bg-white p-6 shadow-[var(--shadow-lift)] ring-1 ring-line">
           <figcaption className="mb-3 flex items-center justify-between text-sm"><span className="font-semibold">Ejemplo de desglose</span><span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-muted">Valores ilustrativos</span></figcaption>
           <dl className="tabular divide-y divide-line text-[15px]">
-            {[["Mano de obra", 4_500_000], ["Materiales", 1_800_000], ["Visita", 1_500_000], ["Cargo de servicio Fixy (5 %)", 390_000]].map(([k, v]) => (
+            {[["Mano de obra", 4_500_000], ["Materiales", 1_800_000], ["Visita", 1_500_000], ["Cargo de servicio Fixy (10 %)", 780_000]].map(([k, v]) => (
               <div key={k as string} className="flex justify-between py-2.5"><dt className="text-muted">{k}</dt><dd>{formatMoney(v as number)}</dd></div>
             ))}
-            <div className="flex justify-between py-3 text-lg font-bold"><dt>Total</dt><dd>{formatMoney(8_190_000)}</dd></div>
+            <div className="flex justify-between py-3 text-lg font-bold"><dt>Total</dt><dd>{formatMoney(8_580_000)}</dd></div>
           </dl>
         </figure>
       </section>
@@ -142,6 +145,47 @@ export default async function Landing() {
           <p className="mt-2 text-white/80">Organizá sedes y equipo, asigná responsables, consultá gastos por sede, período, proveedor y categoría, y exportá a CSV.</p>
           <ButtonLink href="/registro?tipo=organizacion" variant="secondary" className="mt-6">Crear cuenta para mi organización</ButtonLink>
         </article>
+      </section>
+
+      {/* Ponés tu precio */}
+      <section aria-labelledby="budget-title" className="mx-auto mt-20 max-w-6xl px-4 sm:px-6">
+        <div className="grid items-center gap-6 rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8 md:grid-cols-[auto_1fr_auto]">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-spark-100 text-ink"><HandCoins className="h-7 w-7" aria-hidden /></span>
+          <div>
+            <h2 id="budget-title" className="text-2xl font-extrabold">¿Ya sabés cuánto querés pagar? Decilo.</h2>
+            <p className="mt-1 text-ink-2">Proponé tu presupuesto y los profesionales de tu zona se anotan por ese precio o te ofrecen menos. Comparás ofertas, reseñas y experiencia, y elegís.</p>
+          </div>
+          <ButtonLink href="/solicitar" variant="secondary">Proponer mi precio</ButtonLink>
+        </div>
+      </section>
+
+      {/* Trabajos grandes */}
+      <section id="trabajos-grandes" aria-labelledby="big-title" className="mx-auto mt-20 max-w-6xl scroll-mt-20 px-4 sm:px-6">
+        <div className="overflow-hidden rounded-[32px] bg-ink p-6 text-white sm:p-10">
+          <div className="grid gap-8 md:grid-cols-[1.2fr_1fr]">
+            <div>
+              <HardHat className="h-9 w-9 text-spark" aria-hidden />
+              <h2 id="big-title" className="mt-4 text-3xl font-extrabold text-white sm:text-4xl">Trabajos grandes, también.</h2>
+              <p className="mt-3 max-w-xl text-white/80">
+                ¿Una obra, una refacción completa o el mantenimiento de un edificio? Contanos tu proyecto y desde Fixy te acercamos siempre a los mejores profesionales y empresas para hacerlo.
+                Somos tu centro de soluciones: si lo necesitás, lo resolvemos.
+              </p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Proyecto para Fixy")}`} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 font-semibold text-ink hover:bg-cream">
+                  <Mail className="h-5 w-5" aria-hidden />{SUPPORT_EMAIL}
+                </a>
+                <a href={whatsappUrl("Hola Fixy, quiero contarles un trabajo grande")} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 font-semibold text-white ring-1 ring-white/40 hover:bg-white/10">
+                  <MessageCircle className="h-5 w-5" aria-hidden />Por WhatsApp
+                </a>
+              </div>
+            </div>
+            <ul className="grid content-center gap-2 text-[15px] sm:grid-cols-2 md:grid-cols-1">
+              {["Refacciones y remodelaciones", "Obras y ampliaciones", "Mantenimiento de edificios y consorcios", "Locales, oficinas y empresas", "Instalaciones completas: electricidad, gas, agua y climatización", "Lo que no esté en la lista: escribinos igual"].map((t) => (
+                <li key={t} className="flex items-start gap-2 rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10"><CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-spark" aria-hidden />{t}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </section>
 
       {/* Proveedores */}

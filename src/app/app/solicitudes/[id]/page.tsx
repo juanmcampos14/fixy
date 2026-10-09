@@ -33,7 +33,9 @@ export default async function RequestDetail({ params, searchParams }: { params: 
   const inv = Object.fromEntries(invitations.map((i) => [i.status, i.n])) as Record<string, number>;
   const invitedTotal = invitations.reduce((s, i) => s + i.n, 0);
   const open = ["submitted", "searching", "with_quotes", "no_coverage"].includes(r.status);
-  const sent = quotes.filter((q) => q.status === "sent");
+  const budget = r.request_mode === "budget" && r.budget_minor ? Number(r.budget_minor) : null;
+  // Con presupuesto propio, las ofertas se ordenan de la más baja a la más alta.
+  const sent = quotes.filter((q) => q.status === "sent").sort((a, b) => (budget ? a.subtotal_minor - b.subtotal_minor : 0));
   const other = quotes.filter((q) => q.status !== "sent");
   const path = `/app/solicitudes/${id}`;
   const activeInvite = data.invitationList.find((i) => ["invited", "viewed"].includes(i.status));
@@ -95,9 +97,9 @@ export default async function RequestDetail({ params, searchParams }: { params: 
         <Card className="mb-6 flex items-center gap-4">
           <Mascot pose="think" className="h-24 w-auto" />
           <div aria-live="polite">
-            <h2 className="text-lg font-bold">Buscando profesionales</h2>
+            <h2 className="text-lg font-bold">{budget ? `Ofreciste ${formatMoney(budget)}: esperando ofertas` : "Buscando profesionales"}</h2>
             <p className="text-ink-2">
-              Invitamos a {invitedTotal} profesional{invitedTotal === 1 ? "" : "es"} de tu zona.
+              {budget ? "Le avisamos a " : "Invitamos a "}{invitedTotal} profesional{invitedTotal === 1 ? "" : "es"} de tu zona{budget ? ": se anotan por tu precio o te ofrecen menos" : ""}.
               {inv.viewed ? ` ${inv.viewed} ya lo ${inv.viewed === 1 ? "vio" : "vieron"}.` : ""}
               {inv.declined ? ` ${inv.declined} no ${inv.declined === 1 ? "puede" : "pueden"} tomarlo.` : ""} Todavía no hay presupuestos.
             </p>
@@ -135,8 +137,12 @@ export default async function RequestDetail({ params, searchParams }: { params: 
 
       {sent.length > 0 && r.request_mode !== "direct" && (
         <section aria-labelledby="quotes-title" className="mb-10">
-          <h2 id="quotes-title" className="text-xl font-bold">Compará los presupuestos</h2>
-          <p className="mt-1 text-sm text-muted">Revisá qué incluye cada uno antes de confirmar. El total incluye el cargo de servicio de Fixy.</p>
+          <h2 id="quotes-title" className="text-xl font-bold">{budget ? `Ofertas para tu presupuesto de ${formatMoney(budget)}` : "Compará los presupuestos"}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {budget
+              ? `${sent.length} profesional${sent.length === 1 ? "" : "es"} ${sent.length === 1 ? "se anotó" : "se anotaron"}. Ordenadas de la más baja a la más alta; los profesionales pueden seguir bajando su oferta hasta que elijas. El total incluye el cargo de servicio de Fixy.`
+              : "Revisá qué incluye cada uno antes de confirmar. El total incluye el cargo de servicio de Fixy."}
+          </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {sent.map((q) => {
               const items = quoteItems.filter((i) => i.quote_id === q.id);
@@ -146,6 +152,13 @@ export default async function RequestDetail({ params, searchParams }: { params: 
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Link href={`/profesionales/${q.provider_slug}`} className="text-lg font-bold hover:underline">{q.provider_name}</Link>
+                      {budget && (
+                        <div className="mt-1">
+                          {q.subtotal_minor < budget
+                            ? <Badge tone="ok" icon={false}>{formatMoney(budget - q.subtotal_minor)} menos que tu presupuesto</Badge>
+                            : <Badge tone="info" icon={false}>Por tu presupuesto</Badge>}
+                        </div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
                         {q.reviews ? (
                           <span className="inline-flex items-center gap-1 font-semibold"><Star className="h-4 w-4 fill-spark text-spark" aria-hidden />{q.rating} <span className="font-normal text-muted">({q.reviews} reseña{q.reviews === 1 ? "" : "s"})</span></span>
