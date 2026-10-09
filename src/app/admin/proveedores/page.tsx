@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { listProviders } from "@/server/queries/admin";
 import { identityStatusLabel, payoutsStatusLabel, providerStatusLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ export const metadata = { title: "Proveedores" };
 
 export default async function ProvidersAdmin({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("proveedores")).actor;
   const status = sp.estado && providerStatusLabel[sp.estado] ? sp.estado : undefined;
   const q = sp.q?.trim() || undefined;
   const rows = await listProviders(actor.id, { status, q });

@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
 import { sql, systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { notify, providerRecipients, staffRecipients } from "@/server/notifications";
@@ -231,7 +231,7 @@ export async function processReviewDisputeDeadlines() {
 // ───────────────────────── Operación (revisión humana) ─────────────────────────
 
 export async function adminMessage(actor: Actor, disputeId: string, body: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "resenas", "manage")) throw forbidden();
   if (body.trim().length < 2) throw invalid("Escribí el mensaje.");
   return systemTx(async (tx) => {
     const d = await loadDispute(tx, disputeId, true);
@@ -252,7 +252,7 @@ export const adminResolveSchema = z.object({
 
 /** Decisión humana final. Ocultar una reseña solo puede hacerlo operación, con motivo y auditoría. */
 export async function adminResolve(actor: Actor, disputeId: string, input: z.infer<typeof adminResolveSchema>) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "resenas", "manage")) throw forbidden();
   const i = adminResolveSchema.parse(input);
   return systemTx(async (tx) => {
     const d = await loadDispute(tx, disputeId, true);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { categoryOptions, listRequests } from "@/server/queries/admin";
 import { requestStatusLabel, urgencyLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ export const metadata = { title: "Solicitudes" };
 
 export default async function RequestsAdmin({ searchParams }: { searchParams: Promise<{ estado?: string; revision?: string; categoria?: string; q?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("solicitudes")).actor;
   const status = sp.estado && requestStatusLabel[sp.estado] ? sp.estado : undefined;
   const cats = await categoryOptions(actor.id);
   const categoryId = cats.some((c) => c.id === sp.categoria) ? sp.categoria : undefined;

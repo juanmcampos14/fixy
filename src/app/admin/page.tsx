@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireStaff } from "@/server/auth/session";
+import { isPlatformAdmin } from "@/server/auth/actor";
+import { ADMIN_SECTIONS, levelFor } from "@/server/auth/permissions";
 import { getAttention, getOverview, parsePeriod, PERIODS } from "@/server/queries/admin";
 import { disputeReasonLabel, disputeStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { PageHeader, Stat } from "@/components/ui/card";
@@ -16,6 +19,10 @@ const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)} %` : "�
 export default async function AdminHome({ searchParams }: { searchParams: Promise<{ periodo?: string; error?: string }> }) {
   const sp = await searchParams;
   const actor = await requireStaff();
+  if (levelFor(actor, "resumen") === "none") {
+    const first = ADMIN_SECTIONS.find((x) => levelFor(actor, x.key) !== "none");
+    redirect(first ? first.href : isPlatformAdmin(actor) ? "/admin/equipo" : "/app");
+  }
   const period = parsePeriod(sp.periodo);
   const [o, a] = await Promise.all([getOverview(actor.id, period.days), getAttention(actor.id)]);
   const periodText = period.days ? `últimos ${period.days} días` : "todo el historial";
@@ -30,8 +37,8 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
         description="Indicadores calculados con los datos de la plataforma y los temas que necesitan una persona del equipo."
       />
       {sp.error === "forbidden" && (
-        <Alert tone="warn" className="mb-5" title="Sección solo para administradores">
-          Tu rol de operación puede ver la configuración, pero solo un administrador de plataforma puede cambiarla.
+        <Alert tone="warn" className="mb-5" title="No tenés acceso a esa sección">
+          Si lo necesitás, pedíselo al dueño de la cuenta desde Equipo y permisos.
         </Alert>
       )}
 
@@ -81,7 +88,7 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
       <div className="grid gap-3 md:grid-cols-3">
         <Stat label="Volumen contratado" value={formatMoney(o.contractedMinor)} hint={`Total pactado de ${o.contractedJobs} trabajo(s) + adicionales aceptados. No es dinero cobrado.`} />
         <Stat label="Dinero procesado (neto)" value={formatMoney(o.chargedGrossMinor - o.refundedMinor)} hint={`Cobros aprobados ${formatMoney(o.chargedGrossMinor)} − reembolsos ${formatMoney(o.refundedMinor)}. Incluye lo que corresponde al proveedor.`} />
-        <Stat label="Ingresos de plataforma" value={formatMoney(o.platformRevenueMinor)} tone="ok" hint={`Cargo de servicio + comisión, neto de reembolsos. Impuestos aparte: ${formatMoney(o.taxesMinor)}.`} />
+        <Stat label="Ingresos de plataforma" value={formatMoney(o.platformRevenueMinor)} tone="ok" hint={`Cargo de servicio a clientes (a profesionales no se les cobra comisión), neto de reembolsos. Impuestos aparte: ${formatMoney(o.taxesMinor)}.`} />
       </div>
       <Alert tone="info" className="mt-4" title="Cómo leer estos importes">
         El <strong>volumen contratado</strong> es lo pactado con los clientes, se haya cobrado o no. El <strong>dinero procesado</strong> es lo que efectivamente

@@ -10,7 +10,8 @@ import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isPlatformAdmin, isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
+import { isPlatformAdmin } from "@/server/auth/actor";
 import { audit, recordEvent } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { assertTransition, payoutMachine } from "@/server/domain/state-machines";
@@ -149,7 +150,7 @@ export async function requestWithdrawal(actor: Actor, providerId: string, bankIn
 
 /** La operación registra la transferencia realizada. Asienta el pago de cada liquidación incluida. */
 export async function markWithdrawalPaid(actor: Actor, withdrawalId: string, externalRef: string, opts: { allowEarly?: boolean } = {}) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   const ref = externalRef.trim();
   if (ref.length < 3) throw invalid("Indicá la referencia de la transferencia.");
   return systemTx(async (tx) => {
@@ -190,7 +191,7 @@ export async function markWithdrawalPaid(actor: Actor, withdrawalId: string, ext
 
 /** Rechazo (ej.: datos bancarios inválidos). El saldo vuelve a estar disponible y el pedido no cuenta para el mes. */
 export async function rejectWithdrawal(actor: Actor, withdrawalId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   if (reason.trim().length < 5) throw invalid("Explicá el motivo para que el profesional pueda corregirlo.");
   return systemTx(async (tx) => {
     const [w] = await tx<{ id: string; provider_id: string; status: string; amount_minor: number }[]>`select id, provider_id, status, amount_minor from withdrawals where id = ${withdrawalId} for update`;

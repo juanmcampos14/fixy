@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Lock, Paperclip } from "lucide-react";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { getDisputeAdmin } from "@/server/queries/admin";
 import { disputeMachine, type DisputeStatus } from "@/server/domain/state-machines";
 import {
@@ -29,7 +29,7 @@ const SIDE: Record<string, string> = { client: "Cliente", provider: "Proveedor",
 
 export default async function DisputeAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireStaff();
+  const actor = (await requireSection("reclamos")).actor;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await getDisputeAdmin(actor.id, id);
   if (!data) notFound();

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Bell, LogOut, TriangleAlert } from "lucide-react";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { canAccessAdmin } from "@/server/auth/actor";
 import { sql } from "@/server/db/client";
 import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
@@ -16,7 +16,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
   const areas: { key: Area; href: string; label: string }[] = [
     { key: "client", href: "/app", label: "Cliente" },
     ...(actor.providers.length ? [{ key: "provider" as const, href: "/proveedor", label: "Profesional" }] : []),
-    ...(isStaff(actor) ? [{ key: "admin" as const, href: "/admin", label: "Operación" }] : []),
+    ...(canAccessAdmin(actor) ? [{ key: "admin" as const, href: "/admin", label: "Operación" }] : []),
   ];
   return (
     <div className="min-h-dvh">
@@ -44,7 +44,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
             </nav>
           )}
           <div className="ml-auto flex items-center gap-1">
-            {area === "client" && !actor.providers.length && !isStaff(actor) && (
+            {area === "client" && !actor.providers.length && !canAccessAdmin(actor) && (
               <Link href="/sumate" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/5 sm:inline">Ofrecé tus servicios</Link>
             )}
             {area === "provider" && (

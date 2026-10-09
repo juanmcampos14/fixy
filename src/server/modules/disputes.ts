@@ -3,7 +3,7 @@ import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { systemTx, type Db } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit, recordEvent } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { assertTransition, disputeMachine, type DisputeStatus } from "@/server/domain/state-machines";
@@ -64,7 +64,7 @@ export async function replyDispute(actor: Actor, disputeId: string, body: string
   return systemTx(async (tx) => {
     const [d] = await tx<{ id: string; job_id: string; status: DisputeStatus }[]>`select id, job_id, status from disputes where id = ${disputeId} for update`;
     if (!d) throw notFound();
-    const staff = isStaff(actor);
+    const staff = can(actor, "reclamos", "manage");
     const [job] = await tx<{ provider_id: string; request_id: string; code: string }[]>`select provider_id, request_id, code from jobs where id = ${d.job_id}`;
     const isClient = await check(tx, "is_job_client", actor, d.job_id);
     const isProvider = (await providerRole(tx, actor, job.provider_id)) === "admin";
@@ -88,7 +88,7 @@ export async function replyDispute(actor: Actor, disputeId: string, body: string
 }
 
 export async function moveDispute(actor: Actor, disputeId: string, to: "in_review" | "awaiting_response" | "closed", note: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "reclamos", "manage")) throw forbidden();
   if (!note || note.trim().length < 3) throw invalid("Indicá el motivo.");
   return systemTx(async (tx) => {
     const [d] = await tx<{ status: DisputeStatus; job_id: string }[]>`select status, job_id from disputes where id = ${disputeId} for update`;
@@ -112,7 +112,7 @@ export const resolutionSchema = z.object({
  * Libera la pausa de liquidación salvo que se haya devuelto el total.
  */
 export async function resolveDispute(actor: Actor, disputeId: string, input: z.infer<typeof resolutionSchema>) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "reclamos", "manage")) throw forbidden();
   const d = resolutionSchema.parse(input);
   return systemTx(async (tx) => {
     const [disp] = await tx<{ status: DisputeStatus; job_id: string }[]>`select status, job_id from disputes where id = ${disputeId} for update`;
@@ -215,7 +215,7 @@ export async function replyReview(actor: Actor, reviewId: string, reply: string)
 }
 
 export async function hideReview(actor: Actor, reviewId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "reclamos", "manage")) throw forbidden();
   if (reason.trim().length < 5) throw invalid("Indicá el motivo.");
   return systemTx(async (tx) => {
     await tx`update reviews set hidden_at = now() where id = ${reviewId}`;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Fragment } from "react";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { isPlatformAdmin } from "@/server/auth/actor";
 import { sql } from "@/server/db/client";
 import { reconcile } from "@/server/modules/payments";
@@ -46,7 +46,7 @@ const STATUS_FILTER = ["pending", "processing", "approved", "failed", "partially
 
 export default async function FinanceAdmin({ searchParams }: { searchParams: Promise<{ tab?: string; estado?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("finanzas")).actor;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? "retiros") as TabKey;
 
   return (

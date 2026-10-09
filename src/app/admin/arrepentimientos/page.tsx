@@ -1,4 +1,4 @@
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { sql } from "@/server/db/client";
 import { listRevocations } from "@/server/modules/revocations";
 import { PageHeader } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { resolveRevocationAction } from "../actions";
 export const metadata = { title: "Arrepentimientos" };
 
 export default async function RevocationsAdmin() {
-  await requireStaff();
+  await requireSection("arrepentimientos");
   const rows = await listRevocations(sql());
   return (
     <>

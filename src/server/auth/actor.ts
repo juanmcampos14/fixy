@@ -1,6 +1,7 @@
 import type { Db } from "@/server/db/client";
+import type { Permissions } from "./permissions";
 
-export type PlatformRole = "operator" | "admin" | null;
+export type PlatformRole = "operator" | "admin" | "team" | null;
 
 export type Actor = {
   id: string;
@@ -10,9 +11,18 @@ export type Actor = {
   isDemo: boolean;
   organizations: { id: string; name: string; role: "admin" | "member" }[];
   providers: { id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[];
+  /** Permisos por sección del panel (solo rol "team"). */
+  permissions: Permissions;
 };
 
-export const isStaff = (a: Actor | null) => a?.platformRole === "operator" || a?.platformRole === "admin";
+/** Puede entrar al panel de administración (cualquier rol de equipo). */
+export const canAccessAdmin = (a: Actor | null) => a?.platformRole === "operator" || a?.platformRole === "admin" || a?.platformRole === "team";
+/**
+ * Puede ACTUAR como equipo de Fixy en los módulos (lado "staff"). Un miembro "team" solo si gestiona al menos una sección:
+ * quien solo ve (por ejemplo, un socio) nunca actúa como operación. Qué acción puede hacer lo valida cada acción por sección.
+ */
+export const isStaff = (a: Actor | null) =>
+  a?.platformRole === "operator" || a?.platformRole === "admin" || (a?.platformRole === "team" && Object.values(a.permissions).includes("manage"));
 export const isPlatformAdmin = (a: Actor | null) => a?.platformRole === "admin";
 
 export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
@@ -25,6 +35,9 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
   const providers = await db<{ id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[]>`
     select p.id, p.display_name as name, m.role, p.status, p.slug from provider_members m join providers p on p.id = m.provider_id
     where m.user_id = ${userId} and m.active order by p.display_name`;
+  const perms = u.platform_role === "team"
+    ? await db<{ section: string; level: "view" | "manage" }[]>`select section, level from admin_permissions where user_id = ${userId}`
+    : [];
   return {
     id: u.id,
     email: u.email,
@@ -33,5 +46,6 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
     isDemo: u.is_demo,
     organizations: [...orgs],
     providers: [...providers],
+    permissions: Object.fromEntries(perms.map((p) => [p.section, p.level])) as Permissions,
   };
 }

@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { sql, systemTx } from "@/server/db/client";
 import { env } from "@/server/env";
-import { loadActor, isStaff, isPlatformAdmin, type Actor } from "./actor";
+import { loadActor, canAccessAdmin, isPlatformAdmin, type Actor } from "./actor";
+import { levelFor, type AdminSection } from "./permissions";
+import { forbidden } from "@/server/domain/errors";
 
 export const SESSION_COOKIE = "fixy_session";
 const SESSION_DAYS = 30;
@@ -50,10 +52,23 @@ export async function requireActor(next?: string): Promise<Actor> {
   return a;
 }
 
+/** Entrar al panel de administración (cualquier rol de equipo). */
 export async function requireStaff(): Promise<Actor> {
   const a = await requireActor("/admin");
-  if (!isStaff(a)) redirect("/app?error=forbidden");
+  if (!canAccessAdmin(a)) redirect("/app?error=forbidden");
   return a;
+}
+
+/**
+ * Página o acción de una sección del panel. "view" para ver; "manage" para modificar.
+ * En acciones, si falta permiso se lanza un error de dominio (el formulario muestra el mensaje).
+ */
+export async function requireSection(section: AdminSection, level: "view" | "manage" = "view"): Promise<{ actor: Actor; readOnly: boolean }> {
+  const a = await requireStaff();
+  const l = levelFor(a, section);
+  if (l === "none") redirect("/admin?error=forbidden");
+  if (level === "manage" && l !== "manage") throw forbidden("Tu usuario puede ver esta sección, pero no hacer cambios. Pedile permiso al dueño de la cuenta.");
+  return { actor: a, readOnly: l !== "manage" };
 }
 
 export async function requirePlatformAdmin(): Promise<Actor> {

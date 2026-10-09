@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleCheck, CircleX, FileText } from "lucide-react";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { getProviderAdmin } from "@/server/queries/admin";
 import { identityStatusLabel, jobStatusLabelProvider, payoutsStatusLabel, providerStatusLabel } from "@/server/domain/labels";
 import { PageHeader, DefinitionList, Stat } from "@/components/ui/card";
@@ -44,7 +44,7 @@ const REVIEW_BUTTONS: Record<string, { op: string; label: string; title: string;
 
 export default async function ProviderAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireStaff();
+  const actor = (await requireSection("proveedores")).actor;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await getProviderAdmin(actor.id, id);
   if (!data) notFound();

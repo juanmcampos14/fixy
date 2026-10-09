@@ -1,5 +1,5 @@
-import { requireStaff } from "@/server/auth/session";
-import { isPlatformAdmin } from "@/server/auth/actor";
+import { requireSection } from "@/server/auth/session";
+import { can } from "@/server/auth/permissions";
 import { getCommissionsAdmin } from "@/server/queries/admin";
 import { computeBreakdown } from "@/server/domain/money";
 import { PageHeader } from "@/components/ui/card";
@@ -17,8 +17,8 @@ const pct = (bps: number) => `${(bps / 100).toLocaleString("es-AR", { maximumFra
 const pctInput = (bps: number) => (bps / 100).toLocaleString("es-AR", { maximumFractionDigits: 2, useGrouping: false });
 
 export default async function CommissionsAdmin() {
-  const actor = await requireStaff();
-  const canEdit = isPlatformAdmin(actor);
+  const actor = (await requireSection("comisiones")).actor;
+  const canEdit = can(actor, "comisiones", "manage");
   const { rules, settings, categories } = await getCommissionsAdmin(actor.id);
   const active = rules.filter((r) => r.active);
   const def = active.find((r) => !r.category_id);
@@ -43,9 +43,6 @@ export default async function CommissionsAdmin() {
         Cada presupuesto guarda las tasas vigentes al momento de enviarlo, y cada trabajo conserva las de su contrato. Una regla nueva solo aplica a presupuestos que se
         envíen después del cambio.
       </Alert>
-      {!canEdit && (
-        <Alert tone="info" className="mb-5" title="Solo lectura">Los cambios los hace un administrador de plataforma.</Alert>
-      )}
 
       <div className="space-y-6">
         <Section title="Reglas vigentes" description="Si una categoría no tiene regla propia, se aplica la general.">

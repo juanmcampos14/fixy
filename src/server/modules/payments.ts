@@ -11,7 +11,8 @@ import { randomUUID } from "node:crypto";
 import type { Db, Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff, isPlatformAdmin } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
+import { isPlatformAdmin } from "@/server/auth/actor";
 import { audit, recordEvent } from "@/server/audit";
 import { DomainError, forbidden, invalid, notFound } from "@/server/domain/errors";
 import { splitRefund } from "@/server/domain/money";
@@ -314,7 +315,7 @@ export async function refundCharge(
   actor: Actor,
   input: { chargeId: string; amountMinor: number; reason: string; disputeId?: string | null; idempotencyKey?: string },
 ) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   if (!input.reason || input.reason.trim().length < 5) throw invalid("Indicá el motivo del reembolso.");
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw invalid("Importe inválido.");
   return systemTx(async (tx) => refundChargeTx(tx, actor, input));
@@ -422,7 +423,7 @@ export async function createPayoutForJob(tx: Tx, jobId: string) {
  * Con Split 1:1 de Mercado Pago el dinero se acredita directamente al vendedor: ver docs/payments.md.
  */
 export async function executePayout(actor: Actor, payoutId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá un motivo o referencia.");
   return systemTx(async (tx) => {
     const [p] = await tx<{ id: string; status: string; on_hold: boolean; awaiting_review: boolean; provider_id: string; job_id: string; amount_minor: number; gateway: GatewayName; is_test: boolean; withdrawal_id: string | null }[]>`
@@ -478,7 +479,7 @@ export async function executePayout(actor: Actor, payoutId: string, reason: stri
 }
 
 export async function setPayoutHold(actor: Actor, payoutId: string, hold: boolean, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá el motivo.");
   return systemTx(async (tx) => {
     const [p] = await tx<{ status: string }[]>`select status from payouts where id = ${payoutId} for update`;
@@ -578,7 +579,7 @@ export async function reconcile(db: Db): Promise<ReconciliationRow[]> {
 
 /** Re-sincroniza un cobro consultando la pasarela (misma lógica que el webhook). */
 export async function resyncCharge(actor: Actor, chargeId: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "finanzas", "manage")) throw forbidden();
   return systemTx(async (tx) => {
     const [c] = await tx<{ gateway: GatewayName; external_reference: string }[]>`select gateway, external_reference from charges where id = ${chargeId}`;
     if (!c) throw notFound();

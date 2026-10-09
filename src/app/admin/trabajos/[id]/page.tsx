@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { getJobDetail, jobMoney } from "@/server/queries/shared";
 import { jobMachine, type JobStatus } from "@/server/domain/state-machines";
 import {
@@ -30,7 +30,7 @@ const MOVE_HELP: Partial<Record<JobStatus, string>> = {
 
 export default async function JobAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireStaff();
+  const actor = (await requireSection("trabajos")).actor;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const d = await getJobDetail(actor.id, id);
   if (!d) notFound();

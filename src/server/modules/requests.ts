@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
 import { sql, systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit, recordEvent } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { assertTransition, requestMachine, type RequestStatus, type ActorSide } from "@/server/domain/state-machines";
@@ -211,7 +211,7 @@ export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | nu
     if (id) invited++;
   }
   const [{ total }] = await tx<{ total: number }[]>`select count(*)::int as total from request_invitations where request_id = ${requestId} and status not in ('declined','expired')`;
-  const side: ActorSide = actor && isStaff(actor) ? "staff" : "system";
+  const side: ActorSide = actor && can(actor, "solicitudes", "manage") ? "staff" : "system";
   if (total > 0 && (r.status === "submitted" || r.status === "no_coverage")) {
     await transitionRequest(tx, requestId, r.status, "searching", side, actor);
   } else if (total === 0 && (r.status === "submitted" || r.status === "searching")) {
@@ -328,7 +328,7 @@ export async function createRequest(actor: Actor, input: RequestInput, photos: {
 export async function cancelRequest(actor: Actor, requestId: string, reason: string) {
   if (!reason || reason.trim().length < 3) throw invalid("Contanos el motivo de la cancelación.");
   return systemTx(async (tx) => {
-    const staff = isStaff(actor);
+    const staff = can(actor, "solicitudes", "manage");
     if (!staff && !(await check(tx, "is_request_client", actor, requestId))) throw forbidden();
     const [r] = await tx<{ status: RequestStatus }[]>`select status from service_requests where id = ${requestId} for update`;
     await transitionRequest(tx, requestId, r.status, "cancelled", staff ? "staff" : "client", actor, reason);
@@ -346,7 +346,7 @@ export async function cancelRequest(actor: Actor, requestId: string, reason: str
 // ───────────────────────── Operación ─────────────────────────
 
 export async function operatorSetCategory(actor: Actor, requestId: string, categoryId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "solicitudes", "manage")) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá el motivo.");
   return systemTx(async (tx) => {
     const [c] = await tx<{ requires_review: boolean }[]>`select requires_review from categories where id = ${categoryId} and active`;
@@ -359,7 +359,7 @@ export async function operatorSetCategory(actor: Actor, requestId: string, categ
 }
 
 export async function operatorRunMatching(actor: Actor, requestId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "solicitudes", "manage")) throw forbidden();
   return systemTx(async (tx) => {
     await audit(tx, actor, "request.run_matching", "request", requestId, reason || "Reintento de matching");
     await tx`update service_requests set needs_review = false where id = ${requestId}`;
@@ -369,7 +369,7 @@ export async function operatorRunMatching(actor: Actor, requestId: string, reaso
 
 /** Invitación manual por operación (respeta elegibilidad del proveedor). */
 export async function operatorInvite(actor: Actor, requestId: string, providerId: string, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "solicitudes", "manage")) throw forbidden();
   if (!reason || reason.trim().length < 3) throw invalid("Indicá el motivo de la invitación manual.");
   return systemTx(async (tx) => {
     const [r] = await tx<{ status: RequestStatus }[]>`select status from service_requests where id = ${requestId} for update`;

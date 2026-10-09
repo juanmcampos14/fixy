@@ -74,3 +74,14 @@ npx tsx scripts/smoke.ts
 - [ ] Opcional: migrar a Supabase Auth (reemplazar `auth/session.ts`, mapear `app.uid()` a `auth.uid()`), verificación de email y recuperación de contraseña (hoy no implementadas).
 - [ ] Cron frecuente para outbox y vencimientos (plan Vercel Pro o cron externo).
 - [ ] Pruebas end-to-end automatizadas en navegador (Playwright) en CI.
+
+## Panel de socios y equipo (migración 0022)
+- `/admin/socios`: KPIs del período vs. el anterior, evolución semanal (12 semanas), embudo de pedidos, oferta por rubro y zona, calidad, canales (web/WhatsApp, origen de altas) y dinero (cobrado, saldos y retiros de profesionales).
+- `/admin/equipo` (solo dueño): invitaciones por link de un solo uso (7 días, atado al email) y permisos por sección: No ve / Solo ve / Ve y gestiona. Perfiles rápidos: Socio (ve todo) y Operación.
+- Permisos validados en el servidor en cada página (`requireSection`), cada acción (`requireSection(..., "manage")`) y en los módulos (`can(actor, sección, "manage")`). Quien solo ve no actúa como operación en ningún lado.
+- Reservado al dueño: equipo y permisos, ajustes manuales del registro financiero, liberar un pago sin reseña, transferir un retiro antes de su fecha.
+
+## Próximos (pedidos del fundador)
+- Foto de perfil de profesionales (más confianza) — en curso.
+- Registro e ingreso con Google.
+- Evaluar apps para iOS y Android: esfuerzo, plazos y costos.

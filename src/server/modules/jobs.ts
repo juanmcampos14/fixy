@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit, recordEvent } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { computeBreakdown } from "@/server/domain/money";
@@ -41,7 +41,7 @@ export async function jobSide(tx: Tx, actor: Actor, job: JobRow): Promise<ActorS
   if (role === "admin") return "provider";
   if (role === "technician" && job.assigned_user_id === actor.id) return "technician";
   if (await check(tx, "is_job_client", actor, job.id)) return "client";
-  if (isStaff(actor)) return "staff";
+  if (can(actor, "trabajos", "manage")) return "staff";
   return null;
 }
 
@@ -192,7 +192,7 @@ export async function cancelJob(actor: Actor, jobId: string, reason: string, opt
   return systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);
     // Desde el panel de operación se actúa siempre como equipo Fixy, aunque el usuario también sea parte del trabajo.
-    const side = opts.asStaff && isStaff(actor) ? "staff" : await requireSide(tx, actor, job, ["client", "provider", "staff"]);
+    const side = opts.asStaff && can(actor, "trabajos", "manage") ? "staff" : await requireSide(tx, actor, job, ["client", "provider", "staff"]);
     await moveJob(tx, job, "cancelled", side, actor, reason);
     await tx`update jobs set cancel_reason = ${reason}, cancelled_by = ${actor.id} where id = ${jobId}`;
     await tx`update job_extras set status = 'withdrawn', decided_at = now() where job_id = ${jobId} and status = 'proposed'`;
@@ -362,7 +362,7 @@ export async function decideReschedule(actor: Actor, rescheduleId: string, decis
 
 /** Intervención de operación sobre el estado (ej.: volver a ejecución tras un reclamo). Siempre con motivo y auditoría. */
 export async function operatorMoveJob(actor: Actor, jobId: string, to: JobStatus, reason: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "trabajos", "manage")) throw forbidden();
   if (!reason || reason.trim().length < 5) throw invalid("Indicá el motivo.");
   return systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);

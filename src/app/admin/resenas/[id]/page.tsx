@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Bot, ShieldCheck, Star } from "lucide-react";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { getReviewDispute } from "@/server/queries/admin";
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -19,7 +19,7 @@ export const metadata = { title: "Impugnación de reseña" };
 
 export default async function AdminReviewDispute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireStaff();
+  const actor = (await requireSection("resenas")).actor;
   const data = await getReviewDispute(actor.id, id);
   if (!data) notFound();
   const { d, review, job, client, provider, messages, revisions } = data;

@@ -1,4 +1,4 @@
-import { requirePlatformAdmin } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { env } from "@/server/env";
 import { listTemplates, whatsappConfigured } from "@/server/whatsapp/client";
 import { WA_LANGUAGE, WA_TEMPLATES } from "@/server/whatsapp/templates";
@@ -21,7 +21,7 @@ const STATUS: Record<string, { label: string; tone: "ok" | "warn" | "danger" | "
 };
 
 export default async function WhatsAppAdmin() {
-  await requirePlatformAdmin();
+  await requireSection("whatsapp");
   const e = env();
   const remote = await listTemplates().catch(() => null);
   const ours = Object.values(WA_TEMPLATES).map((t) => ({ ...t, remote: remote?.find((r) => r.name === t.name && r.language === WA_LANGUAGE) ?? null }));

@@ -2,11 +2,11 @@ import Link from "next/link";
 import { getActor } from "@/server/auth/session";
 import { Logo } from "@/components/brand/logo";
 import { ButtonLink } from "@/components/ui/button";
-import { isStaff } from "@/server/auth/actor";
+import { canAccessAdmin } from "@/server/auth/actor";
 
 export async function PublicHeader() {
   const actor = await getActor();
-  const home = actor ? (isStaff(actor) ? "/admin" : actor.providers.length && !actor.organizations.length ? "/proveedor" : "/app") : null;
+  const home = actor ? (canAccessAdmin(actor) ? "/admin" : actor.providers.length && !actor.organizations.length ? "/proveedor" : "/app") : null;
   return (
     <header className="sticky top-0 z-30 border-b border-line/70 bg-cream/90 backdrop-blur supports-[backdrop-filter]:bg-cream/75">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">

@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { asUser } from "@/server/db/client";
 import { categoryOptions, getRequestAdmin } from "@/server/queries/admin";
 import { findCandidates, TIME_WINDOWS } from "@/server/modules/requests";
@@ -24,7 +24,7 @@ const ACTIVE = ["submitted", "searching", "with_quotes", "no_coverage"];
 
 export default async function RequestAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requireStaff();
+  const actor = (await requireSection("solicitudes")).actor;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await getRequestAdmin(actor.id, id);
   if (!data) notFound();

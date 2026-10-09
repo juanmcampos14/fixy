@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { listAllReviews, listReviewDisputes } from "@/server/queries/admin";
 import { PageHeader } from "@/components/ui/card";
 import { Badge, DemoBadge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ const RESOLUTION: Record<string, string> = { kept: "Se mantiene", edited: "Corre
 
 export default async function AdminReviews({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
   const { tab = "impugnaciones", q } = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("resenas")).actor;
   const disputes = await listReviewDisputes(actor.id);
   const escalated = disputes.filter((d) => d.status === "escalated").length;
   return (

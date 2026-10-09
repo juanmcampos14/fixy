@@ -1,10 +1,9 @@
 import { ChevronDown } from "lucide-react";
-import { requireStaff } from "@/server/auth/session";
-import { isPlatformAdmin } from "@/server/auth/actor";
+import { requireSection } from "@/server/auth/session";
+import { can } from "@/server/auth/permissions";
 import { getCatalogAdmin } from "@/server/queries/admin";
 import { modeLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { ActionForm, ConfirmAction, SubmitButton } from "@/components/ui/form";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -27,8 +26,8 @@ type Svc = Catalog["services"][number];
 type Q = Catalog["questions"][number];
 
 export default async function CatalogAdmin() {
-  const actor = await requireStaff();
-  const canEdit = isPlatformAdmin(actor);
+  const actor = (await requireSection("catalogo")).actor;
+  const canEdit = can(actor, "catalogo", "manage");
   const c = await getCatalogAdmin(actor.id);
 
   return (
@@ -38,11 +37,6 @@ export default async function CatalogAdmin() {
         title="Catálogo"
         description="Categorías, servicios, preguntas guiadas, credenciales requeridas y zonas de cobertura. Cada cambio queda auditado con su motivo."
       />
-      {!canEdit && (
-        <Alert tone="info" className="mb-5" title="Solo lectura">
-          Tu rol de operación puede consultar el catálogo. Los cambios los hace un administrador de plataforma.
-        </Alert>
-      )}
 
       <div className="space-y-6">
         <Section title="Categorías y servicios" description="Desactivar una categoría o servicio no afecta solicitudes ni trabajos existentes: deja de ofrecerse para nuevos pedidos.">

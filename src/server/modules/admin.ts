@@ -5,12 +5,12 @@
 import { z } from "zod";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isPlatformAdmin } from "@/server/auth/actor";
+import { can, type AdminSection } from "@/server/auth/permissions";
 import { audit } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 
-function assertAdmin(actor: Actor) {
-  if (!isPlatformAdmin(actor)) throw forbidden("Solo un administrador de plataforma puede cambiar esta configuración.");
+function assertManage(actor: Actor, section: AdminSection) {
+  if (!can(actor, section, "manage")) throw forbidden("Tu usuario no tiene permiso para cambiar esta configuración.");
 }
 
 const reasonSchema = z.string().trim().min(5, "Indicá el motivo del cambio (mínimo 5 caracteres).").max(500);
@@ -44,7 +44,7 @@ export const categorySchema = z.object({
 });
 
 export async function saveCategory(actor: Actor, input: z.input<typeof categorySchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   const d = categorySchema.parse(input);
   return systemTx(async (tx) => {
@@ -67,7 +67,7 @@ export async function saveCategory(actor: Actor, input: z.input<typeof categoryS
 }
 
 export async function setCategoryCredentials(actor: Actor, categoryId: string, credentialTypeIds: string[], reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   const ids = z.array(z.string().uuid()).parse(credentialTypeIds);
   return systemTx(async (tx) => {
@@ -109,7 +109,7 @@ export const serviceSchema = z
   .refine((s) => s.pricingMode !== "fixed" || s.scope.length >= 10, { message: "Un precio cerrado requiere describir el alcance (mínimo 10 caracteres).", path: ["scope"] });
 
 export async function saveService(actor: Actor, input: z.input<typeof serviceSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   const d = serviceSchema.parse(input);
   return systemTx(async (tx) => {
@@ -158,7 +158,7 @@ export const questionSchema = z
   .refine((q) => q.kind !== "select" || q.options.length >= 2, { message: "Una pregunta de opciones necesita al menos dos opciones.", path: ["options"] });
 
 export async function saveQuestion(actor: Actor, input: z.input<typeof questionSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   const d = questionSchema.parse(input);
   const options = d.kind === "select" ? d.options : [];
@@ -183,7 +183,7 @@ export async function saveQuestion(actor: Actor, input: z.input<typeof questionS
 
 /** Las respuestas ya guardadas en solicitudes no se pierden: quedan en `answers` con su clave. */
 export async function deleteQuestion(actor: Actor, questionId: string, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   return systemTx(async (tx) => {
     const [q] = await tx<{ category_id: string; key: string }[]>`delete from service_questions where id = ${questionId} returning category_id, key`;
@@ -206,7 +206,7 @@ export const zoneSchema = z.object({
 });
 
 export async function createZone(actor: Actor, input: z.input<typeof zoneSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   const d = zoneSchema.parse(input);
   return systemTx(async (tx) => {
@@ -218,7 +218,7 @@ export async function createZone(actor: Actor, input: z.input<typeof zoneSchema>
 
 /** Desactivar una zona no modifica coberturas existentes: deja de ofrecerse para nuevas solicitudes y altas. */
 export async function setZoneActive(actor: Actor, zoneId: string, active: boolean, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "catalogo");
   const why = cleanReason(reason);
   return systemTx(async (tx) => {
     const [z] = await tx<{ id: string }[]>`update zones set active = ${active} where id = ${zoneId} returning id`;
@@ -250,7 +250,7 @@ export const commissionSchema = z.object({
  * Los presupuestos ya enviados conservan sus tasas (quedan guardadas en cada presupuesto).
  */
 export async function replaceCommissionRule(actor: Actor, input: z.input<typeof commissionSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "comisiones");
   const why = cleanReason(reason);
   const d = commissionSchema.parse(input);
   return systemTx(async (tx) => {
@@ -277,7 +277,7 @@ export async function replaceCommissionRule(actor: Actor, input: z.input<typeof 
 
 /** Quita la regla específica de una categoría: vuelve a aplicarse la regla general. */
 export async function removeCategoryCommissionRule(actor: Actor, categoryId: string, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "comisiones");
   const why = cleanReason(reason);
   return systemTx(async (tx) => {
     const [prev] = await tx<{ id: string }[]>`update commission_rules set active = false where active and category_id = ${categoryId} returning id`;
@@ -294,7 +294,7 @@ export const settingsSchema = z.object({
 });
 
 export async function updatePlatformSettings(actor: Actor, input: z.input<typeof settingsSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "comisiones");
   const why = cleanReason(reason);
   const d = settingsSchema.parse(input);
   return systemTx(async (tx) => {
@@ -334,7 +334,7 @@ export const reviewSettingsSchema = z.object({
  * Cambiar la regla no afecta reseñas ya programadas.
  */
 export async function updateReviewSettings(actor: Actor, input: z.input<typeof reviewSettingsSchema>, reason: string) {
-  assertAdmin(actor);
+  assertManage(actor, "resenas");
   const why = cleanReason(reason);
   const d = reviewSettingsSchema.parse(input);
   return systemTx(async (tx) => {

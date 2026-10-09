@@ -1,4 +1,4 @@
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { listAudit } from "@/server/queries/admin";
 import { PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty";
@@ -13,7 +13,7 @@ const ROLE: Record<string, string> = { admin: "Administración", operator: "Oper
 
 export default async function AuditAdmin({ searchParams }: { searchParams: Promise<{ accion?: string; entidad?: string; pagina?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("auditoria")).actor;
   const page = Math.max(1, Math.min(1000, Number.parseInt(sp.pagina ?? "1", 10) || 1));
   const action = sp.accion?.trim().slice(0, 60) || undefined;
   const entityType = sp.entidad?.trim().slice(0, 40) || undefined;

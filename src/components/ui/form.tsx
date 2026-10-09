@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef, useState } from "react";
+import { createContext, useActionState, useContext, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { LoaderCircle } from "lucide-react";
 import type { ActionState } from "@/lib/action-state";
@@ -8,10 +8,18 @@ import { Alert } from "./alert";
 import { buttonClass } from "./button";
 import { cn } from "@/lib/cn";
 
+/** Modo solo lectura (panel de administración con permiso "solo ve"): deshabilita los botones de acción. */
+const ReadOnlyContext = createContext(false);
+export function ReadOnly({ when, children }: { when: boolean; children: React.ReactNode }) {
+  return <ReadOnlyContext.Provider value={when}>{children}</ReadOnlyContext.Provider>;
+}
+const READ_ONLY_TITLE = "Solo lectura: tu usuario no puede hacer cambios en esta sección.";
+
 export function SubmitButton({ children, pendingText, variant = "primary", size = "md", className, disabled, name, value }: { children: React.ReactNode; pendingText?: string; variant?: "primary" | "secondary" | "danger" | "soft" | "ghost"; size?: "sm" | "md" | "lg"; className?: string; disabled?: boolean; name?: string; value?: string }) {
   const { pending } = useFormStatus();
+  const readOnly = useContext(ReadOnlyContext);
   return (
-    <button type="submit" name={name} value={value} disabled={pending || disabled} aria-disabled={pending || disabled} className={buttonClass(variant, size, className)}>
+    <button type="submit" name={name} value={value} disabled={pending || disabled || readOnly} aria-disabled={pending || disabled || readOnly} title={readOnly ? READ_ONLY_TITLE : undefined} className={buttonClass(variant, size, className)}>
       {pending && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />}
       {pending ? (pendingText ?? "Procesando…") : children}
     </button>
@@ -83,13 +91,14 @@ export function ConfirmAction({
   const uid = useId();
   const [state, formAction] = useActionState(action, {});
   const [open, setOpen] = useState(false);
+  const readOnly = useContext(ReadOnlyContext);
   useEffect(() => {
     // close() dispara onClose, que actualiza `open`.
     if (state.ok) dialog.current?.close();
   }, [state]);
   return (
     <>
-      <button type="button" className={buttonClass(variant, size, className)} onClick={() => { dialog.current?.showModal(); setOpen(true); }}>
+      <button type="button" disabled={readOnly} title={readOnly ? READ_ONLY_TITLE : undefined} className={buttonClass(variant, size, className)} onClick={() => { dialog.current?.showModal(); setOpen(true); }}>
         {label}
       </button>
       <dialog

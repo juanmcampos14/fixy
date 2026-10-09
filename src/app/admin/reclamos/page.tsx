@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { listDisputes } from "@/server/queries/admin";
 import { disputeReasonLabel, disputeResolutionLabel, disputeStatusLabel, jobStatusLabelProvider, payoutStatusLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
@@ -12,7 +12,7 @@ export const metadata = { title: "Reclamos" };
 
 export default async function DisputesAdmin({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("reclamos")).actor;
   const status = sp.estado && disputeStatusLabel[sp.estado] ? sp.estado : undefined;
   const rows = await listDisputes(actor.id, { status });
   return (

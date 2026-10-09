@@ -373,6 +373,7 @@ async function send(s: State, ctx: Ctx): Promise<State> {
       const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
       const id = await submitRequestPayload(actor!, payloadOf(s));
       await attachWhatsAppPhotos(id, { phone: ctx.phone, fileIds: s.photos ?? [] });
+      await sql()`update service_requests set channel = 'whatsapp' where id = ${id}`;
       const [r] = await sql()<{ code: string }[]>`select code from service_requests where id = ${id}`;
       const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
       ctx.out.push({

@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Db } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { notify, staffRecipients } from "@/server/notifications";
@@ -33,7 +33,7 @@ export async function createRevocation(actor: Actor | null, input: z.input<typeo
 }
 
 export async function resolveRevocation(actor: Actor, id: string, resolution: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "arrepentimientos", "manage")) throw forbidden();
   if (resolution.trim().length < 5) throw invalid("Indicá cómo se resolvió.");
   return systemTx(async (tx) => {
     const [r] = await tx<{ status: string }[]>`select status from revocation_requests where id = ${id} for update`;

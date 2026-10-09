@@ -3,9 +3,13 @@
 import { adminMessage, adminResolve } from "@/server/modules/review-disputes";
 
 import { revalidatePath } from "next/cache";
+import { env } from "@/server/env";
 import { act, bool, files, str, strs } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
-import { requirePlatformAdmin, requireStaff } from "@/server/auth/session";
+import { requireSection, requireStaff } from "@/server/auth/session";
+import { ADMIN_SECTIONS } from "@/server/auth/permissions";
+import * as team from "@/server/modules/team";
+import type { Access } from "@/server/modules/team";
 import { invalid } from "@/server/domain/errors";
 import { parseArsToMinor } from "@/server/domain/money";
 import type { JobStatus } from "@/server/domain/state-machines";
@@ -50,7 +54,7 @@ const REVIEW_MESSAGES: Record<ReviewAction, string> = {
 
 export async function reviewProviderAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("proveedores", "manage")).actor;
     const op = str(f, "op") as ReviewAction;
     if (!REVIEW_ACTIONS.includes(op)) throw invalid("Acción inválida.");
     await reviewProvider(actor, str(f, "providerId"), op, str(f, "reason"));
@@ -61,7 +65,7 @@ export async function reviewProviderAction(_: ActionState, f: FormData): Promise
 
 export async function reviewDocumentAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("proveedores", "manage")).actor;
     const decision = str(f, "decision");
     if (decision !== "approved" && decision !== "rejected") throw invalid("Decisión inválida.");
     const expires = str(f, "expiresOn");
@@ -76,7 +80,7 @@ export async function reviewDocumentAction(_: ActionState, f: FormData): Promise
 
 export async function setCategoryAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("solicitudes", "manage")).actor;
     if (!str(f, "categoryId")) throw invalid("Elegí una categoría.");
     const invited = await operatorSetCategory(actor, str(f, "requestId"), str(f, "categoryId"), str(f, "reason"));
     refresh();
@@ -86,7 +90,7 @@ export async function setCategoryAction(_: ActionState, f: FormData): Promise<Ac
 
 export async function runMatchingAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("solicitudes", "manage")).actor;
     if (str(f, "reason").trim().length < 3) throw invalid("Indicá el motivo.");
     const invited = await operatorRunMatching(actor, str(f, "requestId"), str(f, "reason"));
     refresh();
@@ -96,7 +100,7 @@ export async function runMatchingAction(_: ActionState, f: FormData): Promise<Ac
 
 export async function inviteProviderAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("solicitudes", "manage")).actor;
     await operatorInvite(actor, str(f, "requestId"), str(f, "providerId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Invitación enviada." };
@@ -105,7 +109,7 @@ export async function inviteProviderAction(_: ActionState, f: FormData): Promise
 
 export async function cancelRequestAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("solicitudes", "manage")).actor;
     await cancelRequest(actor, str(f, "requestId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Solicitud cancelada." };
@@ -116,7 +120,7 @@ export async function cancelRequestAction(_: ActionState, f: FormData): Promise<
 
 export async function moveJobAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("trabajos", "manage")).actor;
     await operatorMoveJob(actor, str(f, "jobId"), str(f, "to") as JobStatus, str(f, "reason"));
     refresh();
     return { ok: true, message: "Estado actualizado." };
@@ -125,7 +129,7 @@ export async function moveJobAction(_: ActionState, f: FormData): Promise<Action
 
 export async function cancelJobAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("trabajos", "manage")).actor;
     await cancelJob(actor, str(f, "jobId"), str(f, "reason"), { refundAll: bool(f, "refundAll"), asStaff: true });
     refresh();
     return { ok: true, message: "Trabajo cancelado." };
@@ -134,7 +138,7 @@ export async function cancelJobAction(_: ActionState, f: FormData): Promise<Acti
 
 export async function refundChargeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     await refundCharge(actor, { chargeId: str(f, "chargeId"), amountMinor: money(f, "amount", "el importe del reembolso"), reason: str(f, "reason") });
     refresh();
     return { ok: true, message: "Reembolso registrado." };
@@ -145,7 +149,7 @@ export async function refundChargeAction(_: ActionState, f: FormData): Promise<A
 
 export async function replyDisputeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("reclamos", "manage")).actor;
     const [file] = await files(f, "file");
     const internal = bool(f, "internal");
     await replyDispute(actor, str(f, "disputeId"), str(f, "body"), { internal }, file);
@@ -156,7 +160,7 @@ export async function replyDisputeAction(_: ActionState, f: FormData): Promise<A
 
 export async function moveDisputeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("reclamos", "manage")).actor;
     const to = str(f, "to");
     if (to !== "in_review" && to !== "awaiting_response" && to !== "closed") throw invalid("Estado inválido.");
     await moveDispute(actor, str(f, "disputeId"), to, str(f, "reason"));
@@ -167,7 +171,7 @@ export async function moveDisputeAction(_: ActionState, f: FormData): Promise<Ac
 
 export async function resolveDisputeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("reclamos", "manage")).actor;
     const resolution = str(f, "resolution");
     const refundMinor = resolution === "partial_refund" ? money(f, "refund", "el importe a reembolsar") : 0;
     await resolveDispute(actor, str(f, "disputeId"), {
@@ -185,7 +189,7 @@ export async function resolveDisputeAction(_: ActionState, f: FormData): Promise
 
 export async function executePayoutAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     const r = await executePayout(actor, str(f, "payoutId"), str(f, "reason"));
     refresh();
     return r.status === "paid"
@@ -196,7 +200,7 @@ export async function executePayoutAction(_: ActionState, f: FormData): Promise<
 
 export async function payoutHoldAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     const hold = str(f, "hold") === "1";
     await setPayoutHold(actor, str(f, "payoutId"), hold, str(f, "reason"));
     refresh();
@@ -206,7 +210,7 @@ export async function payoutHoldAction(_: ActionState, f: FormData): Promise<Act
 
 export async function resyncChargeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     const r = await resyncCharge(actor, str(f, "chargeId"));
     refresh();
     const msg: Record<string, string> = {
@@ -222,7 +226,7 @@ export async function resyncChargeAction(_: ActionState, f: FormData): Promise<A
 
 export async function manualAdjustmentAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     const [job] = await sql()<{ id: string; provider_id: string }[]>`select id, provider_id from jobs where id = ${str(f, "jobId")}`;
     if (!job) throw invalid("Elegí un trabajo.");
     const amount = money(f, "amount");
@@ -239,7 +243,7 @@ export async function manualAdjustmentAction(_: ActionState, f: FormData): Promi
 
 export async function saveCategoryAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     await admin.saveCategory(
       actor,
       {
@@ -262,7 +266,7 @@ export async function saveCategoryAction(_: ActionState, f: FormData): Promise<A
 
 export async function saveCategoryCredentialsAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     await admin.setCategoryCredentials(actor, str(f, "categoryId"), strs(f, "credentialTypeIds"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Credenciales requeridas actualizadas." };
@@ -271,7 +275,7 @@ export async function saveCategoryCredentialsAction(_: ActionState, f: FormData)
 
 export async function saveServiceAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     await admin.saveService(
       actor,
       {
@@ -297,7 +301,7 @@ export async function saveServiceAction(_: ActionState, f: FormData): Promise<Ac
 
 export async function saveQuestionAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     const options = str(f, "options")
       .split(/\n|,/)
       .map((s) => s.trim())
@@ -323,7 +327,7 @@ export async function saveQuestionAction(_: ActionState, f: FormData): Promise<A
 
 export async function deleteQuestionAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     await admin.deleteQuestion(actor, str(f, "id"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Pregunta eliminada." };
@@ -332,7 +336,7 @@ export async function deleteQuestionAction(_: ActionState, f: FormData): Promise
 
 export async function createZoneAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     await admin.createZone(actor, { code: str(f, "code"), name: str(f, "name"), region: str(f, "region") as "CABA", sort: Number(str(f, "sort") || 0) }, str(f, "reason"));
     refresh();
     return { ok: true, message: "Zona agregada." };
@@ -341,7 +345,7 @@ export async function createZoneAction(_: ActionState, f: FormData): Promise<Act
 
 export async function zoneActiveAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("catalogo", "manage")).actor;
     const active = str(f, "active") === "1";
     await admin.setZoneActive(actor, str(f, "zoneId"), active, str(f, "reason"));
     refresh();
@@ -359,7 +363,7 @@ function pct(f: FormData, key: string, label: string): number {
 
 export async function replaceCommissionAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("comisiones", "manage")).actor;
     const scope = str(f, "categoryId");
     await admin.replaceCommissionRule(
       actor,
@@ -378,7 +382,7 @@ export async function replaceCommissionAction(_: ActionState, f: FormData): Prom
 
 export async function removeCategoryRuleAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("comisiones", "manage")).actor;
     await admin.removeCategoryCommissionRule(actor, str(f, "categoryId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "La categoría vuelve a usar la regla general." };
@@ -387,7 +391,7 @@ export async function removeCategoryRuleAction(_: ActionState, f: FormData): Pro
 
 export async function updateSettingsAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("comisiones", "manage")).actor;
     await admin.updatePlatformSettings(actor, { inviteLimit: str(f, "inviteLimit"), quoteValidDays: str(f, "quoteValidDays") }, str(f, "reason"));
     refresh();
     return { ok: true, message: "Parámetros actualizados." };
@@ -396,7 +400,7 @@ export async function updateSettingsAction(_: ActionState, f: FormData): Promise
 
 export async function releaseWithoutReviewAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     await releasePayoutWithoutReview(actor, str(f, "payoutId"), str(f, "reason"));
     revalidatePath("/admin/finanzas");
     return { ok: true, message: "Liquidación habilitada sin reseña (auditado)." };
@@ -405,7 +409,7 @@ export async function releaseWithoutReviewAction(_: ActionState, f: FormData): P
 
 export async function updateReviewSettingsAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("resenas", "manage")).actor;
     await admin.updateReviewSettings(actor, { delays: str(f, "delays"), jitterHours: str(f, "jitterHours"), reminderDays: str(f, "reminderDays") }, str(f, "reason"));
     refresh();
     return { ok: true, message: "Regla de reseñas actualizada. Aplica a las reseñas nuevas." };
@@ -416,7 +420,7 @@ export async function updateReviewSettingsAction(_: ActionState, f: FormData): P
 
 export async function reviewDisputeMessageAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    await adminMessage(await requireStaff(), str(f, "disputeId"), str(f, "body"));
+    await adminMessage((await requireSection("resenas", "manage")).actor, str(f, "disputeId"), str(f, "body"));
     revalidatePath(`/admin/resenas/${str(f, "disputeId")}`);
     return { ok: true, message: "Mensaje enviado al cliente." };
   });
@@ -424,7 +428,7 @@ export async function reviewDisputeMessageAction(_: ActionState, f: FormData): P
 
 export async function reviewDisputeResolveAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    await adminResolve(await requireStaff(), str(f, "disputeId"), { resolution: str(f, "resolution") as never, note: str(f, "reason"), providerSummary: str(f, "providerSummary") });
+    await adminResolve((await requireSection("resenas", "manage")).actor, str(f, "disputeId"), { resolution: str(f, "resolution") as never, note: str(f, "reason"), providerSummary: str(f, "providerSummary") });
     revalidatePath(`/admin/resenas/${str(f, "disputeId")}`);
     return { ok: true, message: "Impugnación resuelta." };
   });
@@ -432,7 +436,7 @@ export async function reviewDisputeResolveAction(_: ActionState, f: FormData): P
 
 export async function payWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     await markWithdrawalPaid(actor, str(f, "withdrawalId"), str(f, "reason"), { allowEarly: str(f, "early") === "1" });
     refresh();
     return { ok: true, message: "Retiro registrado como transferido." };
@@ -441,7 +445,7 @@ export async function payWithdrawalAction(_: ActionState, f: FormData): Promise<
 
 export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("finanzas", "manage")).actor;
     await rejectWithdrawal(actor, str(f, "withdrawalId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Retiro rechazado. El saldo volvió a estar disponible para el profesional." };
@@ -450,7 +454,7 @@ export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promi
 
 export async function resolveRevocationAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    const actor = await requireStaff();
+    const actor = (await requireSection("arrepentimientos", "manage")).actor;
     await resolveRevocation(actor, str(f, "id"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Pedido marcado como resuelto." };
@@ -459,7 +463,7 @@ export async function resolveRevocationAction(_: ActionState, f: FormData): Prom
 
 export async function createWhatsAppTemplatesAction(): Promise<ActionState> {
   return act(async () => {
-    const actor = await requirePlatformAdmin();
+    const actor = (await requireSection("whatsapp", "manage")).actor;
     const existing = (await listTemplates()) ?? [];
     const results: string[] = [];
     for (const key of Object.keys(WA_TEMPLATES) as WaTemplateKey[]) {
@@ -472,5 +476,48 @@ export async function createWhatsAppTemplatesAction(): Promise<ActionState> {
     revalidatePath("/admin/whatsapp");
     const failed = results.filter((r) => !r.includes("enviada a revisión"));
     return failed.length ? { error: failed.join(" · ") } : { ok: true, message: "Plantillas enviadas a revisión de Meta." };
+  });
+}
+
+// ───────────────────────── Equipo y permisos (solo el dueño) ─────────────────────────
+
+function accessInput(f: FormData): Access {
+  const kind = str(f, "profile");
+  if (kind === "socio" || kind === "operacion") return { kind };
+  const permissions: Record<string, string> = {};
+  for (const s of ADMIN_SECTIONS) permissions[s.key] = str(f, `perm_${s.key}`);
+  return { kind: "custom", permissions };
+}
+
+export async function inviteMemberAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    const r = await team.inviteMember(actor, { email: str(f, "email"), access: accessInput(f) });
+    revalidatePath("/admin/equipo");
+    return { ok: true, message: "Invitación creada. Copiá el link y mandáselo: vence en 7 días.", data: { link: `${env().APP_URL.replace(/\/$/, "")}${r.link}` } };
+  });
+}
+
+export async function updateMemberAccessAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await team.updateMemberAccess(await requireStaff(), str(f, "userId"), accessInput(f));
+    revalidatePath("/admin/equipo");
+    return { ok: true, message: "Permisos actualizados." };
+  });
+}
+
+export async function removeMemberAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await team.removeMember(await requireStaff(), str(f, "userId"));
+    revalidatePath("/admin/equipo");
+    return { ok: true, message: "Acceso quitado." };
+  });
+}
+
+export async function revokeInvitationAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    await team.revokeInvitation(await requireStaff(), str(f, "invitationId"));
+    revalidatePath("/admin/equipo");
+    return { ok: true, message: "Invitación anulada." };
   });
 }

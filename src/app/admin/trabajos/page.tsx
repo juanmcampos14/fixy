@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/server/auth/session";
+import { requireSection } from "@/server/auth/session";
 import { listJobs, providerOptions } from "@/server/queries/admin";
 import { jobStatusLabelProvider, payoutStatusLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ export const metadata = { title: "Trabajos" };
 
 export default async function JobsAdmin({ searchParams }: { searchParams: Promise<{ estado?: string; proveedor?: string; q?: string }> }) {
   const sp = await searchParams;
-  const actor = await requireStaff();
+  const actor = (await requireSection("trabajos")).actor;
   const providers = await providerOptions(actor.id);
   const status = sp.estado && jobStatusLabelProvider[sp.estado] ? sp.estado : undefined;
   const providerId = providers.some((p) => p.id === sp.proveedor) ? sp.proveedor : undefined;

@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
-import { isStaff } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { audit, recordEvent } from "@/server/audit";
 import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { assertTransition, providerMachine, type ProviderStatus } from "@/server/domain/state-machines";
@@ -283,7 +283,7 @@ export async function submitForReview(actor: Actor, providerId: string) {
 export type ReviewAction = "approve" | "observe" | "reject" | "suspend" | "reinstate";
 
 export async function reviewProvider(actor: Actor, providerId: string, action: ReviewAction, note: string) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "proveedores", "manage")) throw forbidden();
   if (!note || note.trim().length < 5) throw invalid("Indicá el motivo o la observación (mínimo 5 caracteres).");
   return systemTx(async (tx) => {
     const [p] = await tx<{ status: ProviderStatus; identity_status: string; payouts_status: string; display_name: string }[]>`
@@ -322,7 +322,7 @@ export async function reviewProvider(actor: Actor, providerId: string, action: R
 }
 
 export async function reviewDocument(actor: Actor, documentId: string, decision: "approved" | "rejected", note: string, expiresOn?: string | null) {
-  if (!isStaff(actor)) throw forbidden();
+  if (!can(actor, "proveedores", "manage")) throw forbidden();
   if (decision === "rejected" && (!note || note.trim().length < 5)) throw invalid("Indicá el motivo del rechazo.");
   return systemTx(async (tx) => {
     const [d] = await tx<{ provider_id: string; kind: string }[]>`select provider_id, kind from provider_documents where id = ${documentId} for update`;

@@ -4,14 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Inbox, House, Building2, Receipt, Bell, Briefcase, Wallet, Star, Users, Store, ClipboardList, Flag, Settings,
-  ScrollText, HandCoins, FileText, UserRound, Search, Wrench,
+  ScrollText, HandCoins, FileText, UserRound, Search, Wrench, ChartColumnIncreasing, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const ICONS = {
   dashboard: LayoutDashboard, inbox: Inbox, house: House, building: Building2, receipt: Receipt, bell: Bell, briefcase: Briefcase,
   wallet: Wallet, star: Star, users: Users, store: Store, clipboard: ClipboardList, flag: Flag, settings: Settings, scroll: ScrollText,
-  coins: HandCoins, file: FileText, user: UserRound, search: Search, wrench: Wrench,
+  coins: HandCoins, file: FileText, user: UserRound, search: Search, wrench: Wrench, chart: ChartColumnIncreasing, message: MessageCircle,
 } as const;
 export type NavIcon = keyof typeof ICONS;
 export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number; exact?: boolean };
