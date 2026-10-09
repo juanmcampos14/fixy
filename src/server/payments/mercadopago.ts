@@ -1,31 +1,117 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/server/env";
-import type { PaymentGateway } from "./gateway";
+import type { GatewayPayment, GatewayPaymentStatus, PaymentGateway } from "./gateway";
 
 /**
- * Adaptador de Mercado Pago — NO ACTIVADO. Esqueleto para la integración real (Split de pagos 1:1,
- * Checkout Pro con marketplace_fee, vinculación OAuth de cada proveedor).
- *
- * Antes de habilitarlo hay que (ver docs/payments.md):
- *  1. Validar el flujo comercial con Mercado Pago (no hay custodia/escrow documentada).
- *  2. Probar en sandbox con cuentas de prueba (vendedor, comprador, integrador).
- *  3. Implementar OAuth del proveedor y guardar sus tokens cifrados fuera de la tabla providers.
- * Solo la verificación de firma de webhooks está implementada según la documentación oficial.
+ * Mercado Pago — Checkout Pro (API de Preferences), cobrando en la cuenta de FLIPS S.R.L.
+ * - El cliente paga en la página de Mercado Pago; los datos de tarjeta nunca pasan por Fixy.
+ * - El pago se confirma SOLO con el webhook firmado + consulta verificada a /v1/payments/{id} (nunca por la vuelta del navegador).
+ * - MERCADOPAGO_MODE=test usa MERCADOPAGO_TEST_ACCESS_TOKEN (sin dinero real); "live" usa MERCADOPAGO_ACCESS_TOKEN.
+ * - A los profesionales se les paga por retiros mensuales (transferencia registrada por la operación), no por la pasarela.
  */
-function notImplemented(): never {
-  throw new Error(
-    "La integración real con Mercado Pago no está activada. Usá PAYMENTS_GATEWAY=mock o completá los pasos de docs/payments.md.",
-  );
+const API = "https://api.mercadopago.com";
+
+export const mpIsTest = () => env().MERCADOPAGO_MODE !== "live";
+
+function token() {
+  const e = env();
+  const t = mpIsTest() ? e.MERCADOPAGO_TEST_ACCESS_TOKEN : e.MERCADOPAGO_ACCESS_TOKEN;
+  if (!t) throw new Error(`Falta ${mpIsTest() ? "MERCADOPAGO_TEST_ACCESS_TOKEN" : "MERCADOPAGO_ACCESS_TOKEN"}`);
+  return t;
+}
+
+async function mp<T>(path: string, init: { method?: string; body?: unknown; idempotencyKey?: string } = {}): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/json",
+      ...(init.idempotencyKey ? { "X-Idempotency-Key": init.idempotencyKey } : {}),
+    },
+    body: init.body ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(15000),
+  });
+  const json = (await res.json().catch(() => ({}))) as T & { message?: string; error?: string };
+  if (!res.ok) throw new Error(`Mercado Pago ${res.status}: ${(json.message ?? json.error ?? "error").toString().slice(0, 200)}`);
+  return json;
+}
+
+const toMinor = (n: number) => Math.round(Number(n) * 100);
+const toPesos = (minor: number) => Math.round(minor) / 100;
+
+function mapStatus(p: { status: string; status_detail?: string; transaction_amount_refunded?: number }): GatewayPaymentStatus {
+  switch (p.status) {
+    case "approved":
+      return (p.transaction_amount_refunded ?? 0) > 0 || p.status_detail === "partially_refunded" ? "partially_refunded" : "approved";
+    case "refunded":
+      return "refunded";
+    case "rejected":
+    case "cancelled":
+      return "rejected";
+    default:
+      // pending, in_process, authorized, in_mediation, charged_back: no cambian el estado aprobado ya registrado.
+      return "pending";
+  }
 }
 
 export const mercadoPagoGateway: PaymentGateway = {
   name: "mercadopago",
-  isTest: false,
-  createCheckout: async () => notImplemented(),
-  getPayment: async () => notImplemented(),
-  refund: async () => notImplemented(),
-  createPayoutAccount: async () => notImplemented(),
-  transfer: async () => notImplemented(),
+  get isTest() {
+    return mpIsTest();
+  },
+
+  async createCheckout(_db, req) {
+    const base = env().APP_URL.replace(/\/$/, "");
+    const back = `${base}/pagos/retorno`;
+    const pref = await mp<{ id: string; init_point: string; sandbox_init_point?: string }>("/checkout/preferences", {
+      method: "POST",
+      idempotencyKey: req.idempotencyKey,
+      body: {
+        items: [{ id: req.externalReference, title: req.description.slice(0, 250), quantity: 1, currency_id: req.currency, unit_price: toPesos(req.amountMinor) }],
+        external_reference: req.externalReference,
+        back_urls: { success: back, pending: back, failure: back },
+        auto_return: "approved",
+        statement_descriptor: "FIXY",
+        // Sin efectivo ni cajeros: la visita se confirma con el pago y esos medios tardan días en acreditarse.
+        payment_methods: { excluded_payment_types: [{ id: "ticket" }, { id: "atm" }] },
+        expires: true,
+        expiration_date_to: new Date(Date.now() + 48 * 3600_000).toISOString(),
+      },
+    });
+    return { checkoutUrl: mpIsTest() && pref.sandbox_init_point ? pref.sandbox_init_point : pref.init_point };
+  },
+
+  async getPayment(_db, paymentId): Promise<GatewayPayment | null> {
+    if (!/^\d{3,25}$/.test(paymentId)) return null;
+    try {
+      const p = await mp<{ id: number; external_reference: string | null; transaction_amount: number; currency_id: string; status: string; status_detail?: string; transaction_amount_refunded?: number }>(`/v1/payments/${paymentId}`);
+      if (!p.external_reference) return null;
+      return {
+        id: String(p.id),
+        externalReference: p.external_reference,
+        amountMinor: toMinor(p.transaction_amount),
+        currency: p.currency_id,
+        status: mapStatus(p),
+        refundedMinor: toMinor(p.transaction_amount_refunded ?? 0),
+      };
+    } catch (e) {
+      if (e instanceof Error && /Mercado Pago 404/.test(e.message)) return null;
+      throw e;
+    }
+  },
+
+  async refund(_db, paymentId, amountMinor, idempotencyKey) {
+    const r = await mp<{ id: number }>(`/v1/payments/${paymentId}/refunds`, { method: "POST", idempotencyKey, body: { amount: toPesos(amountMinor) } });
+    return { refundId: String(r.id) };
+  },
+
+  // Con retiros mensuales Fixy transfiere a la cuenta bancaria del profesional: no hay cuentas de cobro en la pasarela.
+  async createPayoutAccount() {
+    throw new Error("Con Mercado Pago, los profesionales cargan sus datos bancarios y cobran por retiros mensuales.");
+  },
+  async transfer() {
+    throw new Error("Los retiros se transfieren por banco y se registran desde Finanzas → Retiros.");
+  },
 
   /**
    * Firma documentada por Mercado Pago: header x-signature "ts=...,v1=..." y HMAC-SHA256 del

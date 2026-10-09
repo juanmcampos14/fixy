@@ -94,3 +94,13 @@ Paneles: cliente (acordado, pagado, saldo, movimientos, comprobantes, reembolsos
 - **Custodia de fondos:** con este modelo Fixy recibe el pago del cliente y transfiere al profesional después. Hay que validar con asesoría legal/contable el encuadre (BCRA/PSP, facturación por cuenta y orden, retenciones impositivas) y, si corresponde, operar con una cuenta recaudadora o un proveedor de pagos que lo permita.
 - Con el Split 1:1 de Mercado Pago el dinero va directo al vendedor y MP le descuenta su costo: eso **no es compatible** con "0 % al profesional" ni con los retiros mensuales. Alternativas: cobrar en la cuenta de Fixy y transferir (modelo actual) o absorber el costo de MP en el cargo al cliente.
 - Encriptar CBU/alias en reposo y verificar titularidad (CUIT del titular = CUIT del profesional) antes de la primera transferencia.
+
+## Mercado Pago — Checkout Pro (implementado)
+- Cobra en la cuenta de FLIPS S.R.L. con la API de Preferences: `src/server/payments/mercadopago.ts`.
+- `PAYMENTS_GATEWAY=mercadopago` activa la pasarela; `MERCADOPAGO_MODE=test` usa `MERCADOPAGO_TEST_ACCESS_TOKEN` (sin dinero real) y `live` usa `MERCADOPAGO_ACCESS_TOKEN`.
+- Confirmación: webhook firmado (`x-signature`, `MERCADOPAGO_WEBHOOK_SECRET`) en `/api/webhooks/payments/mercadopago` + consulta a `/v1/payments/{id}`; además, la vuelta `/pagos/retorno` fuerza la misma consulta verificada. Nunca se acredita por la vuelta del navegador.
+- Solo se procesan avisos de tipo `payment`; el resto se ignora con 200. En el panel de Mercado Pago, suscribir únicamente "Pagos".
+- Sin efectivo ni cajeros (tardan días en acreditarse); la preferencia vence a las 48 h.
+- Reintegros: `POST /v1/payments/{id}/refunds` con clave de idempotencia.
+- Profesionales: cobran por retiros mensuales a su cuenta bancaria (no se usan cuentas de la pasarela).
+- Pendiente: contracargos y reclamos (retener el saldo del profesional), conciliación diaria contra Mercado Pago.

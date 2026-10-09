@@ -13,6 +13,9 @@ const schema = z.object({
   PAYMENTS_GATEWAY: z.enum(["mock", "mercadopago"]).default("mock"),
   MOCK_WEBHOOK_SECRET: z.string().min(16),
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional().default(""),
+  MERCADOPAGO_TEST_ACCESS_TOKEN: z.string().optional().default(""),
+  // "test": cobros con credenciales de prueba (sin dinero real). "live": cobros reales.
+  MERCADOPAGO_MODE: z.enum(["test", "live"]).default("test"),
   MERCADOPAGO_WEBHOOK_SECRET: z.string().optional().default(""),
   EMAIL_ADAPTER: z.enum(["console", "resend"]).default("console"),
   RESEND_API_KEY: z.string().optional().default(""),
@@ -65,5 +68,5 @@ export function demoLoginEnabled(): boolean {
 }
 
 export function paymentsAreTestMode(): boolean {
-  return env().PAYMENTS_GATEWAY === "mock";
+  return env().PAYMENTS_GATEWAY === "mock" || env().MERCADOPAGO_MODE !== "live";
 }

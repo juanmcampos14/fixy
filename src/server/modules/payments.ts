@@ -185,6 +185,8 @@ export async function processPaymentWebhook(gatewayName: GatewayName, rawBody: s
   } catch {
     return "rejected";
   }
+  // Mercado Pago también avisa otros temas (órdenes, reclamos…): solo procesamos pagos.
+  if (gatewayName === "mercadopago" && payload.type && payload.type !== "payment") return "ignored_stale";
   const eventId = String(payload.id ?? headers.get("x-request-id") ?? "");
   const paymentId = payload.data?.id ? String(payload.data.id) : null;
   if (!eventId) return "rejected";
