@@ -1,11 +1,12 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { matchZone, type AddressComponent, type MatchZone } from "@/lib/zone-match";
+import type { AddressComponent } from "@/lib/zone-match";
+import { componentsToAddress as coreToAddress, type AddressValue } from "@/lib/address";
 import { loadGoogleMaps, MAPS_KEY } from "./google-maps";
 
 export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[] };
-export type AddressValue = { addressLine: string; zoneId: string; lat: string; lng: string; placeId: string; formattedAddress: string };
+export type { AddressValue };
 export type Located = { value: AddressValue; zone: ZoneOption | null; outside: boolean };
 export type LocateError = "denied" | "unavailable" | "unsupported" | "geocode";
 
@@ -21,15 +22,8 @@ export const canLocate = () => !!MAPS_KEY && typeof navigator !== "undefined" &&
 
 /** Componentes de Google → dirección + zona. Fuera de las zonas cubiertas asigna "Otra zona" (nunca rechaza). */
 export function componentsToAddress(components: AddressComponent[], formatted: string, lat: number, lng: number, placeId: string, zones: ZoneOption[], streetLine?: string): Located {
-  const zone = (matchZone(components, zones as MatchZone[]) as ZoneOption | null) ?? zones.find((z) => z.code === "otra-zona") ?? null;
-  const route = components.find((c) => c.types.includes("route"));
-  const number = components.find((c) => c.types.includes("street_number"));
-  const line = streetLine ?? ([route?.long_name ?? route?.longText, number?.long_name ?? number?.longText].filter(Boolean).join(" ") || formatted.split(",")[0]);
-  return {
-    value: { addressLine: line, formattedAddress: formatted, lat: lat.toFixed(6), lng: lng.toFixed(6), placeId, zoneId: zone?.id ?? "" },
-    zone,
-    outside: !zone || zone.code === "otra-zona",
-  };
+  const { value, zone, outside } = coreToAddress(components, formatted, lat, lng, placeId, zones, streetLine);
+  return { value, zone, outside };
 }
 
 /**

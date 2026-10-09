@@ -17,7 +17,5 @@ El pedido es una conversación de **4 mensajes**. La web (`src/app/solicitar/cha
 - **Sin cuenta** se guarda el borrador y se pide crear la cuenta; al volver, el pedido se retoma en el paso 4. En WhatsApp la identidad es el número de teléfono (pendiente: alta por WhatsApp con verificación).
 - **Privacidad.** La dirección solo se comparte con el profesional cuando se confirma la visita; los mensajes ocultan teléfonos y datos de pago.
 
-## Pendiente para WhatsApp
-- Número de WhatsApp Business y app de Meta (Cloud API), webhook `/api/whatsapp` con verificación de firma.
-- Plantillas aprobadas para avisos fuera de la ventana de 24 h (profesional aceptó, visita confirmada, recordatorio de reseña).
-- Vincular el número a la cuenta (código por SMS/WhatsApp) antes de crear pedidos.
+## WhatsApp
+Implementado en `src/server/whatsapp/`, `src/app/api/whatsapp/` y `src/app/wa/[token]/`. Configuración y pendientes en `docs/whatsapp.md`.

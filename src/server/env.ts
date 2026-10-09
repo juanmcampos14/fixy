@@ -26,6 +26,15 @@ const schema = z.object({
     .optional()
     .transform((v) => v === "true"),
   CRON_SECRET: z.string().min(16).default("change-me-cron-secret-000000000000"),
+  // WhatsApp Cloud API (Meta). Sin token/ID, los mensajes salientes se registran sin enviarse (modo simulado).
+  WHATSAPP_ACCESS_TOKEN: z.string().optional().default(""),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
+  WHATSAPP_APP_SECRET: z.string().optional().default(""),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional().default(""),
+  WHATSAPP_API_VERSION: z.string().default("v23.0"),
+  WHATSAPP_DISPLAY_NUMBER: z.string().optional().default(""),
+  // Clave de Google para geocodificar en el servidor (la del navegador está restringida al sitio).
+  GOOGLE_MAPS_SERVER_KEY: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

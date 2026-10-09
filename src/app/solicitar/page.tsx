@@ -6,11 +6,12 @@ import { listCategories, listZones } from "@/server/modules/catalog";
 import { claimDraft, DRAFT_COOKIE } from "@/server/modules/requests";
 import { PublicHeader } from "@/components/layout/public-header";
 import { ChatRequest } from "./chat-request";
+import { Alert } from "@/components/ui/alert";
 import type { RequestPayload } from "./actions";
 
 export const metadata: Metadata = { title: "Pedí un profesional" };
 
-export default async function SolicitarPage({ searchParams }: { searchParams: Promise<{ q?: string; categoria?: string; proveedor?: string; borrador?: string; antecedente?: string }> }) {
+export default async function SolicitarPage({ searchParams }: { searchParams: Promise<{ q?: string; categoria?: string; proveedor?: string; borrador?: string; antecedente?: string; aviso?: string }> }) {
   const sp = await searchParams;
   const db = sql();
   const actor = await getActor();
@@ -49,6 +50,7 @@ export default async function SolicitarPage({ searchParams }: { searchParams: Pr
     <>
       <PublicHeader />
       <main id="contenido" className="min-h-dvh bg-cream px-4 pb-24 pt-6 sm:px-6 sm:pt-10">
+        {sp.aviso && <Alert tone="warn" className="mx-auto mb-6 max-w-2xl">{sp.aviso.slice(0, 200)}</Alert>}
         <ChatRequest
           loggedIn={!!actor}
           categories={categories}
