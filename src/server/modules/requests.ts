@@ -1,4 +1,5 @@
 /** Solicitudes, borradores anónimos, matching e invitaciones. */
+import { maskContactInfo } from "@/server/domain/contact-guard";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
@@ -304,7 +305,7 @@ export async function createRequest(actor: Actor, input: RequestInput, photos: {
     const [req] = await tx<{ id: string; code: string }[]>`
       insert into service_requests (created_by, organization_id, responsible_user_id, property_id, category_id, service_id, title, description,
         answers, urgency, preferred_windows, status, needs_review, review_reason, safety_flag, target_provider_id, previous_job_id, request_mode)
-      values (${actor.id}, ${orgId}, ${responsible}, ${d.propertyId}, ${categoryId}, ${serviceId}, ${d.title}, ${d.description},
+      values (${actor.id}, ${orgId}, ${responsible}, ${d.propertyId}, ${categoryId}, ${serviceId}, ${maskContactInfo(d.title).text}, ${maskContactInfo(d.description).text},
         ${tx.json(d.answers as never)}, ${d.urgency}, ${tx.json(d.preferredWindows as never)}, 'draft',
         ${requiresReview}, ${reviewReason}, ${triage.safety?.level !== "none" ? triage.safety?.level ?? null : null},
         ${d.targetProviderId ?? null}, ${d.previousJobId ?? null}, ${d.targetProviderId ? "direct" : "quotes"})
@@ -534,7 +535,8 @@ export async function addRequestDetails(actor: Actor, requestId: string, text: s
     const [r] = await tx<{ status: string; description: string; code: string }[]>`select status, description, code from service_requests where id = ${requestId} for update`;
     if (r.status === "cancelled") throw invalid("Ese pedido está cancelado.");
     const stamp = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
-    const next = `${r.description}\n\nAgregado por el cliente (${stamp}): ${note}`;
+    // Lo ven los profesionales invitados antes de confirmar la visita: sin teléfonos, emails ni links.
+    const next = `${r.description}\n\nAgregado por el cliente (${stamp}): ${maskContactInfo(note).text}`;
     if (next.length > 4000) throw invalid("El pedido ya tiene mucha información. Escribile al profesional por el chat del pedido.");
     await tx`update service_requests set description = ${next} where id = ${requestId}`;
     await recordEvent(tx, { entityType: "request", entityId: requestId, action: "details_added", actorId: actor.id });

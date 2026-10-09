@@ -1,5 +1,6 @@
 "use server";
 
+import { rateLimit } from "@/server/rate-limit";
 import { clientDecide, clientReply } from "@/server/modules/review-disputes";
 
 import { revalidatePath } from "next/cache";
@@ -236,7 +237,9 @@ export async function saveGatedRulesAction(_: ActionState, f: FormData): Promise
   return act(async () => {
     const propertyId = str(f, "propertyId");
     const [file] = await files(f, "rulesFile");
-    const res = await props.saveGatedRules(await requireActor(), propertyId, { url: str(f, "url"), text: str(f, "text"), notes: str(f, "notes") }, file ?? null);
+    const gatedActor = await requireActor();
+    await rateLimit(`gated-rules:${gatedActor.id}`, 10, 3600); // cada análisis usa la IA
+    const res = await props.saveGatedRules(gatedActor, propertyId, { url: str(f, "url"), text: str(f, "text"), notes: str(f, "notes") }, file ?? null);
     revalidatePath(`/app/propiedades/${propertyId}`);
     return res.interpreted
       ? { ok: true, message: `Listo: encontramos ${res.requirements.requirements.length} requisito${res.requirements.requirements.length === 1 ? "" : "s"}. Revisalos abajo.` }

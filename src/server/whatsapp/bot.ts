@@ -22,6 +22,7 @@ import { classifyIntent } from "./intent";
 import { addRequestDetails, notifyRequestUpdate } from "@/server/modules/requests";
 import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
+import { SUPPORT_EMAIL } from "@/lib/contact";
 
 export type Inbound = {
   id: string;
@@ -132,7 +133,11 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     return { step: "problem" };
   }
   if (/^(ayuda|menu|menú)$/.test(t)) {
-    ctx.out.push({ kind: "text", text: "Te ayudo a conseguir un profesional para tu casa u oficina. Contame el problema en una oración. Escribí *cambiar* si el oficio no es el correcto, o *cancelar* para empezar de nuevo." });
+    ctx.out.push({ kind: "text", text: `Te ayudo a conseguir un profesional para tu casa u oficina. Contame el problema en una oración. Escribí *cambiar* si el oficio no es el correcto, o *cancelar* para empezar de nuevo.\n\nSi preferís hablar con una persona del equipo, escribinos a ${SUPPORT_EMAIL}.` });
+    return s;
+  }
+  if (wantsHuman(t)) {
+    ctx.out.push({ kind: "text", text: `Para hablar con una persona del equipo de Fixy, escribinos a ${SUPPORT_EMAIL} y te respondemos por mail. Si querés, mientras tanto sigo ayudándote por acá con tu pedido.` });
     return s;
   }
   // Pedidos existentes (solo con número vinculado a una cuenta)
@@ -472,9 +477,25 @@ async function allZones(): Promise<Zone[]> {
   return sql()<Zone[]>`select id, code, name, region, match_names from zones where active order by sort, name`;
 }
 
+/** Pide hablar con una persona: la atención humana es por mail. */
+export function wantsHuman(t: string): boolean {
+  return /\b(humano|una persona|persona real|representante|asesor|operador|atencion al cliente|hablar con alguien|alguien del equipo)\b/.test(t);
+}
+
 // ───────────────────────── Vinculación desde el link ─────────────────────────
 
-/** Valida el link (7 días, un solo uso) y vincula el número a la cuenta. Devuelve el pedido guardado. */
+/** Datos para la pantalla de confirmación: solo los últimos dígitos del número, nunca el pedido. */
+export async function peekWhatsAppLink(token: string): Promise<{ phoneTail: string; usedBy: string | null } | null> {
+  const [l] = await sql()<{ phone: string; used_by: string | null }[]>`
+    select phone, used_by from whatsapp_links where token_hash = ${hash(token)} and created_at > now() - interval '7 days'`;
+  return l ? { phoneTail: l.phone.slice(-4), usedBy: l.used_by } : null;
+}
+
+/**
+ * Valida el link (7 días, un solo uso) y vincula el número a la cuenta. Devuelve el pedido guardado.
+ * Se llama solo desde una acción con confirmación explícita (nunca desde un GET), y nunca reemplaza
+ * un WhatsApp ya vinculado a la cuenta: así nadie puede atar su teléfono a la cuenta de otra persona.
+ */
 export async function consumeWhatsAppLink(token: string, userId: string): Promise<{ data: RequestPayload; phone: string } | { error: string }> {
   return systemTx(async (tx) => {
     const [l] = await tx<{ id: string; phone: string; data: RequestPayload; used_by: string | null }[]>`
@@ -482,9 +503,10 @@ export async function consumeWhatsAppLink(token: string, userId: string): Promis
     if (!l) return { error: "El link venció o no es válido. Escribinos de nuevo por WhatsApp." };
     if (l.used_by && l.used_by !== userId) return { error: "Este link ya se usó con otra cuenta." };
     const [owner] = await tx<{ id: string }[]>`select id from users where whatsapp_phone = ${l.phone} and id <> ${userId}`;
-    if (!owner) {
-      await tx`update users set whatsapp_phone = ${l.phone}, whatsapp_linked_at = now() where id = ${userId}`;
-    }
+    if (owner) return { error: "Ese WhatsApp ya está vinculado a otra cuenta de Fixy." };
+    const [me] = await tx<{ whatsapp_phone: string | null }[]>`select whatsapp_phone from users where id = ${userId} for update`;
+    if (me?.whatsapp_phone && me.whatsapp_phone !== l.phone) return { error: "Tu cuenta ya tiene otro WhatsApp vinculado. Escribinos desde ese número." };
+    await tx`update users set whatsapp_phone = ${l.phone}, whatsapp_linked_at = coalesce(whatsapp_linked_at, now()) where id = ${userId}`;
     await tx`update whatsapp_links set used_at = coalesce(used_at, now()), used_by = ${userId} where id = ${l.id}`;
     // Las fotos que mandó por WhatsApp quedan reservadas para el pedido que termine en la web.
     await tx`update whatsapp_media set claimed_by = ${userId} where phone = ${l.phone} and request_id is null and created_at > now() - interval '7 days'`;

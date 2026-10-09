@@ -11,7 +11,8 @@ export async function sendMessageAction(_: ActionState, f: FormData): Promise<Ac
     const actor = await requireActor();
     const [file] = await files(f, "file");
     await sendMessage(actor, str(f, "conversationId"), str(f, "body"), file);
-    revalidatePath(str(f, "path") || "/");
+    const path = str(f, "path");
+    revalidatePath(/^\/(app|proveedor|admin)(\/[\w-]+)*$/.test(path) ? path : "/");
     return { ok: true };
   });
 }

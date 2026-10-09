@@ -55,6 +55,9 @@ export async function requestPasswordReset(email: string) {
   await systemTx(async (tx) => {
     const [u] = await tx<{ id: string }[]>`select id from users where lower(email) = ${normalized} and disabled_at is null`;
     if (!u) return;
+    // Hasta 3 enlaces por hora por cuenta: evita llenarle la casilla a alguien.
+    const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from password_resets where user_id = ${u.id} and created_at > now() - interval '1 hour'`;
+    if (n >= 3) return;
     const token = randomBytes(32).toString("base64url");
     await tx`insert into password_resets (token_hash, user_id, expires_at) values (${hashToken(token)}, ${u.id}, now() + interval '1 hour')`;
     await tx`insert into outbox (channel, recipient_user_id, payload) values ('email', ${u.id}, ${tx.json({
@@ -73,6 +76,7 @@ export async function resetPassword(token: string, newPassword: string) {
       update password_resets set used_at = now() where token_hash = ${hashToken(token)} and used_at is null and expires_at > now() returning user_id`;
     if (!r) throw new DomainError("expired", "El enlace venció o ya fue usado. Pedí uno nuevo.");
     await tx`update users set password_hash = ${hash} where id = ${r.user_id}`;
+    await tx`update password_resets set used_at = now() where user_id = ${r.user_id} and used_at is null`; // anula otros enlaces
     await tx`delete from sessions where user_id = ${r.user_id}`; // cierra sesiones abiertas
     await tx`insert into audit_log (actor_id, action, entity_type, entity_id) values (${r.user_id}, 'user.password_reset', 'user', ${r.user_id})`;
   });
@@ -99,7 +103,12 @@ export async function signInWithGoogle(g: { sub: string; email: string; emailVer
     if (byEmail) {
       if (byEmail.disabled_at) throw new DomainError("forbidden", "Tu cuenta está deshabilitada. Escribinos para revisarla.");
       if (byEmail.google_sub && byEmail.google_sub !== g.sub) throw conflict("Ese email ya está vinculado a otra cuenta de Google.");
-      await tx`update users set google_sub = ${g.sub} where id = ${byEmail.id}`;
+      // El registro con email no verifica la casilla: alguien pudo crear la cuenta con un email ajeno y una contraseña suya.
+      // Google sí prueba que el email es de esta persona, así que al vincular se anulan la contraseña y las sesiones abiertas
+      // (si la contraseña era suya, la recupera con "Olvidé mi contraseña").
+      await tx`update users set google_sub = ${g.sub}, password_hash = null where id = ${byEmail.id}`;
+      await tx`delete from sessions where user_id = ${byEmail.id}`;
+      await tx`update password_resets set used_at = now() where user_id = ${byEmail.id} and used_at is null`;
       await audit(tx, null, "user.google_linked", "user", byEmail.id, null);
       return { userId: byEmail.id, created: false };
     }

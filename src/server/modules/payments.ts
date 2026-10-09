@@ -194,6 +194,11 @@ export async function processPaymentWebhook(gatewayName: GatewayName, rawBody: s
   const paymentId = payload.data?.id ? String(payload.data.id) : null;
   if (!eventId) return "rejected";
 
+  // Sin firma válida no se guarda nada: un evento falso no puede "ocupar" el id del aviso real.
+  if (!signatureValid) {
+    console.warn(`[payments] webhook ${gatewayName} con firma inválida descartado`);
+    return "rejected";
+  }
   return systemTx(async (tx) => {
     const inserted = await tx<{ id: string }[]>`
       insert into payment_events (gateway, external_event_id, event_type, external_payment_id, signature_valid, payload, attempts)
@@ -210,7 +215,6 @@ export async function processPaymentWebhook(gatewayName: GatewayName, rawBody: s
       await tx`update payment_events set processed_at = now(), result = ${result}, error = ${error ?? null} where id = ${ev.id}`;
       return result;
     };
-    if (!signatureValid) return finish("rejected", "firma inválida");
     if (!paymentId) return finish("rejected", "sin id de pago");
     const res = await syncPaymentFromGateway(tx, gatewayName, paymentId);
     return finish(res.result, res.error);
@@ -236,10 +240,18 @@ export async function syncPaymentFromGateway(
     });
     return { result: "rejected", error: "monto o moneda no coinciden", chargeId: charge.id };
   }
+  const target = mapGatewayStatus(payment.status);
+  // Un pago aprobado que ya no tiene a qué aplicarse (pagó dos veces, pagó un link viejo, reintentó con otra tarjeta
+  // después del rechazo, o el trabajo se canceló) queda registrado para que la operación lo devuelva.
+  if (target === "approved" && ((charge.external_payment_id && charge.external_payment_id !== payment.id) || charge.status === "failed")) {
+    await audit(tx, null, "payment.orphan_approved", "charge", charge.id, "Pago aprobado sin cobro pendiente: hay que devolverlo", {
+      paymentId: payment.id, amountMinor: payment.amountMinor, chargeStatus: charge.status,
+    });
+    return { result: "rejected", error: "pago aprobado sin cobro pendiente: devolver", chargeId: charge.id };
+  }
   if (charge.external_payment_id && charge.external_payment_id !== payment.id) {
     return { result: "rejected", error: "id de pago distinto al registrado", chargeId: charge.id };
   }
-  const target = mapGatewayStatus(payment.status);
   // Los reembolsos los inicia la plataforma y se registran en refundCharge; acá solo cobro aprobado/fallido.
   if (target === "refunded" || target === "partially_refunded") return { result: "ignored_stale", chargeId: charge.id };
   if (CHARGE_RANK[target] <= charge.status_rank || charge.status === target) {
@@ -355,11 +367,11 @@ export async function refundChargeTx(
   const [existing] = await tx<{ id: string }[]>`select id from refunds where idempotency_key = ${idem}`;
   if (existing) return existing.id;
 
-  const gw = gatewayByName(c.gateway);
-  const { refundId: externalRefundId } = await gw.refund(tx, c.external_payment_id, input.amountMinor, idem);
+  // Primero se registra todo en Fixy y recién al final se pide la devolución a la pasarela: si algo falla
+  // en la base, no sale dinero; si falla la pasarela, se deshace todo lo registrado.
   const [refund] = await tx<{ id: string }[]>`
     insert into refunds (charge_id, amount_minor, status, reason, dispute_id, external_refund_id, idempotency_key, requested_by, processed_at)
-    values (${c.id}, ${input.amountMinor}, 'approved', ${input.reason}, ${input.disputeId ?? null}, ${externalRefundId}, ${idem}, ${actor.id}, now())
+    values (${c.id}, ${input.amountMinor}, 'approved', ${input.reason}, ${input.disputeId ?? null}, null, ${idem}, ${actor.id}, now())
     returning id`;
   const refunded = c.refunded_minor + input.amountMinor;
   const newStatus: ChargeStatus = refunded === c.amount_minor ? "refunded" : "partially_refunded";
@@ -380,7 +392,7 @@ export async function refundChargeTx(
       refundId: refund.id,
       providerId: job.provider_id,
       isTest: c.is_test,
-      externalRef: externalRefundId,
+      externalRef: idem,
       reason: `Reembolso: ${input.reason}`,
       actorId: actor.id,
     },
@@ -391,12 +403,21 @@ export async function refundChargeTx(
     select id, status, adjustments_minor, amount_minor from payouts where job_id = ${c.job_id} and kind = 'job' for update`;
   if (payout && ["pending", "scheduled", "failed"].includes(payout.status)) {
     const adj = payout.adjustments_minor - providerPartMinor;
-    await tx`update payouts set adjustments_minor = ${adj}, amount_minor = gross_minor - fee_minor + ${adj} where id = ${payout.id}`;
-    await recordEvent(tx, { entityType: "payout", entityId: payout.id, action: "adjusted_by_refund", actorId: actor.id, reason: input.reason, data: { providerPartMinor } });
+    // La liquidación no puede quedar negativa (costos de cobro + recomendación + reembolso total): lo que falte se recupera aparte.
+    const [{ amount, shortfall }] = await tx<{ amount: number; shortfall: number }[]>`
+      update payouts set adjustments_minor = ${adj}, amount_minor = greatest(0, gross_minor - fee_minor + ${adj}) where id = ${payout.id}
+      returning amount_minor as amount, greatest(0, -(gross_minor - fee_minor + ${adj}))::bigint as shortfall`;
+    await recordEvent(tx, { entityType: "payout", entityId: payout.id, action: "adjusted_by_refund", actorId: actor.id, reason: input.reason, data: { providerPartMinor, amount } });
+    if (Number(shortfall) > 0) await audit(tx, actor, "payout.refund_shortfall", "payout", payout.id, "El reembolso supera lo pendiente de liquidar: requiere recupero", { shortfallMinor: Number(shortfall) });
   } else if (payout && payout.status === "paid") {
     await audit(tx, actor, "payout.refund_after_paid", "payout", payout.id, "Reembolso posterior a la liquidación: requiere recupero", { providerPartMinor });
   }
+  const [referral] = await tx<{ id: string; status: string }[]>`select id, status from payouts where job_id = ${c.job_id} and kind = 'referral'`;
+  if (referral) await audit(tx, actor, "payout.referral_review", "payout", referral.id, "Reembolso en un trabajo con recomendación: revisar la parte del colega", { providerPartMinor, status: referral.status });
 
+  const gw = gatewayByName(c.gateway);
+  const { refundId: gatewayRefundId } = await gw.refund(tx, c.external_payment_id, input.amountMinor, idem);
+  await tx`update refunds set external_refund_id = ${gatewayRefundId} where id = ${refund.id}`;
   await recordEvent(tx, { entityType: "charge", entityId: c.id, action: "refund", from: c.status, to: newStatus, actorId: actor.id, actorRole: actor.platformRole, reason: input.reason, data: { amountMinor: input.amountMinor } });
   await audit(tx, actor, "charge.refund", "charge", c.id, input.reason, { amountMinor: input.amountMinor, refundId: refund.id });
   await notify(tx, await clientRecipients(tx, job.request_id), {

@@ -139,7 +139,10 @@ export async function cancelJobAction(_: ActionState, f: FormData): Promise<Acti
 export async function refundChargeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
-    await refundCharge(actor, { chargeId: str(f, "chargeId"), amountMinor: money(f, "amount", "el importe del reembolso"), reason: str(f, "reason") });
+    // Una clave por formulario: un doble clic no genera dos reembolsos.
+    const key = str(f, "refundKey");
+    const amountMinor = money(f, "amount", "el importe del reembolso");
+    await refundCharge(actor, { chargeId: str(f, "chargeId"), amountMinor, reason: str(f, "reason"), idempotencyKey: /^[0-9a-f-]{36}$/.test(key) ? `refund:${key}:${amountMinor}` : undefined });
     refresh();
     return { ok: true, message: "Reembolso registrado." };
   });

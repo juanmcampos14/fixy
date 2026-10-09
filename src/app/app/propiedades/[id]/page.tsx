@@ -30,8 +30,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const [money] = await sql()<{ paid: number; refunded: number; contracted: number }[]>`
     select coalesce(sum(c.amount_minor) filter (where c.status in ('approved','partially_refunded','refunded')), 0)::bigint as paid,
            coalesce(sum(c.refunded_minor), 0)::bigint as refunded,
-           (select coalesce(sum(j.total_minor), 0)::bigint from jobs j where j.property_id = ${id} and j.status <> 'cancelled') as contracted
-    from charges c join jobs j on j.id = c.job_id where j.property_id = ${id}`;
+           (select coalesce(sum(j.total_minor), 0)::bigint from jobs j where j.property_id = ${id} and j.status <> 'cancelled' and app.is_job_client(${actor.id}, j.id)) as contracted
+    from charges c join jobs j on j.id = c.job_id where j.property_id = ${id} and app.is_job_client(${actor.id}, j.id)`;
   const openReqs = reqs.filter((r) => !r.job_id);
   return (
     <>

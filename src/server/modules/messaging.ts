@@ -5,6 +5,7 @@ import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { notify } from "@/server/notifications";
 import { storeFile } from "@/server/storage";
 import { check } from "./authz";
+import { can } from "@/server/auth/permissions";
 import { maskContactInfo } from "@/server/domain/contact-guard";
 import { audit } from "@/server/audit";
 
@@ -20,6 +21,8 @@ export async function sendMessage(actor: Actor, conversationId: string, body: st
     const isClient = await check(tx, "is_request_client", actor, c.request_id);
     const [{ role }] = await tx<{ role: string | null }[]>`select app.provider_role(${actor.id}, ${c.provider_id}) as role`;
     const side = role ? "provider" : isClient ? "client" : "platform";
+    // Escribir como Fixy (sin enmascarar datos) requiere gestionar la operación, no solo ver el panel.
+    if (side === "platform" && !(["solicitudes", "trabajos", "reclamos"] as const).some((s) => can(actor, s, "manage"))) throw forbidden();
     // Antes de contratar, solo se conversa con proveedores invitados a una solicitud abierta.
     const [r] = await tx<{ status: string }[]>`select status from service_requests where id = ${c.request_id}`;
     if (!c.job_id && ["cancelled"].includes(r.status)) throw invalid("La solicitud fue cancelada.");

@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Db } from "@/server/db/client";
 import { env } from "@/server/env";
+import { stripImageMetadata } from "./strip-metadata";
 import { invalid } from "@/server/domain/errors";
 
 export const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -101,6 +102,7 @@ export async function storeFile(
   if (!mime || (mime === "application/pdf" && input.allowPdf === false)) {
     throw invalid("Formato no admitido. Usá JPG, PNG, WEBP" + (input.allowPdf === false ? "." : " o PDF."));
   }
+  if (mime !== "application/pdf") input = { ...input, data: stripImageMetadata(input.data, mime) };
   const id = randomUUID();
   const key = `${input.purpose}/${id}.${ALLOWED_MIME[mime]}`;
   await (await driver()).put(key, input.data);

@@ -134,7 +134,7 @@ export default async function JobAdminPage({ params }: { params: Promise<{ id: s
                               title={`Reembolsar ${chargeKindLabel[c.kind] ?? "cobro"}`}
                               description={<>Máximo reembolsable: <strong>{formatMoney(refundable)}</strong>.{c.is_test && " Modo de prueba: no se devuelve dinero real."} Si la liquidación no se pagó, se ajusta su neto.</>}
                               confirmLabel="Reembolsar"
-                              hidden={{ chargeId: c.id }}
+                              hidden={{ chargeId: c.id, refundKey: crypto.randomUUID() }}
                               requireReason
                               reasonLabel="Motivo (lo ve el cliente)"
                             >

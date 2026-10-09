@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CreditCard, FileText, MapPin, RotateCcw, Star, UserRound } from "lucide-react";
 import { requireActor } from "@/server/auth/session";
+import { sql } from "@/server/db/client";
 import { getJobDetail, jobMoney } from "@/server/queries/shared";
 import { chargeKindLabel, chargeStatusLabel, disputeReasonLabel, disputeStatusLabel, jobStatusLabel, modeLabel } from "@/server/domain/labels";
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
@@ -28,6 +29,9 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
   const { id } = await params;
   const { pago } = await searchParams;
   const actor = await requireActor(`/app/trabajos/${id}`);
+  // Vista del cliente: ni el técnico, ni el equipo de Fixy (que usa el panel), ni ex miembros de la organización.
+  const [{ isClient }] = await sql()<{ isClient: boolean }[]>`select app.is_job_client(${actor.id}, ${id}::uuid) as "isClient"`.catch(() => [{ isClient: false }]);
+  if (!isClient) notFound();
   const d = await getJobDetail(actor.id, id);
   if (!d) notFound();
   const { job, request, provider } = d;

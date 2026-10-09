@@ -52,6 +52,12 @@ const DecisionSchema = z.object({
 
 const InquirySchema = z.object({ message: z.string() });
 
+const PROVIDER_SUMMARY: Record<"keep" | "ask_more" | "escalate", string> = {
+  keep: "Revisamos tu impugnación con la información del trabajo y la reseña cumple las reglas de publicación, así que se mantiene. Si tenés información nueva, podés escribirnos.",
+  ask_more: "Estamos revisando tu impugnación y pedimos más información. Te avisamos cuando haya una decisión.",
+  escalate: "Tu impugnación pasó a revisión del equipo de Fixy. Te avisamos cuando haya una decisión.",
+};
+
 const BASE = `Sos el asistente de mediación de Fixy, una plataforma argentina que conecta clientes con profesionales de reparaciones.
 Un profesional impugnó una reseña que recibió. Tu trabajo es entender qué pasó, con neutralidad, sin tomar partido.
 Escribís en español rioplatense (voseo), con calidez y precisión, frases breves.
@@ -151,9 +157,9 @@ client_message: solo si decision = "ask_more"; si no, null.`,
       decision,
       confidence: o.confidence,
       internalSummary: o.internal_summary.slice(0, 2000),
-      providerSummary: (decision === "escalate"
-        ? "Tu impugnación pasó a revisión del equipo de Fixy. Te avisamos cuando haya una decisión."
-        : o.provider_summary).slice(0, 500),
+      // Textos fijos para el profesional: el texto libre de la IA podría repetir, por pedido del propio profesional,
+      // palabras del cliente o datos del trabajo que identifiquen quién escribió la reseña.
+      providerSummary: PROVIDER_SUMMARY[decision] ?? PROVIDER_SUMMARY.escalate,
       clientMessage: decision === "ask_more" ? (o.client_message ?? "").slice(0, 1500) : null,
       policyFlags: o.policy_flags,
       source: "ai",

@@ -1,4 +1,5 @@
 /** Órdenes de trabajo: confirmación, ejecución, evidencias, adicionales, reprogramaciones, cierre y cancelación. */
+import { rateLimit } from "@/server/rate-limit";
 import { z } from "zod";
 import type { Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
@@ -120,6 +121,8 @@ export async function markOnTheWay(actor: Actor, jobId: string) {
 
 /** Inicio en el lugar. Con código de visita: el cliente se lo dicta al profesional al llegar (registra la visita). */
 export async function startJob(actor: Actor, jobId: string, visitCode?: string) {
+  // El código de visita tiene 4 dígitos: con pocos intentos por trabajo no se puede adivinar sin el cliente presente.
+  await rateLimit(`visit-code:${jobId}`, 6, 900);
   return systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);
     const side = await requireSide(tx, actor, job, ["provider", "technician"]);

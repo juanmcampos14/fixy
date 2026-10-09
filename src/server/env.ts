@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 const schema = z.object({
@@ -58,6 +59,11 @@ export function env(): Env {
     throw new Error(`Configuración inválida. Revisá estas variables de entorno: ${fields}`);
   }
   cached = parsed.data;
+  // Sin CRON_SECRET propio en producción, el cron queda cerrado (nadie conoce la clave) en vez de abierto con la de ejemplo.
+  if (cached.NODE_ENV === "production" && cached.CRON_SECRET === "change-me-cron-secret-000000000000") {
+    console.error("[env] Falta CRON_SECRET en producción: el procesamiento programado queda deshabilitado.");
+    cached.CRON_SECRET = randomBytes(32).toString("hex");
+  }
   return cached;
 }
 

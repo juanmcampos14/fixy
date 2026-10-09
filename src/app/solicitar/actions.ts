@@ -15,10 +15,19 @@ import { headers } from "next/headers";
 
 export async function triageAction(text: string, categorySlug: string | null) {
   const h = await headers();
-  await rateLimit(`triage:${h.get("x-forwarded-for") ?? "local"}`, 60, 600).catch(() => null);
+  try {
+    await rateLimit(`triage:${clientIp(h)}`, 60, 600);
+  } catch {
+    return null; // superó el límite: sigue sin sugerencias de la IA
+  }
   const t = text.slice(0, 2000);
   if (t.trim().length < 3) return null;
   return triage(t, categorySlug);
+}
+
+/** IP del cliente según Vercel (x-real-ip no lo puede fijar el navegador); x-forwarded-for solo como respaldo local. */
+function clientIp(h: Headers) {
+  return h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
 }
 
 export type { RequestPayload } from "@/server/modules/request-submit";
@@ -49,7 +58,11 @@ export async function submitRequestAction(_: ActionState, f: FormData): Promise<
 /** Profesionales elegibles para la categoría y zona (datos públicos). Funciona sin cuenta. */
 export async function bookableProvidersAction(categorySlug: string, zoneId: string, windows: string[]) {
   const h = await headers();
-  await rateLimit(`bookable:${h.get("x-forwarded-for") ?? "local"}`, 60, 600).catch(() => null);
+  try {
+    await rateLimit(`bookable:${clientIp(h)}`, 60, 600);
+  } catch {
+    return [];
+  }
   if (!/^[0-9a-f-]{36}$/.test(zoneId)) return [];
   const [cat] = await sql()<{ id: string }[]>`select id from categories where slug = ${categorySlug} and active and not requires_review`;
   if (!cat) return [];
