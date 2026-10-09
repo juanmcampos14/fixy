@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Bell, LogOut, TriangleAlert } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import type { Actor } from "@/server/auth/actor";
 import { canAccessAdmin } from "@/server/auth/actor";
 import { sql } from "@/server/db/client";
-import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
 import { PanelNav, type NavItem } from "./panel-nav";
 import { logoutAction } from "@/app/(auth)/actions";
@@ -20,14 +19,6 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
   ];
   return (
     <div className="min-h-dvh">
-      {paymentsAreTestMode() && (
-        <div className="bg-warn-bg text-warn">
-          <p className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-[13px] font-semibold sm:px-6">
-            <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
-            Modo de prueba: los pagos y liquidaciones son simulados. No se mueve dinero real.
-          </p>
-        </div>
-      )}
       <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6">
           <Link href={areas.find((a) => a.key === area)?.href ?? "/"} aria-label="Fixy, inicio del panel" className="shrink-0">
