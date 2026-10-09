@@ -16,6 +16,7 @@ import { submitRequestPayload, type RequestPayload } from "@/server/modules/requ
 import { componentsToAddress, type AddressValue } from "@/lib/address";
 import { formatMoney } from "@/lib/format";
 import { geocodeAddress, reverseGeocode } from "@/server/geo";
+import { nearestZoneCode } from "@/lib/zone-centroids";
 import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client";
 import { storeFile } from "@/server/storage";
 
@@ -32,7 +33,7 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = "idle" | "problem" | "location" | "address" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = "idle" | "problem" | "location" | "address" | "street" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
   description?: string;
@@ -52,7 +53,6 @@ type Zone = { id: string; code: string; name: string; region: string; match_name
 type Ctx = { phone: string; name: string; userId: string | null; out: OutMessage[] };
 
 const PRIVACY = "Tu dirección la ve y la protege solo Fixy: el profesional la recibe recién cuando se confirma la visita.";
-const FEW_PROS = "Todavía tenemos pocos profesionales en esa zona para este trabajo. Podés hacer el pedido igual: lo revisa nuestro equipo y te avisamos apenas consigamos a alguien.";
 const hash = (t: string) => createHash("sha256").update(t).digest("hex");
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 const isGreeting = (t: string) => /^(hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|hey|que tal|hi|hello)[\s!.,]*$/.test(norm(t));
@@ -167,6 +167,13 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
       }
       return onAddressText(s, text, ctx, true);
 
+    case "street":
+      if (text.length < 5) {
+        ctx.out.push({ kind: "text", text: "Escribime la calle y la altura (por ejemplo: Av. Cabildo 2000)." });
+        return s;
+      }
+      return confirm({ ...s, address: { ...s.address, addressLine: text.split("\n")[0].slice(0, 200) } }, ctx);
+
     case "zone_region":
     case "zone": {
       const zones = await allZones();
@@ -247,25 +254,35 @@ function askLocationRequest(s: State, ctx: Ctx): State {
 
 async function onLocation(s: State, loc: NonNullable<Inbound["location"]>, ctx: Ctx): Promise<State> {
   const zones = await allZones();
+  const coords = { lat: loc.lat.toFixed(6), lng: loc.lng.toFixed(6) };
   const geo = await reverseGeocode(loc.lat, loc.lng);
-  const base: Partial<AddressValue> = { lat: loc.lat.toFixed(6), lng: loc.lng.toFixed(6) };
   if (geo) {
     const r = componentsToAddress(geo.components, geo.formatted, loc.lat, loc.lng, geo.placeId, zones);
-    const next: State = { ...s, propertyId: null, address: { ...r.value } };
-    if (!r.hasStreetNumber) {
-      ctx.out.push({ kind: "text", text: `Recibí tu ubicación (${r.zone?.name ?? "zona sin identificar"}). ¿Me pasás la calle y la altura? Ej.: ${r.value.addressLine || "Av. Cabildo"} 2000.` });
-      return { ...next, step: "address" };
-    }
-    return goPros(next, ctx);
+    const zoneId = r.value.zoneId || zoneFromLocation(zones, loc);
+    if (!zoneId) return askZone({ ...s, propertyId: null, address: { ...r.value } }, ctx);
+    // Con la zona alcanza para mostrar profesionales; la calle y la altura se piden al final si faltan.
+    return goPros({ ...s, propertyId: null, address: { ...r.value, zoneId, addressLine: r.hasStreetNumber ? r.value.addressLine : "" } }, ctx);
   }
-  // Sin geocodificación en el servidor: usamos lo que mande WhatsApp y pedimos lo que falte.
-  const line = loc.address?.split(",")[0] ?? "";
-  const next: State = { ...s, propertyId: null, address: { ...base, addressLine: line, formattedAddress: loc.address ?? "" } };
-  if (line.length < 5) {
-    ctx.out.push({ kind: "text", text: "Recibí tu ubicación. ¿Me pasás la calle y la altura? (Ej.: Av. Cabildo 2000)" });
-    return { ...next, step: "address" };
-  }
-  return askZone(next, ctx);
+  // Sin geocodificación en el servidor: zona por el barrio o la localidad que manda WhatsApp, o por cercanía.
+  const zoneId = zoneFromLocation(zones, loc);
+  const next: State = { ...s, propertyId: null, address: { ...coords, addressLine: streetFrom(loc.address), formattedAddress: loc.address ?? "", zoneId: zoneId ?? "" } };
+  return zoneId ? goPros(next, ctx) : askZone(next, ctx);
+}
+
+/** Zona desde lo que trae la ubicación de WhatsApp: primero el texto (barrio, localidad), si no, la cercanía. */
+function zoneFromLocation(zones: Zone[], loc: NonNullable<Inbound["location"]>): string | null {
+  const text = norm(`${loc.name ?? ""} ${loc.address ?? ""}`);
+  const byText = zones.find((z) => z.match_names.some((n) => text.includes(n)));
+  if (byText) return byText.id;
+  const code = nearestZoneCode(loc.lat, loc.lng);
+  return (code ? zones.find((z) => z.code === code)?.id : zones.find((z) => z.code === "otra-zona")?.id) ?? null;
+}
+
+/** Calle y altura si el texto las tiene ("Av. Cabildo 2000, ..."); no un código postal ("B1623 Escobar"). */
+function streetFrom(address?: string): string {
+  const first = (address ?? "").split(",")[0].trim();
+  if (/^[A-Z]\d{4}/i.test(first)) return "";
+  return /[a-zA-ZáéíóúñÑ]{3,}.*\s\d{1,5}\b/.test(first) ? first.slice(0, 200) : "";
 }
 
 async function onAddressText(s: State, text: string, ctx: Ctx, keepZone = false): Promise<State> {
@@ -307,10 +324,7 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
   if (!cat || cat.requires_review) return confirm({ ...s, chosen: "quotes", pros: [] }, ctx);
   const list = await listBookableProviders(sql(), { categoryId: cat.id, zoneId, preferredWindows: [], limit: 9 });
   const pros = list.map((p) => ({ slug: p.slug, name: p.displayName, visitFeeMinor: p.visitFeeMinor }));
-  if (!list.length) {
-    ctx.out.push({ kind: "buttons", text: FEW_PROS, buttons: [{ id: "quotes", title: "Hacer el pedido" }, { id: "cancel", title: "Cancelar" }] });
-    return { ...s, step: "pros", pros };
-  }
+  if (!list.length) return confirm({ ...s, chosen: "quotes", pros }, ctx);
   ctx.out.push({
     kind: "list",
     text: `Estos profesionales de ${cat.name.toLowerCase()} pueden ir. Elegí uno: coordinan la visita por Fixy y te presupuesta el arreglo en el lugar.`,
@@ -331,6 +345,10 @@ async function goPros(s: State, ctx: Ctx): Promise<State> {
 }
 
 async function confirm(s: State, ctx: Ctx): Promise<State> {
+  if (!s.propertyId && (s.address?.addressLine ?? "").trim().length < 5) {
+    ctx.out.push({ kind: "text", text: `Último dato: ¿calle y altura? (por ejemplo: Av. Cabildo 2000). ${PRIVACY}` });
+    return { ...s, step: "street" };
+  }
   const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
   const where = s.propertyId
     ? (await sql()<{ label: string; zone_name: string }[]>`select p.label, z.name as zone_name from properties p join zones z on z.id = p.zone_id where p.id = ${s.propertyId}`)[0]
@@ -340,7 +358,7 @@ async function confirm(s: State, ctx: Ctx): Promise<State> {
     "*Tu pedido*",
     `Problema: ${s.title ?? s.description}`,
     `Dónde: ${where ? `${where.label} (${where.zone_name})` : `${s.address?.addressLine ?? ""}${zoneName ? ` (${zoneName})` : ""}`}`,
-    pro ? `Profesional: ${pro.name} · ${pro.visitFeeMinor > 0 ? `visita ${formatMoney(pro.visitFeeMinor)}` : "visita sin cargo"}` : s.pros?.length ? "Recibís presupuestos de varios profesionales." : "Nuestro equipo busca un profesional para vos.",
+    pro ? `Profesional: ${pro.name} · ${pro.visitFeeMinor > 0 ? `visita ${formatMoney(pro.visitFeeMinor)}` : "visita sin cargo"}` : s.pros?.length ? "Recibís presupuestos de varios profesionales." : "Te conectamos con un profesional de tu zona y te avisamos por acá.",
     s.extra ? `Detalles: ${s.extra}` : "",
     s.photos?.length ? `Fotos: ${s.photos.length}` : "",
     "",

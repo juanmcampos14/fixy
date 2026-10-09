@@ -219,7 +219,7 @@ export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | nu
     await notify(tx, await clientRecipients(tx, requestId), {
       type: "request_received",
       title: `Estamos buscando un profesional para vos · ${r.code}`,
-      body: "Todavía tenemos pocos profesionales en tu zona para este trabajo. Nuestro equipo ya está viendo tu pedido y te avisamos apenas consigamos a alguien.",
+      body: "Nuestro equipo ya está viendo tu pedido para conectarte con un profesional. Te avisamos apenas lo tome.",
       link: `/app/solicitudes/${requestId}`,
     });
     await notify(tx, await staffRecipients(tx), { type: "request_received", title: `Pedido para conseguir a mano · ${r.code}`, link: `/admin/solicitudes/${requestId}` });

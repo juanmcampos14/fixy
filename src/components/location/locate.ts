@@ -10,7 +10,7 @@ export type { AddressValue };
 export type Located = { value: AddressValue; zone: ZoneOption | null; outside: boolean };
 export type LocateError = "denied" | "unavailable" | "unsupported" | "geocode";
 
-export const FEW_PROS_MESSAGE = "Todavía tenemos pocos profesionales en esa zona. Podés hacer el pedido igual: lo revisa nuestro equipo y te avisamos apenas consigamos a alguien.";
+export const FEW_PROS_MESSAGE = "Recibimos tu ubicación. Hacé el pedido y te conectamos con un profesional de tu zona.";
 export const LOCATE_ERROR: Record<LocateError, string> = {
   denied: "Tu navegador tiene bloqueada la ubicación para este sitio. Podés activarla desde el ícono del candado, junto a la dirección del sitio, o escribir la dirección.",
   unavailable: "No pudimos detectar tu ubicación. Escribí la dirección.",

@@ -158,4 +158,25 @@ describe("WhatsApp", () => {
     expect(tpl.template.components[0].parameters[0].text).toBe(carla.fullName.split(" ")[0]);
     expect(tpl.template.components[1].parameters[0].text).toBe(req.id);
   });
+
+  it("ubicación compartida: deduce la zona (sin preguntar CABA/GBA), no habla de pocos profesionales y pide la calle solo al final", async () => {
+    const PHONE3 = "5491155550303";
+    await sql()`delete from whatsapp_conversations where phone = ${PHONE3}`;
+    const m3 = (m: Partial<Inbound>) => msg({ from: PHONE3, ...m });
+    await handleInbound(m3({ text: "Necesito un electricista, se corta la luz en la cocina" }));
+    await handleInbound(m3({ type: "location", location: { lat: -34.343273, lng: -58.722935, name: "Malba Puertos", address: "B1623 Escobar" } }));
+    const outs = await sql()<{ body: Record<string, unknown> }[]>`select body from whatsapp_messages where phone = ${PHONE3} and direction = 'out' order by id`;
+    const all = outs.map((o) => outText(o.body)).join("\n");
+    expect(all).not.toContain("¿En qué zona es?");
+    expect(all).not.toMatch(/pocos profesionales/i);
+    // Sin profesionales en Escobar en los datos de prueba: va directo al último dato (calle), sin aviso de escasez.
+    const last = outText(await lastOut(PHONE3));
+    expect(last).toMatch(/calle y altura|Ver profesionales/);
+    if (/calle y altura/.test(last)) {
+      await handleInbound(m3({ text: "Mendoza 1234" }));
+      const summary = outText(await lastOut(PHONE3));
+      expect(summary).toContain("Tu pedido");
+      expect(summary).toContain("Mendoza 1234 (Escobar)");
+    }
+  });
 });

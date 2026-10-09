@@ -313,7 +313,7 @@ export function ChatRequest(props: {
             {pros.length ? (
               <>Estos profesionales pueden ir{zoneName && zoneName !== "Otra zona" ? ` a ${zoneName}` : ""}. <strong>Elegí uno</strong>: coordinan la visita por Fixy y te presupuesta el arreglo en el lugar.</>
             ) : (
-              <>{outside ? FEW_PROS_MESSAGE : <>Todavía tenemos pocos profesionales de {category?.name.toLowerCase()} en {zoneName || "tu zona"}. Hacé el pedido igual: lo revisa nuestro equipo y te avisamos apenas consigamos a alguien.</>}</>
+              <>Enviá tu pedido y te conectamos con un profesional de {category?.name.toLowerCase() ?? "este rubro"}{zoneName && zoneName !== "Otra zona" ? ` en ${zoneName}` : " de tu zona"}. Te avisamos apenas lo tome.</>
             )}
             <ul className="mt-3 space-y-3">
               {pros.map((p) => <li key={p.slug}><ProCard p={p} onChoose={() => setChosen(p.slug)} /></li>)}

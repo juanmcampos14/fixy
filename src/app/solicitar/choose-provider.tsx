@@ -34,8 +34,8 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
       {providers.length === 0 && (
         <div className="flex flex-col items-center rounded-2xl bg-cream/60 p-6 text-center ring-1 ring-line">
           <Mascot pose="empathy" className="h-24 w-auto" />
-          <p className="mt-3 font-semibold">Todavía tenemos pocos profesionales de {categoryName.toLowerCase() || "este rubro"} en tu zona.</p>
-          <p className="mt-1 text-sm text-muted">Hacé el pedido igual: nuestro equipo lo revisa a mano y te avisamos apenas consigamos a alguien.</p>
+          <p className="mt-3 font-semibold">Enviá tu pedido y te conectamos con un profesional{categoryName ? ` de ${categoryName.toLowerCase()}` : ""}.</p>
+          <p className="mt-1 text-sm text-muted">Te avisamos apenas lo tome.</p>
         </div>
       )}
       <div className="mt-4 space-y-3">
