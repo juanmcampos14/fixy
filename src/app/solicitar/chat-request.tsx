@@ -15,7 +15,7 @@ import type { BookableProviderCard } from "./choose-provider";
 import { Mascot } from "@/components/brand/mascot";
 import { AddressFields } from "@/components/location/address-fields";
 import { GatedToggle } from "@/components/location/gated-toggle";
-import { canLocate, FEW_PROS_MESSAGE, LOCATE_ERROR, locateMe, type ZoneOption } from "@/components/location/locate";
+import { canLocate, LOCATE_ERROR, locateMe, type ZoneOption } from "@/components/location/locate";
 import { CategoryIcon } from "@/components/category-icon";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/form";
@@ -73,7 +73,6 @@ export function ChatRequest(props: {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
-  const [outside, setOutside] = useState(false);
   // 3. Profesional
   const [prosState, setProsState] = useState<{ key: string | null; list: BookableProviderCard[] }>({ key: null, list: [] });
   const [chosen, setChosen] = useState<string | null>(d ? d.targetProviderSlug ?? "quotes" : null);
@@ -164,7 +163,6 @@ export function ChatRequest(props: {
     }
     setPropertyId(null);
     setNewProp((p) => ({ ...p, ...r.located.value }));
-    setOutside(r.located.outside);
     setLocationDone(true);
     setChosen(null);
   }
