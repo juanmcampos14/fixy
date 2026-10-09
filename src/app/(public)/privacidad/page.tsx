@@ -47,7 +47,7 @@ export default function Privacy() {
         <li><strong>Proveedores que nos prestan servicios</strong>, bajo obligaciones de confidencialidad y solo para estos fines:
           <ul>
             <li>Alojamiento del sitio (Vercel Inc.) y base de datos y almacenamiento de archivos (Supabase Inc.), con servidores en Estados Unidos.</li>
-            <li>Google (Google Maps Platform), para autocompletar direcciones y convertir tu ubicación en una dirección.</li>
+            <li>Google: Google Maps Platform, para autocompletar direcciones y convertir tu ubicación en una dirección; e inicio de sesión con Google, si lo elegís (recibimos tu nombre, tu email y un identificador de tu cuenta de Google, nunca tu contraseña).</li>
             <li>Anthropic PBC (inteligencia artificial), para sugerir el tipo de profesional, interpretar reglamentos de barrios, ayudar a armar perfiles y mediar en impugnaciones de reseñas. Antes de enviar texto eliminamos correos y teléfonos cuando es posible. Estos datos no se usan para entrenar sus modelos según sus condiciones comerciales.</li>
             <li>Proveedores de pagos y de envío de correos.</li>
           </ul>

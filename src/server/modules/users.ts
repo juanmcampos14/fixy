@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
+import { audit } from "@/server/audit";
 import { sql, systemTx } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { DomainError, conflict } from "@/server/domain/errors";
@@ -29,13 +30,17 @@ export async function registerUser(input: z.infer<typeof registerSchema>, opts: 
 }
 
 export async function authenticate(email: string, password: string): Promise<string> {
-  const [u] = await sql()<{ id: string; password_hash: string; disabled_at: Date | null }[]>`
+  const [u] = await sql()<{ id: string; password_hash: string | null; disabled_at: Date | null }[]>`
     select id, password_hash, disabled_at from users where lower(email) = lower(${email.trim()})`;
   // Mismo mensaje para email inexistente o contraseña incorrecta.
   const fail = new DomainError("unauthenticated", "Email o contraseña incorrectos.");
   if (!u) {
     await hashPassword(password); // tiempo similar para no revelar si el email existe
     throw fail;
+  }
+  if (!u.password_hash) {
+    await hashPassword(password);
+    throw new DomainError("unauthenticated", "Esta cuenta ingresa con Google. Usá «Continuar con Google» (o creá una contraseña desde «Olvidé mi contraseña»).");
   }
   if (u.disabled_at || !(await verifyPassword(password, u.password_hash))) throw fail;
   return u.id;
@@ -70,5 +75,39 @@ export async function resetPassword(token: string, newPassword: string) {
     await tx`update users set password_hash = ${hash} where id = ${r.user_id}`;
     await tx`delete from sessions where user_id = ${r.user_id}`; // cierra sesiones abiertas
     await tx`insert into audit_log (actor_id, action, entity_type, entity_id) values (${r.user_id}, 'user.password_reset', 'user', ${r.user_id})`;
+  });
+}
+
+// ───────── Ingreso con Google ─────────
+
+/**
+ * Ingresa o registra con la identidad verificada por Google.
+ * - Ya vinculada (google_sub) → ingresa.
+ * - Email verificado por Google que ya tiene cuenta → vincula y ingresa (el email lo confirmó Google).
+ * - Nueva → crea la cuenta sin contraseña y registra la aceptación de términos (se informa en el botón).
+ */
+export async function signInWithGoogle(g: { sub: string; email: string; emailVerified: boolean; name: string }): Promise<{ userId: string; created: boolean }> {
+  if (!g.emailVerified) throw new DomainError("unauthenticated", "Tu cuenta de Google no tiene el email verificado.");
+  const email = g.email.trim().toLowerCase();
+  return systemTx(async (tx) => {
+    const [bySub] = await tx<{ id: string; disabled_at: Date | null }[]>`select id, disabled_at from users where google_sub = ${g.sub}`;
+    if (bySub) {
+      if (bySub.disabled_at) throw new DomainError("forbidden", "Tu cuenta está deshabilitada. Escribinos para revisarla.");
+      return { userId: bySub.id, created: false };
+    }
+    const [byEmail] = await tx<{ id: string; disabled_at: Date | null; google_sub: string | null }[]>`select id, disabled_at, google_sub from users where lower(email) = ${email} for update`;
+    if (byEmail) {
+      if (byEmail.disabled_at) throw new DomainError("forbidden", "Tu cuenta está deshabilitada. Escribinos para revisarla.");
+      if (byEmail.google_sub && byEmail.google_sub !== g.sub) throw conflict("Ese email ya está vinculado a otra cuenta de Google.");
+      await tx`update users set google_sub = ${g.sub} where id = ${byEmail.id}`;
+      await audit(tx, null, "user.google_linked", "user", byEmail.id, null);
+      return { userId: byEmail.id, created: false };
+    }
+    const name = g.name.trim().slice(0, 120) || email.split("@")[0];
+    const [u] = await tx<{ id: string }[]>`insert into users (email, password_hash, full_name, google_sub) values (${email}, null, ${name}, ${g.sub}) returning id`;
+    const policies = await tx<{ id: string }[]>`select distinct on (kind) id from policy_documents where kind in ('terms','privacy') order by kind, published_at desc`;
+    for (const p of policies) await tx`insert into policy_acceptances (user_id, policy_id) values (${u.id}, ${p.id}) on conflict do nothing`;
+    await audit(tx, null, "user.google_signup", "user", u.id, null);
+    return { userId: u.id, created: true };
   });
 }

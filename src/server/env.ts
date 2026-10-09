@@ -35,6 +35,9 @@ const schema = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().optional().default(""),
   WHATSAPP_API_VERSION: z.string().default("v23.0"),
   WHATSAPP_DISPLAY_NUMBER: z.string().optional().default(""),
+  // Ingreso con Google (OAuth). Sin estas variables el botón no aparece.
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   // Clave de Google para geocodificar en el servidor (la del navegador está restringida al sitio).
   GOOGLE_MAPS_SERVER_KEY: z.string().optional().default(""),
 });
