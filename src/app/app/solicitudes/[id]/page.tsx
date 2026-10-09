@@ -89,8 +89,8 @@ export default async function RequestDetail({ params, searchParams }: { params: 
         <Card className="mb-6 flex items-center gap-4">
           <Mascot pose="empathy" className="h-24 w-auto" />
           <div>
-            <h2 className="text-lg font-bold">Todavía no encontramos un profesional disponible para este pedido</h2>
-            <p className="text-ink-2">No hay proveedores habilitados para {r.category_name ?? "esta categoría"} en {r.zone_name}. El equipo lo está revisando y te avisamos si aparece alguien.</p>
+            <h2 className="text-lg font-bold">Estamos buscando un profesional para vos</h2>
+            <p className="text-ink-2">Todavía tenemos pocos profesionales de {r.category_name?.toLowerCase() ?? "este rubro"} en {r.zone_name === "Otra zona" ? "tu zona" : r.zone_name}. Nuestro equipo ya está viendo tu pedido y te avisamos apenas consigamos a alguien.</p>
           </div>
         </Card>
       )}

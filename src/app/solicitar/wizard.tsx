@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowLeft, ArrowRight, Camera, Pencil, TriangleAlert, Info, LoaderCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, Pencil, TriangleAlert, Info, LoaderCircle, MapPin } from "lucide-react";
 import type { TriageResult } from "@/server/assistant/rules";
 import { bookableProvidersAction, submitRequestAction, triageAction, type RequestPayload } from "./actions";
 import { ChooseProvider, type BookableProviderCard } from "./choose-provider";
@@ -34,7 +34,7 @@ const WINDOWS = [
   { v: "evening", l: "Última hora (17 a 20 h)" },
   { v: "weekend", l: "Fin de semana" },
 ] as const;
-const STEPS = ["Contanos qué pasa", "Algunos detalles", "Dónde y cuándo", "Elegí tu profesional", "Revisá y enviá"];
+const STEPS = ["Contanos qué pasa", "Detalles y horarios", "Revisá y enviá"];
 
 export function RequestWizard(props: {
   loggedIn: boolean;
@@ -52,7 +52,7 @@ export function RequestWizard(props: {
   previous: { id: string; code: string; title: string; property_id: string } | null;
 }) {
   const d = props.draft;
-  const [step, setStep] = useState(d ? 4 : 0);
+  const [step, setStep] = useState(d ? 2 : 0);
   const [description, setDescription] = useState(d?.description ?? props.initialText);
   const [title, setTitle] = useState(d?.title ?? (props.previous ? `Nuevo pedido: ${props.previous.title}` : ""));
   const [categorySlug, setCategorySlug] = useState<string | null>(d?.categorySlug ?? props.initialCategory);
@@ -61,7 +61,7 @@ export function RequestWizard(props: {
   const [urgency, setUrgency] = useState<RequestPayload["urgency"]>(d?.urgency ?? "normal");
   const [windows, setWindows] = useState<RequestPayload["windows"]>(d?.windows ?? []);
   const [propertyId, setPropertyId] = useState<string | null>(d?.propertyId ?? props.previous?.property_id ?? props.properties[0]?.id ?? null);
-  const [newProp, setNewProp] = useState<Record<string, string>>(d?.newProperty ?? { kind: "home", label: "", addressLine: "", addressExtra: "", zoneId: "", contactName: "", contactPhone: "" });
+  const [newProp, setNewProp] = useState<Record<string, string>>(d?.newProperty ?? { kind: "home", label: "Casa", addressLine: "", addressExtra: "", zoneId: "", contactName: "", contactPhone: "" });
   const [newPropOrg, setNewPropOrg] = useState<string | null>(d?.organizationId ?? null);
   const [responsible, setResponsible] = useState<string | null>(d?.responsibleUserId ?? null);
   const [accessInfo, setAccessInfo] = useState(d?.accessInfo ?? "");
@@ -70,9 +70,10 @@ export function RequestWizard(props: {
   const [localError, setLocalError] = useState<string | null>(null);
   const [photoNames, setPhotoNames] = useState<string[]>([]);
   const [state, formAction] = useActionState(submitRequestAction, {});
-  const [pros, setPros] = useState<BookableProviderCard[]>([]);
-  const [loadingPros, setLoadingPros] = useState(false);
+  const [prosState, setProsState] = useState<{ key: string | null; list: BookableProviderCard[] }>({ key: null, list: [] });
   const [chosen, setChosen] = useState<string | null>(d?.targetProviderSlug ?? null);
+  const [showCats, setShowCats] = useState(!props.initialCategory && !d?.categorySlug);
+  const manualCategory = useRef(!!(props.initialCategory || d?.categorySlug));
   const headingRef = useRef<HTMLHeadingElement>(null);
   const useNewProperty = !propertyId;
 
@@ -87,58 +88,66 @@ export function RequestWizard(props: {
     headingRef.current?.focus();
   }, [step]);
 
-  // Si había texto inicial (desde la landing), sugerimos categoría de entrada.
+  // La IA analiza el problema mientras escribís (con una pausa) y sugiere el oficio.
   useEffect(() => {
-    if (props.initialText && !props.draft && !props.initialCategory) runTriage(props.initialText);
+    if (props.draft || description.trim().length < 12) return;
+    const t = setTimeout(() => runTriage(description), 900);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [description]);
 
   function runTriage(text = description) {
     startTriage(async () => {
       const r = await triageAction(text, null);
       setTriage(r);
-      if (r?.categorySlug && !categorySlug) setCategorySlug(r.categorySlug);
-      if (r && !title) setTitle(r.suggestedTitle);
+      if (!manualCategory.current) {
+        if (r?.categorySlug) { setCategorySlug(r.categorySlug); setShowCats(false); }
+        else setShowCats(true);
+      }
+      if (r) setTitle((t) => t || r.suggestedTitle);
       if (r?.suggestedUrgency && r.suggestedUrgency !== "normal") setUrgency(r.suggestedUrgency);
     });
   }
 
-  function loadProviders() {
-    const zoneId = selectedProperty?.zone_id ?? newProp.zoneId;
-    if (!categorySlug || !zoneId) return;
-    setLoadingPros(true);
-    bookableProvidersAction(categorySlug, zoneId, windows)
-      .then((list) => {
-        setPros(list);
-        if (props.target && list.some((p) => p.slug === props.target!.slug)) setChosen(props.target.slug);
-        else if (chosen && chosen !== "quotes" && !list.some((p) => p.slug === chosen)) setChosen(null);
-        if (!list.length) setChosen("quotes");
-      })
-      .finally(() => setLoadingPros(false));
-  }
+  // Apenas sabemos el oficio y la zona, mostramos candidatos.
+  const zoneId = selectedProperty?.zone_id ?? newProp.zoneId ?? "";
+  const prosKey = categorySlug && zoneId && !category?.requires_review ? `${categorySlug}|${zoneId}` : null;
+  useEffect(() => {
+    if (!prosKey) return;
+    let cancelled = false;
+    const [slug, zone] = prosKey.split("|");
+    bookableProvidersAction(slug, zone, windows).then((list) => {
+      if (cancelled) return;
+      setProsState({ key: prosKey, list });
+      setChosen((c) => {
+        if (props.target && list.some((p) => p.slug === props.target!.slug)) return props.target.slug;
+        if (!list.length) return "quotes";
+        return c && (c === "quotes" || list.some((p) => p.slug === c)) ? c : null;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prosKey]);
+  const pros = prosKey && prosState.key === prosKey ? prosState.list : [];
+  const loadingPros = !!prosKey && prosState.key !== prosKey;
 
   function next() {
     setLocalError(null);
     if (step === 0) {
       if (description.trim().length < 10) return setLocalError("Contanos un poco más: con 10 caracteres o más podemos orientarte mejor.");
       if (!title) setTitle(description.trim().split(/[.\n]/)[0].slice(0, 80));
-      if (!triage) runTriage();
-      if (!categorySlug) setCategorySlug("otro");
+      if (!categorySlug) { setCategorySlug("otro"); setChosen("quotes"); }
+      if (useNewProperty && (newProp.addressLine.length < 5 || !newProp.zoneId)) return setLocalError("Indicá dónde es el trabajo: usá tu ubicación o escribí la dirección.");
+      if (category?.requires_review) setChosen("quotes");
+      else if (!chosen && pros.length) return setLocalError("Elegí un profesional o la opción de recibir presupuestos de varios.");
+      else if (!chosen) setChosen("quotes");
     }
     if (step === 1) {
       const missing = questions.filter((q) => q.required && (answers[q.key] === undefined || answers[q.key] === ""));
       if (missing.length) return setLocalError(`Respondé: ${missing.map((m) => m.label).join(" · ")}`);
+      if (useNewProperty && !newProp.label?.trim()) return setLocalError("Poné un nombre para el lugar (por ejemplo, Casa).");
     }
-    if (step === 2) {
-      if (useNewProperty && (!newProp.label || newProp.addressLine.length < 5 || !newProp.zoneId)) return setLocalError("Completá el nombre, la dirección y la zona del lugar.");
-      if (category?.requires_review) {
-        setChosen("quotes");
-        return setStep(4);
-      }
-      loadProviders();
-    }
-    if (step === 3 && !chosen) return setLocalError("Elegí un profesional o la opción de recibir presupuestos de varios.");
-    setStep((s) => Math.min(s + 1, 4));
+    setStep((s) => Math.min(s + 1, 2));
   }
 
   const payload: RequestPayload = {
@@ -161,9 +170,9 @@ export function RequestWizard(props: {
           {props.target && <p className="mt-2 text-ink-2">Pedido de presupuesto para <strong>{props.target.display_name}</strong>.</p>}
           {props.previous && <p className="mt-2 text-ink-2">Nuevo pedido vinculado al trabajo {props.previous.code}. Los precios y condiciones anteriores no se reutilizan.</p>}
         </div>
-        <Mascot pose={step === 0 ? "listen" : step === 4 ? "wave" : "think"} className="hidden h-24 w-auto shrink-0 sm:block" key={step} />
+        <Mascot pose={step === 0 ? "listen" : step === 2 ? "wave" : "think"} className="hidden h-24 w-auto shrink-0 sm:block" key={step} />
       </div>
-      <ol className="mt-5 grid grid-cols-5 gap-1.5" aria-label="Progreso">
+      <ol className="mt-5 grid grid-cols-3 gap-1.5" aria-label="Progreso">
         {STEPS.map((s, i) => (
           <li key={s} className={cn("h-1.5 rounded-full", i <= step ? "bg-fixy-700" : "bg-line")}>
             <span className="sr-only">{s}{i === step ? " (actual)" : i < step ? " (completo)" : ""}</span>
@@ -191,7 +200,17 @@ export function RequestWizard(props: {
                 </Alert>
               )}
             </div>
-            <fieldset>
+            {categorySlug && !showCats && category ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-fixy-50 px-4 py-3 ring-1 ring-fixy-500/20">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-fixy-700"><CategoryIcon icon={category.icon} className="h-5 w-5" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-muted">{triage?.source && triage.categorySlug === categorySlug ? "Te sugerimos" : "Profesional"}</span>
+                  <span className="block font-bold">{category.name}</span>
+                </span>
+                <button type="button" onClick={() => setShowCats(true)} className="text-sm font-semibold text-fixy-800 underline">Cambiar</button>
+              </div>
+            ) : (
+              <fieldset>
               <legend className="text-[15px] font-semibold">¿Qué tipo de profesional necesitás?</legend>
               <p className="mt-0.5 text-sm text-muted">
                 {triage?.categorySlug && triage.source
@@ -201,7 +220,7 @@ export function RequestWizard(props: {
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {props.categories.map((c) => (
                   <label key={c.id} className="cursor-pointer">
-                    <input type="radio" name="category" className="peer sr-only" checked={categorySlug === c.slug} onChange={() => { setCategorySlug(c.slug); setServiceId(null); }} />
+                    <input type="radio" name="category" className="peer sr-only" checked={categorySlug === c.slug} onChange={() => { manualCategory.current = true; setCategorySlug(c.slug); setServiceId(null); setShowCats(false); }} />
                     <span className="flex min-h-14 items-center gap-3 rounded-2xl border border-[#d3dfdc] bg-white px-3 py-2 transition peer-checked:border-fixy-700 peer-checked:bg-fixy-50 peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40 hover:border-fixy-500">
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-fixy-50 text-fixy-700"><CategoryIcon icon={c.icon} className="h-5 w-5" /></span>
                       <span className="text-[15px] font-semibold leading-snug">{c.name}</span>
@@ -210,10 +229,54 @@ export function RequestWizard(props: {
                 ))}
               </div>
             </fieldset>
+            )}
+
+            <fieldset>
+              <legend className="text-[15px] font-semibold">¿Dónde es?</legend>
+              {props.properties.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {props.properties.map((p) => (
+                    <label key={p.id} className="cursor-pointer">
+                      <input type="radio" name="property" className="peer sr-only" checked={propertyId === p.id} onChange={() => setPropertyId(p.id)} />
+                      <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[#d3dfdc] px-4 text-[15px] font-medium peer-checked:border-fixy-700 peer-checked:bg-fixy-50 peer-checked:text-fixy-800 peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40">
+                        <MapPin className="h-4 w-4" aria-hidden />{p.label} <span className="text-muted">· {p.zone_name}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <label className="cursor-pointer">
+                    <input type="radio" name="property" className="peer sr-only" checked={!propertyId} onChange={() => setPropertyId(null)} />
+                    <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-[#c6d4d1] px-4 text-[15px] font-semibold text-fixy-800 peer-checked:border-fixy-700 peer-checked:bg-fixy-50">+ Otro lugar</span>
+                  </label>
+                </div>
+              )}
+              {useNewProperty && (
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <AddressFields
+                    zones={props.zones}
+                    autoLocate
+                    defaultValue={{ addressLine: newProp.addressLine ?? "", zoneId: newProp.zoneId ?? "", lat: newProp.lat ?? "", lng: newProp.lng ?? "", placeId: newProp.placeId ?? "", formattedAddress: newProp.formattedAddress ?? "" }}
+                    onChange={(a) => setNewProp((p) => ({ ...p, ...a }))}
+                  />
+                </div>
+              )}
+            </fieldset>
+
+            {categorySlug && zoneId && (
+              <section aria-labelledby="pros-t" className="border-t border-line pt-6">
+                <h2 id="pros-t" className="text-lg font-bold">{category?.requires_review ? "Lo revisa nuestro equipo" : "Profesionales para tu problema"}</h2>
+                {category?.requires_review ? (
+                  <p className="mt-1 text-[15px] text-ink-2">Como no está claro qué oficio necesitás, una persona del equipo lee tu pedido y te propone profesionales. Seguí y envialo.</p>
+                ) : (
+                  <div className="mt-3">
+                    <ChooseProvider loading={loadingPros} providers={pros} chosen={chosen} onChoose={setChosen} categoryName={category?.name ?? ""} />
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
 
-        {/* Paso 2 */}
+        {/* Paso 2: detalles */}
         {step === 1 && (
           <div className="space-y-6">
             {category?.requires_review && (
@@ -271,32 +334,6 @@ export function RequestWizard(props: {
                 <p className="mt-2 text-xs text-muted">Los valores de referencia son estimaciones: el precio confirmado es el del presupuesto que aceptes.</p>
               </fieldset>
             )}
-          </div>
-        )}
-
-        {/* Paso 3 */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <fieldset>
-              <legend className="text-[15px] font-semibold">¿Dónde es el trabajo?</legend>
-              {props.properties.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {props.properties.map((p) => (
-                    <label key={p.id} className="block cursor-pointer">
-                      <input type="radio" name="property" className="peer sr-only" checked={propertyId === p.id} onChange={() => setPropertyId(p.id)} />
-                      <span className="flex items-center justify-between rounded-2xl border border-[#d3dfdc] p-3 peer-checked:border-fixy-700 peer-checked:bg-fixy-50 peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40">
-                        <span><span className="font-semibold">{p.label}</span> <span className="text-sm text-muted">· {p.zone_name}</span></span>
-                        {p.org_name && <span className="text-xs font-semibold text-muted">{p.org_name}</span>}
-                      </span>
-                    </label>
-                  ))}
-                  <label className="block cursor-pointer">
-                    <input type="radio" name="property" className="peer sr-only" checked={!propertyId} onChange={() => setPropertyId(null)} />
-                    <span className="block rounded-2xl border border-dashed border-[#c6d4d1] p-3 font-semibold text-fixy-800 peer-checked:border-fixy-700 peer-checked:bg-fixy-50">+ Otro lugar</span>
-                  </label>
-                </div>
-              )}
-            </fieldset>
             {useNewProperty && (
               <div className="grid gap-4 rounded-2xl bg-cream/60 p-4 ring-1 ring-line sm:grid-cols-2">
                 {props.orgs.length > 0 && (
@@ -307,14 +344,9 @@ export function RequestWizard(props: {
                     </Select>
                   </Field>
                 )}
-                <Field label="Nombre del lugar" htmlFor="np-label" required hint="Ej.: Casa, Oficina centro.">
+                <Field label="Nombre del lugar" htmlFor="np-label" required hint="Ej.: Casa, Oficina centro. Solo lo ves vos.">
                   <Input id="np-label" value={newProp.label} onChange={(e) => setNewProp({ ...newProp, label: e.target.value })} maxLength={120} />
                 </Field>
-                <AddressFields
-                  zones={props.zones}
-                  defaultValue={{ addressLine: newProp.addressLine ?? "", zoneId: newProp.zoneId ?? "", lat: newProp.lat ?? "", lng: newProp.lng ?? "", placeId: newProp.placeId ?? "", formattedAddress: newProp.formattedAddress ?? "" }}
-                  onChange={(a) => setNewProp((p) => ({ ...p, ...a }))}
-                />
                 <Field label="Piso / depto." htmlFor="np-extra">
                   <Input id="np-extra" value={newProp.addressExtra} onChange={(e) => setNewProp({ ...newProp, addressExtra: e.target.value })} maxLength={120} />
                 </Field>
@@ -361,18 +393,7 @@ export function RequestWizard(props: {
           </div>
         )}
 
-        {/* Paso 4: resumen editable */}
-        {step === 3 && (
-          <ChooseProvider
-            loading={loadingPros}
-            providers={pros}
-            chosen={chosen}
-            onChoose={setChosen}
-            categoryName={category?.name ?? ""}
-          />
-        )}
-
-        {step === 4 && (
+        {step === 2 && (
           <form action={formAction} className="space-y-5">
             <input type="hidden" name="payload" value={JSON.stringify(payload)} />
             <Summary label="Problema" onEdit={() => setStep(0)}>
@@ -390,7 +411,7 @@ export function RequestWizard(props: {
               )}
             </Summary>
             {!category?.requires_review && (
-              <Summary label="Profesional" onEdit={() => setStep(3)}>
+              <Summary label="Profesional" onEdit={() => setStep(0)}>
                 {chosenPro ? (
                   <>
                     <span className="font-semibold">{chosenPro.displayName}</span>
@@ -399,7 +420,7 @@ export function RequestWizard(props: {
                 ) : "Recibir presupuestos de varios profesionales"}
               </Summary>
             )}
-            <Summary label="Lugar y horarios" onEdit={() => setStep(2)}>
+            <Summary label="Lugar y horarios" onEdit={() => setStep(1)}>
               {selectedProperty ? <>{selectedProperty.label} · {selectedProperty.zone_name}</> : <>{newProp.label || "Nuevo lugar"} · {zoneName ?? "Zona sin elegir"}</>}
               <div className="text-sm text-muted">
                 {URGENCIES.find((u) => u.v === urgency)?.l}
@@ -429,13 +450,13 @@ export function RequestWizard(props: {
                 : "Pedir presupuestos es gratis. Vamos a invitar a un grupo acotado de profesionales de tu zona; no te prometemos disponibilidad inmediata."}
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-              <Button type="button" variant="secondary" onClick={() => setStep(category?.requires_review ? 2 : 3)}><ArrowLeft className="h-4 w-4" aria-hidden /> Volver</Button>
+              <Button type="button" variant="secondary" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4" aria-hidden /> Volver</Button>
               <SubmitButton size="lg" pendingText="Enviando…">{!props.loggedIn ? "Guardar y crear cuenta" : chosenPro ? `Pedir visita a ${chosenPro.displayName}` : "Enviar pedido"}</SubmitButton>
             </div>
           </form>
         )}
 
-        {step < 4 && (
+        {step < 2 && (
           <div className="mt-8 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             {step > 0 ? <Button type="button" variant="secondary" onClick={() => setStep(step - 1)}><ArrowLeft className="h-4 w-4" aria-hidden /> Volver</Button> : <span />}
             <Button type="button" size="lg" onClick={next}>Continuar <ArrowRight className="h-4 w-4" aria-hidden /></Button>

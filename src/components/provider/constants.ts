@@ -31,6 +31,7 @@ export function minutesToHour(m: number) {
 /** Agrupa zonas por región, en el orden definido. */
 export function groupZones<T extends { region: string }>(zones: T[]): [string, T[]][] {
   const map = new Map<string, T[]>();
-  for (const z of zones) map.set(z.region, [...(map.get(z.region) ?? []), z]);
+  // "Otra zona" es solo para pedidos de clientes fuera de cobertura: los profesionales no la eligen.
+  for (const z of zones) if (REGION_ORDER.includes(z.region)) map.set(z.region, [...(map.get(z.region) ?? []), z]);
   return [...map.entries()].sort((a, b) => REGION_ORDER.indexOf(a[0]) - REGION_ORDER.indexOf(b[0]));
 }

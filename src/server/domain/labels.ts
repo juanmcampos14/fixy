@@ -6,7 +6,7 @@ export const requestStatusLabel: Record<string, string> = {
   with_quotes: "Con presupuestos",
   converted: "Contratada",
   cancelled: "Cancelada",
-  no_coverage: "Sin cobertura",
+  no_coverage: "Buscando a mano",
 };
 export const quoteStatusLabel: Record<string, string> = {
   draft: "Borrador",

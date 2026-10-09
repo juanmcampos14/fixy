@@ -11,7 +11,8 @@ import { AddressPrivacyNote } from "./privacy-note";
 export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[] };
 export type AddressValue = { addressLine: string; zoneId: string; lat: string; lng: string; placeId: string; formattedAddress: string };
 
-const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur" };
+const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur", OTRA: "Fuera de CABA y GBA" };
+export const FEW_PROS_MESSAGE = "Todavía tenemos pocos profesionales en esa zona. Podés hacer el pedido igual: lo revisa nuestro equipo y te avisamos apenas consigamos a alguien.";
 const BA_CENTER = { lat: -34.6037, lng: -58.3816 };
 const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
 
@@ -20,11 +21,13 @@ const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5
  * "Usar mi ubicación" (geolocalización del navegador + Geocoding) y zona asignada automáticamente.
  * Sin clave: carga manual. Siempre renderiza inputs con nombre para usarse dentro de formularios.
  */
-export function AddressFields({ zones, defaultValue, onChange, required = true }: {
+export function AddressFields({ zones, defaultValue, onChange, required = true, autoLocate = false }: {
   zones: ZoneOption[];
   defaultValue?: Partial<AddressValue>;
   onChange?: (v: AddressValue) => void;
   required?: boolean;
+  /** Pide la ubicación apenas se muestra (si el navegador no la tiene bloqueada) y completa la dirección sola. */
+  autoLocate?: boolean;
 }) {
   const uid = useId();
   const [v, setV] = useState<AddressValue>({ addressLine: "", zoneId: "", lat: "", lng: "", placeId: "", formattedAddress: "", ...defaultValue });
@@ -32,32 +35,46 @@ export function AddressFields({ zones, defaultValue, onChange, required = true }
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [busy, setBusy] = useState<"" | "locating" | "loading">("");
-  const [msg, setMsg] = useState<{ tone: "warn" | "ok"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ tone: "warn" | "ok" | "info"; text: string } | null>(null);
   const [autoZone, setAutoZone] = useState(false);
   const token = useRef<any>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const enabled = !!MAPS_KEY;
 
+  // Valor actual en una ref: avisamos al padre fuera del render (onChange no puede ir dentro del updater de setState).
+  const current = useRef(v);
   const update = (patch: Partial<AddressValue>) => {
-    setV((prev) => {
-      const next = { ...prev, ...patch };
-      onChange?.(next);
-      return next;
-    });
+    const next = { ...current.current, ...patch };
+    current.current = next;
+    setV(next);
+    onChange?.(next);
   };
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
+  // Ubicación automática: sin pedirle al usuario que escriba primero. Si ya negó el permiso, no insistimos.
+  useEffect(() => {
+    if (!autoLocate || !enabled || v.addressLine || typeof navigator === "undefined" || !navigator.geolocation) return;
+    let cancelled = false;
+    const go = () => { if (!cancelled) locate(); };
+    if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: "geolocation" as PermissionName }).then((st) => { if (st.state !== "denied") go(); }).catch(go);
+    } else go();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function applyComponents(components: AddressComponent[], formatted: string, lat: number, lng: number, placeId: string, streetLine?: string) {
-    const zone = matchZone(components, zones as MatchZone[]);
+    const zone = matchZone(components, zones as MatchZone[]) ?? zones.find((z) => z.code === "otra-zona") ?? null;
+    const outside = zone?.code === "otra-zona";
     const route = components.find((c) => c.types.includes("route"));
     const number = components.find((c) => c.types.includes("street_number"));
     const line = streetLine ?? ([route?.long_name ?? route?.longText, number?.long_name ?? number?.longText].filter(Boolean).join(" ") || formatted.split(",")[0]);
     update({ addressLine: line, formattedAddress: formatted, lat: lat.toFixed(6), lng: lng.toFixed(6), placeId, ...(zone ? { zoneId: zone.id } : {}) });
     setAutoZone(!!zone);
-    setMsg(zone
+    setMsg(zone && !outside
       ? { tone: "ok", text: `Zona detectada: ${zones.find((z) => z.id === zone.id)?.name}.` }
-      : { tone: "warn", text: "Todavía no llegamos a esa ubicación (cubrimos CABA y GBA). Si es un error, elegí la zona a mano." });
+      : { tone: "info", text: FEW_PROS_MESSAGE });
   }
 
   async function search(input: string) {
@@ -192,8 +209,9 @@ export function AddressFields({ zones, defaultValue, onChange, required = true }
             </ul>
           )}
         </div>
+        {busy === "locating" && <p role="status" className="flex items-center gap-1.5 text-sm text-muted"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />Buscando tu ubicación…</p>}
         {msg && (
-          <p role="status" className={cn("flex items-start gap-1.5 text-sm", msg.tone === "warn" ? "text-warn" : "text-ok")}>
+          <p role="status" className={cn("flex items-start gap-1.5 text-sm", msg.tone === "warn" ? "text-warn" : msg.tone === "info" ? "rounded-xl bg-info-bg px-3 py-2 text-info" : "text-ok")}>
             {msg.tone === "warn" && <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}{msg.text}
           </p>
         )}
@@ -201,7 +219,7 @@ export function AddressFields({ zones, defaultValue, onChange, required = true }
       <div className="space-y-1.5">
         <label htmlFor={`${uid}-zone`} className="block text-[15px] font-semibold text-ink">Zona{required && <span className="text-danger" aria-hidden> *</span>}</label>
         {autoZone && <p className="text-sm text-muted">Detectada desde la dirección. Podés cambiarla.</p>}
-        <select id={`${uid}-zone`} name="zoneId" value={v.zoneId} required={required} onChange={(e) => { update({ zoneId: e.target.value }); setAutoZone(false); }} className={cn(control, "h-12")}>
+        <select id={`${uid}-zone`} name="zoneId" value={v.zoneId} required={required} onChange={(e) => { update({ zoneId: e.target.value }); setAutoZone(false); setMsg(zones.find((z) => z.id === e.target.value)?.code === "otra-zona" ? { tone: "info", text: FEW_PROS_MESSAGE } : null); }} className={cn(control, "h-12")}>
           <option value="" disabled>Elegí la zona</option>
           {Object.entries(REGION).map(([r, label]) => (
             <optgroup key={r} label={label}>

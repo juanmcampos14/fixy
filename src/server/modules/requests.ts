@@ -218,11 +218,11 @@ export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | nu
     await transitionRequest(tx, requestId, r.status, "no_coverage", side, actor, "Sin proveedores elegibles en la zona y categoría");
     await notify(tx, await clientRecipients(tx, requestId), {
       type: "request_received",
-      title: `Todavía no hay profesionales disponibles · ${r.code}`,
-      body: "No encontramos proveedores habilitados para tu zona y tipo de trabajo. Nuestro equipo lo revisa y te avisamos.",
+      title: `Estamos buscando un profesional para vos · ${r.code}`,
+      body: "Todavía tenemos pocos profesionales en tu zona para este trabajo. Nuestro equipo ya está viendo tu pedido y te avisamos apenas consigamos a alguien.",
       link: `/app/solicitudes/${requestId}`,
     });
-    await notify(tx, await staffRecipients(tx), { type: "request_received", title: `Solicitud sin cobertura · ${r.code}`, link: `/admin/solicitudes/${requestId}`, email: false });
+    await notify(tx, await staffRecipients(tx), { type: "request_received", title: `Pedido para conseguir a mano · ${r.code}`, link: `/admin/solicitudes/${requestId}` });
   }
   await recordEvent(tx, { entityType: "request", entityId: requestId, action: "matching_run", actorId: actor?.id ?? null, data: { candidates: candidates.length, invited } });
   return invited;
