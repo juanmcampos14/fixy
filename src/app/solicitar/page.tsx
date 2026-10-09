@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { sql } from "@/server/db/client";
 import { getActor } from "@/server/auth/session";
-import { listCategories, listZones, listServices } from "@/server/modules/catalog";
+import { listCategories, listZones } from "@/server/modules/catalog";
 import { claimDraft, DRAFT_COOKIE } from "@/server/modules/requests";
 import { PublicHeader } from "@/components/layout/public-header";
-import { RequestWizard } from "./wizard";
+import { ChatRequest } from "./chat-request";
 import type { RequestPayload } from "./actions";
 
 export const metadata: Metadata = { title: "Pedí un profesional" };
@@ -14,7 +14,7 @@ export default async function SolicitarPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const db = sql();
   const actor = await getActor();
-  const [categories, zones, services] = await Promise.all([listCategories(db), listZones(db), listServices(db)]);
+  const [categories, zones] = await Promise.all([listCategories(db), listZones(db)]);
   const questions = await db<{ category_id: string; key: string; label: string; kind: "text" | "select" | "boolean"; options: string[]; required: boolean }[]>`
     select category_id, key, label, kind, options, required from service_questions order by sort`;
 
@@ -48,15 +48,13 @@ export default async function SolicitarPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <PublicHeader />
-      <main id="contenido" className="mx-auto max-w-3xl px-4 pb-24 pt-6 sm:px-6 sm:pt-10">
-        <RequestWizard
+      <main id="contenido" className="min-h-dvh bg-cream px-4 pb-24 pt-6 sm:px-6 sm:pt-10">
+        <ChatRequest
           loggedIn={!!actor}
           categories={categories}
           questions={questions.map((q) => ({ ...q, options: q.options ?? [] }))}
           zones={zones}
-          services={services.map((s) => ({ id: s.id, category_id: s.category_id, name: s.name, pricing_mode: s.pricing_mode, fixed_price_minor: s.fixed_price_minor, diagnostic_price_minor: s.diagnostic_price_minor, scope: s.scope, exclusions: s.exclusions }))}
           properties={properties}
-          orgs={actor?.organizations.filter((o) => o.role === "admin") ?? []}
           orgMembers={orgMembers}
           initialText={sp.q ?? ""}
           initialCategory={sp.categoria ?? previous?.category_slug ?? null}

@@ -3,16 +3,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useId, useRef, useState } from "react";
 import { LoaderCircle, LocateFixed, MapPin, TriangleAlert } from "lucide-react";
-import { matchZone, type AddressComponent, type MatchZone } from "@/lib/zone-match";
+import type { AddressComponent } from "@/lib/zone-match";
 import { loadGoogleMaps, MAPS_KEY } from "./google-maps";
 import { cn } from "@/lib/cn";
 import { AddressPrivacyNote } from "./privacy-note";
 
-export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[] };
-export type AddressValue = { addressLine: string; zoneId: string; lat: string; lng: string; placeId: string; formattedAddress: string };
+import { componentsToAddress, FEW_PROS_MESSAGE, LOCATE_ERROR, locateMe, type AddressValue, type ZoneOption } from "./locate";
+export type { AddressValue, ZoneOption } from "./locate";
 
 const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur", OTRA: "Fuera de CABA y GBA" };
-export const FEW_PROS_MESSAGE = "Todavía tenemos pocos profesionales en esa zona. Podés hacer el pedido igual: lo revisa nuestro equipo y te avisamos apenas consigamos a alguien.";
 const BA_CENTER = { lat: -34.6037, lng: -58.3816 };
 const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
 
@@ -21,13 +20,11 @@ const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5
  * "Usar mi ubicación" (geolocalización del navegador + Geocoding) y zona asignada automáticamente.
  * Sin clave: carga manual. Siempre renderiza inputs con nombre para usarse dentro de formularios.
  */
-export function AddressFields({ zones, defaultValue, onChange, required = true, autoLocate = false }: {
+export function AddressFields({ zones, defaultValue, onChange, required = true }: {
   zones: ZoneOption[];
   defaultValue?: Partial<AddressValue>;
   onChange?: (v: AddressValue) => void;
   required?: boolean;
-  /** Pide la ubicación apenas se muestra (si el navegador no la tiene bloqueada) y completa la dirección sola. */
-  autoLocate?: boolean;
 }) {
   const uid = useId();
   const [v, setV] = useState<AddressValue>({ addressLine: "", zoneId: "", lat: "", lng: "", placeId: "", formattedAddress: "", ...defaultValue });
@@ -52,29 +49,11 @@ export function AddressFields({ zones, defaultValue, onChange, required = true, 
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  // Ubicación automática: sin pedirle al usuario que escriba primero. Si ya negó el permiso, no insistimos.
-  useEffect(() => {
-    if (!autoLocate || !enabled || v.addressLine || typeof navigator === "undefined" || !navigator.geolocation) return;
-    let cancelled = false;
-    const go = () => { if (!cancelled) locate(); };
-    if (navigator.permissions?.query) {
-      navigator.permissions.query({ name: "geolocation" as PermissionName }).then((st) => { if (st.state !== "denied") go(); }).catch(go);
-    } else go();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   function applyComponents(components: AddressComponent[], formatted: string, lat: number, lng: number, placeId: string, streetLine?: string) {
-    const zone = matchZone(components, zones as MatchZone[]) ?? zones.find((z) => z.code === "otra-zona") ?? null;
-    const outside = zone?.code === "otra-zona";
-    const route = components.find((c) => c.types.includes("route"));
-    const number = components.find((c) => c.types.includes("street_number"));
-    const line = streetLine ?? ([route?.long_name ?? route?.longText, number?.long_name ?? number?.longText].filter(Boolean).join(" ") || formatted.split(",")[0]);
-    update({ addressLine: line, formattedAddress: formatted, lat: lat.toFixed(6), lng: lng.toFixed(6), placeId, ...(zone ? { zoneId: zone.id } : {}) });
+    const { value, zone, outside } = componentsToAddress(components, formatted, lat, lng, placeId, zones, streetLine);
+    update(zone ? value : { ...value, zoneId: current.current.zoneId });
     setAutoZone(!!zone);
-    setMsg(zone && !outside
-      ? { tone: "ok", text: `Zona detectada: ${zones.find((z) => z.id === zone.id)?.name}.` }
-      : { tone: "info", text: FEW_PROS_MESSAGE });
+    setMsg(zone && !outside ? { tone: "ok", text: `Zona detectada: ${zone.name}.` } : { tone: "info", text: FEW_PROS_MESSAGE });
   }
 
   async function search(input: string) {
@@ -117,32 +96,16 @@ export function AddressFields({ zones, defaultValue, onChange, required = true, 
     }
   }
 
-  function locate() {
-    if (!navigator.geolocation) return setMsg({ tone: "warn", text: "Tu navegador no permite detectar la ubicación." });
+  async function locate() {
     setBusy("locating");
     setMsg(null);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const g = await loadGoogleMaps();
-          const { Geocoder } = await g.maps.importLibrary("geocoding");
-          const { results } = await new Geocoder().geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, language: "es", region: "AR" });
-          const best = results.find((r: any) => r.types.includes("street_address") || r.types.includes("premise")) ?? results[0];
-          if (!best) throw new Error("sin resultados");
-          applyComponents(best.address_components, best.formatted_address, pos.coords.latitude, pos.coords.longitude, best.place_id);
-          setMsg((m) => (m?.tone === "ok" ? { tone: "ok", text: `${m.text} Revisá la altura y completá piso o depto.` } : m));
-        } catch {
-          setMsg({ tone: "warn", text: "No pudimos convertir tu ubicación en una dirección. Escribila a mano." });
-        } finally {
-          setBusy("");
-        }
-      },
-      (err) => {
-        setBusy("");
-        setMsg({ tone: "warn", text: err.code === err.PERMISSION_DENIED ? "No diste permiso para usar tu ubicación. Podés escribir la dirección." : "No pudimos detectar tu ubicación. Escribí la dirección." });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    );
+    const r = await locateMe(zones);
+    setBusy("");
+    if (!r.ok) return setMsg({ tone: "warn", text: LOCATE_ERROR[r.error] });
+    const { value, zone, outside } = r.located;
+    update(zone ? value : { ...value, zoneId: current.current.zoneId });
+    setAutoZone(!!zone);
+    setMsg(outside ? { tone: "info", text: FEW_PROS_MESSAGE } : { tone: "ok", text: `Zona detectada: ${zone!.name}. Revisá la altura y completá piso o depto.` });
   }
 
   const listId = `${uid}-list`;
