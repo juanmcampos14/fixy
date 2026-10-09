@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LEGAL } from "@/lib/legal";
+import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
 
 export function PublicFooter() {
@@ -25,16 +27,18 @@ export function PublicFooter() {
           </ul>
         </div>
         <div>
-          <h2 className="text-sm font-bold text-white">Legales (borradores)</h2>
+          <h2 className="text-sm font-bold text-white">Legales</h2>
           <ul className="mt-3 space-y-2 text-sm">
             <li><Link className="hover:underline" href="/terminos">Términos y condiciones</Link></li>
+            <li><Link className="hover:underline" href="/terminos/profesionales">Condiciones para profesionales</Link></li>
             <li><Link className="hover:underline" href="/privacidad">Privacidad</Link></li>
+            <li><Link className="hover:underline font-semibold" href="/arrepentimiento">Botón de arrepentimiento</Link></li>
           </ul>
         </div>
       </div>
       <div className="border-t border-white/10">
         <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-white/60 sm:px-6">
-          © {new Date().getFullYear()} Fixy · fixy.solutions · MVP en desarrollo: los perfiles, reseñas y pagos que ves son de demostración.
+          © {new Date().getFullYear()} {LEGAL.company} · CUIT {LEGAL.cuit} · {LEGAL.brand} · {LEGAL.site}{paymentsAreTestMode() ? " · Pagos en modo de prueba: no se mueve dinero real." : ""}
         </p>
       </div>
     </footer>

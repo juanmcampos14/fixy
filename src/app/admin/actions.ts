@@ -13,6 +13,7 @@ import { reviewDocument, reviewProvider, type ReviewAction } from "@/server/modu
 import { cancelRequest, operatorInvite, operatorRunMatching, operatorSetCategory } from "@/server/modules/requests";
 import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
 import { markWithdrawalPaid, rejectWithdrawal } from "@/server/modules/withdrawals";
+import { resolveRevocation } from "@/server/modules/revocations";
 import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, resyncCharge, setPayoutHold } from "@/server/modules/payments";
 import { moveDispute, replyDispute, resolveDispute } from "@/server/modules/disputes";
 import * as admin from "@/server/modules/admin";
@@ -441,5 +442,14 @@ export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promi
     await rejectWithdrawal(actor, str(f, "withdrawalId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Retiro rechazado. El saldo volvió a estar disponible para el profesional." };
+  });
+}
+
+export async function resolveRevocationAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    await resolveRevocation(actor, str(f, "id"), str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Pedido marcado como resuelto." };
   });
 }

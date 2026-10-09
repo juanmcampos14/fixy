@@ -1,3 +1,4 @@
+import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
 /** Secciones del alta y del perfil del proveedor (componentes de servidor). */
 import { CircleCheck, CircleDashed, FileText, ImagePlus, Trash2 } from "lucide-react";
@@ -274,6 +275,7 @@ export function TermsSection({ setup, accepted, id = "terminos" }: { setup: Prov
             {t.title} · versión {t.version} {t.is_draft && <Badge tone="warn" icon={false} className="ml-1">Borrador</Badge>}
           </p>
           {t.is_draft && <p className="mt-1 text-sm text-muted">Es una versión preliminar en revisión legal. Te avisamos si cambia.</p>}
+          <p className="mt-1 text-sm"><Link href="/terminos/profesionales" target="_blank" className="font-semibold text-fixy-800 underline">Leer las condiciones</Link> · 0 % de comisión, cobros y retiros, reseñas y conducta.</p>
           {accepted || t.accepted ? (
             <p className="mt-3 flex items-center gap-2 font-semibold text-ok"><CircleCheck className="h-5 w-5" aria-hidden /> Aceptados</p>
           ) : (

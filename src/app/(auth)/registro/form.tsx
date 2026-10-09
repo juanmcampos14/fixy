@@ -27,7 +27,7 @@ export function RegisterForm({ next }: { next: string }) {
         <Input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required invalid={!!fe("password")} />
       </Field>
       <div>
-        <Checkbox name="acceptTerms" required label={<>Acepto los <Link href="/terminos" className="underline" target="_blank">términos</Link> y la <Link href="/privacidad" className="underline" target="_blank">política de privacidad</Link> (borradores en revisión).</>} />
+        <Checkbox name="acceptTerms" required label={<>Acepto los <Link href="/terminos" className="underline" target="_blank">términos</Link> y la <Link href="/privacidad" className="underline" target="_blank">política de privacidad</Link> de Fixy.</>} />
         <FieldError state={s} name="acceptTerms" />
       </div>
       <SubmitButton className="w-full" size="lg" pendingText="Creando cuenta…">Crear cuenta</SubmitButton>
