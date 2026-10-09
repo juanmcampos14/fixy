@@ -14,10 +14,13 @@ import { cancelRequest, operatorInvite, operatorRunMatching, operatorSetCategory
 import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
 import { markWithdrawalPaid, rejectWithdrawal } from "@/server/modules/withdrawals";
 import { resolveRevocation } from "@/server/modules/revocations";
+import { createTemplate, listTemplates } from "@/server/whatsapp/client";
+import { WA_LANGUAGE, WA_TEMPLATES, templateDefinition, type WaTemplateKey } from "@/server/whatsapp/templates";
 import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, resyncCharge, setPayoutHold } from "@/server/modules/payments";
 import { moveDispute, replyDispute, resolveDispute } from "@/server/modules/disputes";
 import * as admin from "@/server/modules/admin";
 import { sql } from "@/server/db/client";
+import { audit } from "@/server/audit";
 
 const refresh = () => revalidatePath("/admin", "layout");
 
@@ -451,5 +454,23 @@ export async function resolveRevocationAction(_: ActionState, f: FormData): Prom
     await resolveRevocation(actor, str(f, "id"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Pedido marcado como resuelto." };
+  });
+}
+
+export async function createWhatsAppTemplatesAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requirePlatformAdmin();
+    const existing = (await listTemplates()) ?? [];
+    const results: string[] = [];
+    for (const key of Object.keys(WA_TEMPLATES) as WaTemplateKey[]) {
+      const t = WA_TEMPLATES[key];
+      if (existing.some((r) => r.name === t.name && r.language === WA_LANGUAGE)) continue;
+      const r = await createTemplate(templateDefinition(key));
+      results.push(r.ok ? `${t.name}: enviada a revisión` : `${t.name}: ${r.error}`);
+    }
+    await audit(sql(), actor, "whatsapp.templates_create", "whatsapp", null, null, { results });
+    revalidatePath("/admin/whatsapp");
+    const failed = results.filter((r) => !r.includes("enviada a revisión"));
+    return failed.length ? { error: failed.join(" · ") } : { ok: true, message: "Plantillas enviadas a revisión de Meta." };
   });
 }

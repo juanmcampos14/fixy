@@ -12,7 +12,9 @@ export type OutMessage =
   | { kind: "text"; text: string; previewUrl?: boolean }
   | { kind: "buttons"; text: string; buttons: OutButton[] }
   | { kind: "list"; text: string; button: string; sections: { title: string; rows: OutRow[] }[] }
-  | { kind: "location_request"; text: string };
+  | { kind: "location_request"; text: string }
+  /** Plantilla aprobada por Meta: única forma de escribir fuera de la ventana de 24 h. */
+  | { kind: "template"; name: string; language: string; params: string[]; buttonParam?: string };
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -43,14 +45,26 @@ export function toGraphPayload(to: string, m: OutMessage) {
     }
     case "location_request":
       return { ...base, type: "interactive", interactive: { type: "location_request_message", body: { text: cut(m.text, 1024) }, action: { name: "send_location" } } };
+    case "template":
+      return {
+        ...base, type: "template",
+        template: {
+          name: m.name, language: { code: m.language },
+          components: [
+            { type: "body", parameters: m.params.map((t) => ({ type: "text", text: cut(t.replace(/\s+/g, " ").trim() || "-", 200) })) },
+            ...(m.buttonParam ? [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: m.buttonParam }] }] : []),
+          ],
+        },
+      };
   }
 }
 
-export async function sendWhatsApp(to: string, m: OutMessage): Promise<void> {
+/** Envía y registra. Devuelve el resultado para que el outbox decida si reintenta. */
+export async function sendWhatsApp(to: string, m: OutMessage): Promise<"sent" | "failed" | "simulated"> {
   const payload = toGraphPayload(to, m);
   if (!whatsappConfigured()) {
     await sql()`insert into whatsapp_messages (phone, direction, kind, body, status) values (${to}, 'out', ${m.kind}, ${sql().json(payload as never)}, 'simulated')`;
-    return;
+    return "simulated";
   }
   const e = env();
   let status = "sent";
@@ -73,6 +87,50 @@ export async function sendWhatsApp(to: string, m: OutMessage): Promise<void> {
   }
   await sql()`insert into whatsapp_messages (wa_message_id, phone, direction, kind, body, status)
     values (${waId}, ${to}, 'out', ${m.kind}, ${sql().json(payload as never)}, ${status}) on conflict (wa_message_id) do nothing`;
+  return status as "sent" | "failed";
+}
+
+const graph = (path: string) => `https://graph.facebook.com/${env().WHATSAPP_API_VERSION}/${path}`;
+const auth = () => ({ Authorization: `Bearer ${env().WHATSAPP_ACCESS_TOKEN}` });
+
+/** Descarga una foto recibida (2 pasos: la Graph API da una URL temporal que también exige el token). */
+export async function downloadMedia(mediaId: string): Promise<{ data: Buffer; mime: string } | null> {
+  if (!whatsappConfigured() || !/^\d{5,30}$/.test(mediaId)) return null;
+  try {
+    const meta = (await (await fetch(graph(mediaId), { headers: auth(), signal: AbortSignal.timeout(8000) })).json()) as { url?: string; mime_type?: string; file_size?: number };
+    if (!meta.url || (meta.file_size ?? 0) > 8 * 1024 * 1024) return null;
+    const host = new URL(meta.url).hostname;
+    if (!host.endsWith(".fbsbx.com") && !host.endsWith(".facebook.com") && !host.endsWith(".whatsapp.net")) return null;
+    const res = await fetch(meta.url, { headers: auth(), signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    return { data: Buffer.from(await res.arrayBuffer()), mime: meta.mime_type ?? "" };
+  } catch {
+    console.warn("[whatsapp] no se pudo descargar una foto");
+    return null;
+  }
+}
+
+export type TemplateStatus = { name: string; language: string; status: string; category: string; rejected_reason?: string };
+
+/** Plantillas de la cuenta de WhatsApp Business (WHATSAPP_WABA_ID). */
+export async function listTemplates(): Promise<TemplateStatus[] | null> {
+  const e = env();
+  if (!e.WHATSAPP_ACCESS_TOKEN || !e.WHATSAPP_WABA_ID) return null;
+  const res = await fetch(graph(`${e.WHATSAPP_WABA_ID}/message_templates?fields=name,language,status,category,rejected_reason&limit=100`), { headers: auth(), signal: AbortSignal.timeout(10000) });
+  if (!res.ok) return null;
+  return ((await res.json()) as { data?: TemplateStatus[] }).data ?? [];
+}
+
+/** Crea una plantilla para revisión de Meta. Devuelve el error de Meta si la rechaza al crearla. */
+export async function createTemplate(def: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> {
+  const e = env();
+  if (!e.WHATSAPP_ACCESS_TOKEN || !e.WHATSAPP_WABA_ID) return { ok: false, error: "Falta configurar WHATSAPP_ACCESS_TOKEN o WHATSAPP_WABA_ID." };
+  const res = await fetch(graph(`${e.WHATSAPP_WABA_ID}/message_templates`), {
+    method: "POST", headers: { ...auth(), "Content-Type": "application/json" }, body: JSON.stringify(def), signal: AbortSignal.timeout(15000),
+  });
+  if (res.ok) return { ok: true };
+  const j = (await res.json().catch(() => ({}))) as { error?: { message?: string; error_user_msg?: string } };
+  return { ok: false, error: (j.error?.error_user_msg || j.error?.message || `Meta respondió ${res.status}`).slice(0, 300) };
 }
 
 export async function markRead(messageId: string) {

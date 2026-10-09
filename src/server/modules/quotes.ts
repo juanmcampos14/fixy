@@ -15,6 +15,14 @@ import { providerEligibility } from "./providers";
 import { createCharge } from "./payments";
 import { formatMoney } from "@/lib/format";
 
+/** "jueves 15/10" para avisos por WhatsApp. */
+function weekdayDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  const day = new Intl.DateTimeFormat("es-AR", { weekday: "long", timeZone: "UTC" }).format(dt);
+  return `${day} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+
 export const DEFAULT_CANCELLATION_TERMS =
   "Podés cancelar sin cargo mientras el profesional no haya confirmado el trabajo: si ya pagaste, se reintegra el total por el mismo medio. " +
   "Después de la confirmación, la cancelación se gestiona con el equipo de Fixy según lo realizado. Fixy no ofrece custodia de fondos ni garantías adicionales a las indicadas.";
@@ -95,6 +103,8 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
     }
     await recordEvent(tx, { entityType: "request", entityId: inv.request_id, action: "quote_received", data: { quoteId: q.id, providerId: inv.provider_id } });
     const direct = req.request_mode === "direct";
+    const [prov] = await tx<{ display_name: string }[]>`select display_name from providers where id = ${inv.provider_id}`;
+    const when = d.proposedDate ? `${weekdayDate(d.proposedDate)}${d.proposedWindow ? ` (${d.proposedWindow.toLowerCase()})` : ""}` : "día a coordinar";
     await notify(tx, await clientRecipients(tx, inv.request_id), {
       type: "quote_received",
       title: direct ? `El profesional aceptó tu pedido · ${req.code}` : `Recibiste un presupuesto · ${req.code}`,
@@ -102,6 +112,11 @@ export async function createQuote(actor: Actor, input: QuoteInput) {
         ? `Propone visitarte${d.proposedDate ? ` el ${d.proposedDate}` : ""}. ${b.totalMinor > 0 ? `Visita: ${formatMoney(b.totalMinor)}.` : "La visita es sin cargo."} Confirmala en Fixy.`
         : `Total: ${formatMoney(b.totalMinor)}. Revisá qué incluye antes de confirmar.`,
       link: `/app/solicitudes/${inv.request_id}`,
+      whatsapp: direct
+        ? { template: "proAccepted", params: [prov.display_name, req.code, when], requestId: inv.request_id,
+            text: `${prov.display_name} aceptó tu pedido ${req.code} y propone visitarte el ${when}. Confirmá la visita en Fixy:` }
+        : { template: "quoteReceived", params: [prov.display_name, req.code, formatMoney(b.totalMinor)], requestId: inv.request_id,
+            text: `${prov.display_name} te envió un presupuesto para tu pedido ${req.code} por ${formatMoney(b.totalMinor)}. Revisalo en Fixy:` },
     });
     return q.id;
   });

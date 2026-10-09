@@ -9,6 +9,7 @@ import { triage } from "@/server/assistant";
 import { rateLimit } from "@/server/rate-limit";
 import { DRAFT_COOKIE, saveAnonymousDraft } from "@/server/modules/requests";
 import { requestPayloadSchema, submitRequestPayload } from "@/server/modules/request-submit";
+import { attachWhatsAppPhotos } from "@/server/whatsapp/bot";
 import { sql } from "@/server/db/client";
 import { headers } from "next/headers";
 
@@ -36,6 +37,8 @@ export async function submitRequestAction(_: ActionState, f: FormData): Promise<
       return;
     }
     const id = await submitRequestPayload(actor, payload, await files(f, "photos"));
+    // Fotos que mandó por WhatsApp antes de vincular su cuenta con el link (reservadas para esta cuenta).
+    await attachWhatsAppPhotos(id, { claimedBy: actor.id }).catch(() => null);
     (await cookies()).delete(DRAFT_COOKIE);
     target = `/app/solicitudes/${id}?nueva=1`;
   });

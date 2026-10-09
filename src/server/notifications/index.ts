@@ -1,6 +1,7 @@
 import type { Db } from "@/server/db/client";
 import { sql } from "@/server/db/client";
 import { env } from "@/server/env";
+import type { WaNotice } from "@/server/whatsapp/templates";
 
 export type NotificationType =
   | "request_received"
@@ -26,7 +27,7 @@ export type NotificationType =
 export async function notify(
   db: Db,
   userIds: (string | null | undefined)[],
-  n: { type: NotificationType; title: string; body?: string; link?: string; email?: boolean },
+  n: { type: NotificationType; title: string; body?: string; link?: string; email?: boolean; whatsapp?: WaNotice },
 ) {
   const ids = [...new Set(userIds.filter((x): x is string => !!x))];
   for (const userId of ids) {
@@ -35,6 +36,11 @@ export async function notify(
     if (n.email !== false) {
       await db`insert into outbox (channel, recipient_user_id, payload)
         values ('email', ${userId}, ${db.json({ subject: n.title, text: n.body ?? "", link: n.link ?? null } as never)})`;
+    }
+    // WhatsApp solo a quienes vincularon su número (lo hicieron escribiéndonos: hay consentimiento).
+    if (n.whatsapp) {
+      await db`insert into outbox (channel, recipient_user_id, payload)
+        select 'whatsapp', id, ${db.json(n.whatsapp as never)} from users where id = ${userId} and whatsapp_phone is not null and disabled_at is null`;
     }
   }
 }
@@ -116,7 +122,7 @@ export async function processOutbox(limit = 20, adapter: EmailAdapter = emailAda
   await sql().begin(async (tx) => {
     const rows = await tx<{ id: string; payload: { subject: string; text: string; link: string | null }; attempts: number; email: string }[]>`
       select o.id, o.payload, o.attempts, u.email from outbox o join users u on u.id = o.recipient_user_id
-      where o.status in ('pending','failed') and o.next_attempt_at <= now()
+      where o.channel = 'email' and o.status in ('pending','failed') and o.next_attempt_at <= now()
       order by o.created_at limit ${limit} for update of o skip locked`;
     for (const r of rows) {
       try {

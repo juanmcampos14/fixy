@@ -29,6 +29,8 @@ const schema = z.object({
   // WhatsApp Cloud API (Meta). Sin token/ID, los mensajes salientes se registran sin enviarse (modo simulado).
   WHATSAPP_ACCESS_TOKEN: z.string().optional().default(""),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
+  // Cuenta de WhatsApp Business (WABA): para crear y consultar plantillas.
+  WHATSAPP_WABA_ID: z.string().optional().default(""),
   WHATSAPP_APP_SECRET: z.string().optional().default(""),
   WHATSAPP_VERIFY_TOKEN: z.string().optional().default(""),
   WHATSAPP_API_VERSION: z.string().default("v23.0"),

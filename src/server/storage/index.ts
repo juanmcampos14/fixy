@@ -86,10 +86,10 @@ export async function storeFile(
   input: {
     data: Buffer;
     originalName: string;
-    uploadedBy: string;
+    uploadedBy: string | null;
     purpose: FilePurpose;
-    ownerType: FileOwnerType;
-    ownerId: string;
+    ownerType: FileOwnerType | null;
+    ownerId: string | null;
     visibility?: "private" | "public";
     allowPdf?: boolean;
   },

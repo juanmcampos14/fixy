@@ -16,7 +16,8 @@ import { submitRequestPayload, type RequestPayload } from "@/server/modules/requ
 import { componentsToAddress, type AddressValue } from "@/lib/address";
 import { formatMoney } from "@/lib/format";
 import { geocodeAddress, reverseGeocode } from "@/server/geo";
-import { markRead, sendWhatsApp, type OutMessage } from "./client";
+import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client";
+import { storeFile } from "@/server/storage";
 
 export type Inbound = {
   id: string;
@@ -26,6 +27,9 @@ export type Inbound = {
   text?: string;
   replyId?: string;
   location?: { lat: number; lng: number; name?: string; address?: string };
+  mediaId?: string;
+  /** Archivo guardado de la foto recibida (lo completa handleInbound). */
+  fileId?: string;
 };
 
 type Step = "idle" | "problem" | "location" | "address" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
@@ -40,6 +44,8 @@ type State = {
   pros?: { slug: string; name: string; visitFeeMinor: number }[];
   chosen?: string | null; // slug | "quotes"
   extra?: string;
+  /** Fotos recibidas por WhatsApp para este pedido (ids de archivos privados). */
+  photos?: string[];
 };
 
 type Zone = { id: string; code: string; name: string; region: string; match_names: string[] };
@@ -72,7 +78,10 @@ export function parseWebhook(body: unknown): Inbound[] {
         else if (m.type === "location") {
           const l = m.location as { latitude: number; longitude: number; name?: string; address?: string };
           out.push({ ...base, type: "location", location: { lat: Number(l.latitude), lng: Number(l.longitude), name: l.name, address: l.address } });
-        } else if (m.type === "image") out.push({ ...base, type: "image", text: String((m.image as { caption?: string })?.caption ?? "") });
+        } else if (m.type === "image") {
+          const img = m.image as { id?: string; caption?: string };
+          out.push({ ...base, type: "image", text: String(img?.caption ?? ""), mediaId: img?.id ? String(img.id) : undefined });
+        }
         else out.push({ ...base, type: "other" });
       }
     }
@@ -87,6 +96,7 @@ export async function handleInbound(msg: Inbound): Promise<void> {
     on conflict (wa_message_id) do nothing returning id`;
   if (!logged) return; // duplicado
   void markRead(msg.id);
+  if (msg.type === "image" && msg.mediaId) msg.fileId = (await saveIncomingPhoto(msg.from, msg.mediaId)) ?? undefined;
 
   const out: OutMessage[] = [];
   await systemTx(async (tx) => {
@@ -118,6 +128,7 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     ctx.out.push({ kind: "text", text: "Te ayudo a conseguir un profesional para tu casa u oficina. Contame el problema en una oración. Escribí *cambiar* si el oficio no es el correcto, o *cancelar* para empezar de nuevo." });
     return s;
   }
+  if (msg.type === "image") return onPhoto(s, msg, ctx);
   if ((reply === "change_cat" || t === "cambiar") && s.description) return askCategory(s, ctx);
   if (reply.startsWith("cat:") && s.description) {
     const next = { ...s, categorySlug: reply.slice(4) };
@@ -130,14 +141,10 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     case "awaiting_account":
       if (s.step === "awaiting_account" && !text) return s;
       if (msg.type === "text" && text.length >= 12 && !isGreeting(text)) return onProblem({ step: "problem" }, text, ctx);
-      ctx.out.push({ kind: "text", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, soy Fixy. Contame qué problema tenés (por ejemplo: «gotea la canilla de la cocina») y te muestro profesionales que pueden ir.` });
+      ctx.out.push({ kind: "text", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, soy Fixy. Contame qué problema tenés (por ejemplo: «gotea la canilla de la cocina») y te muestro profesionales que pueden ir. Si querés, mandame fotos: se suman al pedido.` });
       return { step: "problem" };
 
     case "problem":
-      if (msg.type === "image" && text.length < 10) {
-        ctx.out.push({ kind: "text", text: "Gracias por la foto. Contame en una oración qué pasa y te muestro profesionales. (Las fotos las podés sumar al pedido desde la web.)" });
-        return s;
-      }
       if (text.length < 10) {
         ctx.out.push({ kind: "text", text: "Contame un poco más, con una oración alcanza. Por ejemplo: «se corta la luz cuando prendo el horno»." });
         return s;
@@ -178,7 +185,7 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     case "confirm":
       if (reply === "send" || /^(enviar|si|sí|dale|ok|listo)$/.test(t)) return send(s, ctx);
       if (reply === "details") {
-        ctx.out.push({ kind: "text", text: "Contame en un mensaje lo que quieras sumar: horarios que te quedan bien, piso o depto, cómo entrar, si es barrio cerrado. (Las fotos las podés sumar después desde la web.)" });
+        ctx.out.push({ kind: "text", text: "Contame en un mensaje lo que quieras sumar: horarios que te quedan bien, piso o depto, cómo entrar, si es barrio cerrado. También podés mandarme fotos del problema." });
         return { ...s, step: "details" };
       }
       if (reply === "change_pro") return goPros(s, ctx);
@@ -335,6 +342,7 @@ async function confirm(s: State, ctx: Ctx): Promise<State> {
     `Dónde: ${where ? `${where.label} (${where.zone_name})` : `${s.address?.addressLine ?? ""}${zoneName ? ` (${zoneName})` : ""}`}`,
     pro ? `Profesional: ${pro.name} · ${pro.visitFeeMinor > 0 ? `visita ${formatMoney(pro.visitFeeMinor)}` : "visita sin cargo"}` : s.pros?.length ? "Recibís presupuestos de varios profesionales." : "Nuestro equipo busca un profesional para vos.",
     s.extra ? `Detalles: ${s.extra}` : "",
+    s.photos?.length ? `Fotos: ${s.photos.length}` : "",
     "",
     pro ? "No pagás nada hasta confirmar la visita." : "Pedir es gratis.",
   ].filter((l, i, a) => l !== "" || i === a.length - 2);
@@ -364,6 +372,7 @@ async function send(s: State, ctx: Ctx): Promise<State> {
     try {
       const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
       const id = await submitRequestPayload(actor!, payloadOf(s));
+      await attachWhatsAppPhotos(id, { phone: ctx.phone, fileIds: s.photos ?? [] });
       const [r] = await sql()<{ code: string }[]>`select code from service_requests where id = ${id}`;
       const pro = s.chosen && s.chosen !== "quotes" ? s.pros?.find((p) => p.slug === s.chosen) : null;
       ctx.out.push({
@@ -380,7 +389,7 @@ async function send(s: State, ctx: Ctx): Promise<State> {
   await sql()`insert into whatsapp_links (token_hash, phone, data) values (${hash(token)}, ${ctx.phone}, ${sql().json(payloadOf(s) as never)})`;
   ctx.out.push({
     kind: "text", previewUrl: true,
-    text: `Último paso: creá tu cuenta o ingresá desde este link y tu pedido se envía (lo guardamos 7 días). Así también quedan vinculados tu WhatsApp y tu cuenta.\n\n${base}/wa/${token}`,
+    text: `Último paso: creá tu cuenta o ingresá desde este link y tu pedido se envía (lo guardamos 7 días).${s.photos?.length ? " Las fotos que me mandaste se suman solas." : ""} Así también quedan vinculados tu WhatsApp y tu cuenta.\n\n${base}/wa/${token}`,
   });
   return { ...s, step: "awaiting_account" };
 }
@@ -403,8 +412,66 @@ export async function consumeWhatsAppLink(token: string, userId: string): Promis
       await tx`update users set whatsapp_phone = ${l.phone}, whatsapp_linked_at = now() where id = ${userId}`;
     }
     await tx`update whatsapp_links set used_at = coalesce(used_at, now()), used_by = ${userId} where id = ${l.id}`;
+    // Las fotos que mandó por WhatsApp quedan reservadas para el pedido que termine en la web.
+    await tx`update whatsapp_media set claimed_by = ${userId} where phone = ${l.phone} and request_id is null and created_at > now() - interval '7 days'`;
     await tx`update whatsapp_conversations set state = '{"step":"done"}'::jsonb, updated_at = now() where phone = ${l.phone}`;
     return { data: l.data, phone: l.phone };
   });
 }
 
+
+// ───────────────────────── Fotos ─────────────────────────
+
+const MAX_PHOTOS = 6;
+
+async function saveIncomingPhoto(phone: string, mediaId: string): Promise<string | null> {
+  const media = await downloadMedia(mediaId);
+  if (!media) return null;
+  try {
+    const [u] = await sql()<{ id: string }[]>`select id from users where whatsapp_phone = ${phone}`;
+    const fileId = await storeFile(sql(), { data: media.data, originalName: "foto-whatsapp.jpg", uploadedBy: u?.id ?? null, purpose: "request_photo", ownerType: null, ownerId: null, allowPdf: false });
+    await sql()`insert into whatsapp_media (phone, file_id) values (${phone}, ${fileId})`;
+    return fileId;
+  } catch {
+    console.warn("[whatsapp] foto recibida con formato no admitido o demasiado grande");
+    return null;
+  }
+}
+
+async function onPhoto(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
+  const caption = (msg.text ?? "").trim();
+  if (!msg.fileId) {
+    ctx.out.push({ kind: "text", text: "No pude guardar esa foto. Probá mandarla de nuevo (JPG o PNG, hasta 8 MB)." });
+    return s;
+  }
+  const fresh = ["idle", "done", "awaiting_account"].includes(s.step);
+  const base: State = fresh ? { step: "problem" } : s;
+  const photos = [...(base.photos ?? []), msg.fileId].slice(0, MAX_PHOTOS);
+  const next: State = { ...base, photos };
+  if (next.step === "problem") {
+    if (caption.length >= 10 && !isGreeting(caption)) return onProblem(next, caption, ctx);
+    ctx.out.push({ kind: "text", text: `Recibí la foto${photos.length > 1 ? ` (${photos.length})` : ""}. Contame en una oración qué pasa y te muestro profesionales que pueden ir.` });
+    return next;
+  }
+  ctx.out.push({ kind: "text", text: photos.length >= MAX_PHOTOS ? `Sumé la foto. Ya tenés ${MAX_PHOTOS}, el máximo por pedido.` : `Sumé la foto al pedido (${photos.length}).` });
+  return next.step === "confirm" ? confirm(next, ctx) : next;
+}
+
+/**
+ * Adjunta al pedido las fotos recibidas por WhatsApp. Solo fotos del mismo número (bot) o reservadas para esa cuenta
+ * al usar el link (web); nunca ids que vengan del navegador.
+ */
+export async function attachWhatsAppPhotos(requestId: string, who: { phone: string; fileIds: string[] } | { claimedBy: string }) {
+  await systemTx(async (tx) => {
+    const rows = "phone" in who
+      ? who.fileIds.length
+        ? await tx<{ id: number; file_id: string }[]>`select id, file_id from whatsapp_media where phone = ${who.phone} and request_id is null and file_id in ${tx(who.fileIds)}`
+        : []
+      : await tx<{ id: number; file_id: string }[]>`select id, file_id from whatsapp_media where claimed_by = ${who.claimedBy} and request_id is null and created_at > now() - interval '7 days' order by id limit ${MAX_PHOTOS}`;
+    for (const r of rows.slice(0, MAX_PHOTOS)) {
+      await tx`insert into request_attachments (request_id, file_id) values (${requestId}, ${r.file_id}) on conflict do nothing`;
+      await tx`update files set owner_type = 'request', owner_id = ${requestId} where id = ${r.file_id} and owner_id is null`;
+      await tx`update whatsapp_media set request_id = ${requestId} where id = ${r.id}`;
+    }
+  });
+}

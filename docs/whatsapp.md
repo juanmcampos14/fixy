@@ -16,10 +16,18 @@ El bot sigue el mismo guion que la web (`docs/flujo-pedido.md`): problema → ub
 | `WHATSAPP_PHONE_NUMBER_ID` | App de Meta → WhatsApp → Configuración de la API → "Identificador del número de teléfono" |
 | `WHATSAPP_APP_SECRET` | App de Meta → Configuración de la app → Básica → "Clave secreta de la app" |
 | `WHATSAPP_VERIFY_TOKEN` | Texto al azar que también se pega en Meta al configurar el webhook (ya está cargado en Vercel) |
+| `WHATSAPP_WABA_ID` | Identificador de la cuenta de WhatsApp Business (Business Settings → Cuentas de WhatsApp). Para crear y consultar plantillas |
 | `WHATSAPP_DISPLAY_NUMBER` | Número público, para mostrar en el sitio (opcional) |
 | `GOOGLE_MAPS_SERVER_KEY` | Clave de Google **distinta** a la del navegador, restringida a "Geocoding API" (opcional, mejora la ubicación) |
 
+## Fotos
+El cliente puede mandar fotos en cualquier paso (hasta 6). Se descargan de la Graph API, se guardan como archivos privados sin dueño (`whatsapp_media`) y se adjuntan al pedido al enviarlo. Si el pedido se termina en la web con el link, las fotos quedan reservadas para esa cuenta y se adjuntan al enviarlo. Nunca se adjuntan ids de archivos que vengan del navegador.
+
+## Avisos y plantillas
+- `notify(..., { whatsapp })` encola en `outbox` (canal `whatsapp`) solo para usuarios con número vinculado.
+- El cron (`/api/cron/outbox`, cada 10 min) los envía: si la persona escribió en las últimas 23 h va un **texto común** (gratis); si no, la **plantilla** aprobada.
+- Plantillas (`src/server/whatsapp/templates.ts`, categoría utilidad, `es_AR`): `fixy_profesional_acepto` (reserva directa aceptada) y `fixy_presupuesto_recibido`. Se crean y se sigue su estado en **/admin/whatsapp**. Para cambiar un texto aprobado, crear una plantilla con otro nombre.
+
 ## Pendiente
-- Plantillas aprobadas por Meta para avisar fuera de la ventana de 24 h (profesional aceptó, visita confirmada, recordatorio de reseña).
-- Avisos de novedades del pedido por WhatsApp a números vinculados.
-- Recibir fotos desde WhatsApp (descarga de medios de la Graph API).
+- Más avisos con plantilla: visita confirmada, recordatorio de visita, pedido de reseña.
+- Avisos para profesionales con número vinculado.

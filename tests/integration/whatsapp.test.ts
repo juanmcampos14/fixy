@@ -3,7 +3,9 @@ import { createHmac } from "node:crypto";
 import { sql } from "@/server/db/client";
 import { consumeWhatsAppLink, handleInbound, parseWebhook, type Inbound } from "@/server/whatsapp/bot";
 import { toGraphPayload, verifySignature } from "@/server/whatsapp/client";
-import { actor } from "./helpers";
+import { actor, invitationFor, providerId, simpleQuote } from "./helpers";
+import { storeFile } from "@/server/storage";
+import { processWhatsAppOutbox } from "@/server/whatsapp/outbox";
 
 let seq = 0;
 const PHONE = "5491155550101";
@@ -103,5 +105,57 @@ describe("WhatsApp", () => {
   it("'cancelar' reinicia la conversación", async () => {
     await handleInbound(msg({ text: "cancelar" }));
     expect(outText(await lastOut())).toContain("empezamos de nuevo");
+  });
+
+  it("fotos por WhatsApp se adjuntan al pedido y el aviso de presupuesto llega por WhatsApp (texto en ventana, plantilla fuera)", async () => {
+    const PHONE2 = "5491155550202";
+    const carla = await actor("carla");
+    await sql()`update users set whatsapp_phone = null where whatsapp_phone = ${PHONE2}`;
+    await sql()`update users set whatsapp_phone = ${PHONE2}, whatsapp_linked_at = now() where id = ${carla.id}`;
+    await sql()`delete from whatsapp_conversations where phone = ${PHONE2}`;
+    const m2 = (m: Partial<Inbound>) => msg({ from: PHONE2, ...m });
+
+    // Foto con texto: arranca el pedido y queda guardada (privada, sin dueño) hasta enviarlo.
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
+    const fileId = await storeFile(sql(), { data: jpeg, originalName: "foto.jpg", uploadedBy: carla.id, purpose: "request_photo", ownerType: null, ownerId: null, allowPdf: false });
+    await sql()`insert into whatsapp_media (phone, file_id) values (${PHONE2}, ${fileId})`;
+    await handleInbound(m2({ type: "image", fileId, text: "Pierde agua la canilla del baño y gotea todo el día" }));
+    expect(listIds(await lastOut(PHONE2))).toContain("loc:new"); // tiene lugares guardados: elige "otra dirección"
+    await handleInbound(m2({ type: "interactive", replyId: "loc:new" }));
+    // Un id de archivo ajeno no se adjunta aunque llegue en el estado.
+    const otherFile = await storeFile(sql(), { data: jpeg, originalName: "ajena.jpg", uploadedBy: null, purpose: "request_photo", ownerType: null, ownerId: null, allowPdf: false });
+    await sql()`update whatsapp_conversations set state = jsonb_set(state, '{photos}', ${sql().json([fileId, otherFile] as never)}) where phone = ${PHONE2}`;
+
+    await handleInbound(m2({ text: "Av. Santa Fe 3500, Palermo" }));
+    await handleInbound(m2({ type: "interactive", replyId: "quotes" }));
+    expect(outText(await lastOut(PHONE2))).toContain("Fotos: 2");
+    await handleInbound(m2({ type: "interactive", replyId: "send" }));
+    const code = outText(await lastOut(PHONE2)).match(/S-\d+/)![0];
+    const [req] = await sql()<{ id: string }[]>`select id from service_requests where code = ${code}`;
+    const att = await sql()<{ file_id: string }[]>`select file_id from request_attachments where request_id = ${req.id}`;
+    expect(att.map((a) => a.file_id)).toEqual([fileId]);
+    const [f] = await sql()<{ owner_type: string; owner_id: string }[]>`select owner_type, owner_id from files where id = ${fileId}`;
+    expect(f).toEqual({ owner_type: "request", owner_id: req.id });
+
+    // Un profesional presupuesta → aviso por WhatsApp. Escribió hace instantes: va como texto común.
+    const lucia = await actor("lucia");
+    const pid = await providerId("Plomería Sosa");
+    await simpleQuote(lucia, await invitationFor(req.id, pid));
+    const [ob] = await sql()<{ id: string }[]>`select id from outbox where channel = 'whatsapp' and recipient_user_id = ${carla.id} order by created_at desc limit 1`;
+    expect(ob).toBeTruthy();
+    await processWhatsAppOutbox();
+    const inWindow = await lastOut(PHONE2);
+    expect(inWindow?.type).toBe("text");
+    expect(outText(inWindow)).toContain(`/app/solicitudes/${req.id}`);
+
+    // Fuera de la ventana de 24 h: plantilla aprobada, con el nombre y el botón al pedido.
+    await sql()`update whatsapp_conversations set last_inbound_at = now() - interval '2 days' where phone = ${PHONE2}`;
+    await sql()`update outbox set status = 'pending', next_attempt_at = now() where id = ${ob.id}`;
+    await processWhatsAppOutbox();
+    const tpl = (await lastOut(PHONE2)) as { type: string; template: { name: string; components: { type: string; parameters: { text: string }[] }[] } };
+    expect(tpl.type).toBe("template");
+    expect(tpl.template.name).toBe("fixy_presupuesto_recibido");
+    expect(tpl.template.components[0].parameters[0].text).toBe(carla.fullName.split(" ")[0]);
+    expect(tpl.template.components[1].parameters[0].text).toBe(req.id);
   });
 });
