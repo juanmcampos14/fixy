@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   title: { default: "Fixy · Servicios para tu hogar y oficina", template: "%s · Fixy" },
   description: "Contanos qué pasa. Encontrá quién lo resuelva. Pedí presupuestos a profesionales y gestioná el trabajo en un solo lugar.",
   applicationName: "Fixy",
+  openGraph: { type: "website", locale: "es_AR", siteName: "Fixy" },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = { themeColor: "#FFF9F1", width: "device-width", initialScale: 1 };
