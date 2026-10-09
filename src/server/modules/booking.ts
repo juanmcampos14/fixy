@@ -1,12 +1,13 @@
 /** Profesionales para que el cliente elija (solo datos públicos). */
 import type { Db } from "@/server/db/client";
 import { findCandidatesFor } from "./requests";
+import { publicFileUrl } from "@/server/storage";
 
 export type BookableProvider = {
   id: string; slug: string; displayName: string; kind: string; isDemo: boolean; description: string; yearsExperience: number | null;
   rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; credentials: string[];
   visitFeeMinor: number; visitFeeCredited: boolean; priceRefs: { title: string; fromMinor: number; note: string }[];
-  availabilityMatch: boolean; sameZone: boolean; approvedAt: Date | null;
+  availabilityMatch: boolean; sameZone: boolean; approvedAt: Date | null; avatarUrl: string | null;
 };
 
 export async function listBookableProviders(
@@ -19,8 +20,8 @@ export async function listBookableProviders(
   const top = candidates.slice(0, q.limit ?? 12);
   if (!top.length) return [];
   const ids = top.map((c) => c.providerId);
-  const rows = await db<{ id: string; slug: string; display_name: string; kind: string; is_demo: boolean; description: string; years_experience: number | null; identity_status: string; visit_fee_minor: number; visit_fee_credited: boolean; base_zone_id: string | null; approved_at: Date | null; completed: number }[]>`
-    select p.id, p.slug, p.display_name, p.kind, p.is_demo, p.description, p.years_experience, p.identity_status, p.visit_fee_minor, p.visit_fee_credited, p.base_zone_id, p.approved_at,
+  const rows = await db<{ id: string; slug: string; display_name: string; kind: string; is_demo: boolean; description: string; years_experience: number | null; identity_status: string; visit_fee_minor: number; visit_fee_credited: boolean; base_zone_id: string | null; approved_at: Date | null; completed: number; avatar_file_id: string | null }[]>`
+    select p.id, p.slug, p.display_name, p.kind, p.is_demo, p.description, p.years_experience, p.identity_status, p.visit_fee_minor, p.visit_fee_credited, p.base_zone_id, p.approved_at, p.avatar_file_id,
       (select count(*)::int from jobs j where j.provider_id = p.id and j.status = 'completed') as completed
     from providers p where p.id in ${db(ids)}`;
   const refs = await db<{ provider_id: string; title: string; from_minor: number; note: string }[]>`
@@ -38,6 +39,7 @@ export async function listBookableProviders(
       availabilityMatch: c.reasons.some((r) => r.startsWith("Disponibilidad compatible")),
       sameZone: p.base_zone_id === q.zoneId,
       approvedAt: p.approved_at,
+      avatarUrl: p.avatar_file_id ? publicFileUrl(p.avatar_file_id) : null,
     };
   });
 }

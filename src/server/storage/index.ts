@@ -20,7 +20,8 @@ export type FilePurpose =
   | "job_evidence"
   | "message_attachment"
   | "dispute_evidence"
-  | "property_document";
+  | "property_document"
+  | "provider_avatar";
 export type FileOwnerType = "provider" | "request" | "job" | "conversation" | "dispute" | "property";
 
 /** Verifica el tipo real por "magic bytes" (no confiamos en la extensión ni en el MIME del navegador). */

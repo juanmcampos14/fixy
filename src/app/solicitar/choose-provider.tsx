@@ -3,13 +3,14 @@
 import { BadgeCheck, CalendarCheck, LoaderCircle, MapPin, Star, Users } from "lucide-react";
 import { Mascot } from "@/components/brand/mascot";
 import { cn } from "@/lib/cn";
+import { ProviderAvatar } from "@/components/domain/provider-avatar";
 import { formatMoney } from "@/lib/format";
 
 export type BookableProviderCard = {
   slug: string; displayName: string; kind: string; isDemo: boolean; description: string; yearsExperience: number | null;
   rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; credentials: string[];
   visitFeeMinor: number; visitFeeCredited: boolean; priceRefs: { title: string; fromMinor: number; note: string }[];
-  availabilityMatch: boolean; sameZone: boolean;
+  availabilityMatch: boolean; sameZone: boolean; avatarUrl: string | null;
 };
 
 export function ChooseProvider({ loading, providers, chosen, onChoose, categoryName }: {
@@ -43,6 +44,8 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
             <input type="radio" name="provider" value={p.slug} checked={chosen === p.slug} onChange={() => onChoose(p.slug)} className="peer sr-only" />
             <span className={cn("block rounded-2xl border bg-white p-4 transition peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40", chosen === p.slug ? "border-fixy-700 bg-fixy-50/60 ring-1 ring-fixy-700" : "border-[#d3dfdc] hover:border-fixy-500")}>
               <span className="flex flex-wrap items-start justify-between gap-3">
+                <span className="flex min-w-0 items-start gap-3">
+                <ProviderAvatar url={p.avatarUrl} name={p.displayName} className="h-14 w-14 text-lg" />
                 <span className="min-w-0">
                   <span className="block text-lg font-bold">{p.displayName}</span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -54,6 +57,7 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
                     {p.yearsExperience ? <span className="text-muted">{p.yearsExperience} años de experiencia</span> : null}
                     {p.isDemo && <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-muted">Demostración</span>}
                   </span>
+                </span>
                 </span>
                 <span className="text-right">
                   <span className="block text-xs text-muted">Visita</span>

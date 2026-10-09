@@ -11,7 +11,7 @@ import type { Actor } from "@/server/auth/actor";
 import { forbidden } from "@/server/domain/errors";
 import {
   acceptProviderTerms, addPortfolioItem, coverageSchema, createProvider, documentSchema, providerProfileSchema, removePortfolioItem,
-  setupPayouts, submitForReview, updateCoverage, updateProviderProfile, uploadProviderDocument, quickStartProvider, quickStartSchema,
+  setupPayouts, submitForReview, updateCoverage, updateProviderProfile, uploadProviderDocument, quickStartProvider, quickStartSchema, setProviderAvatar, removeProviderAvatar,
 } from "@/server/modules/providers";
 import { AVAILABILITY_PRESETS, draftProviderProfile, type AvailabilityPreset } from "@/server/assistant/provider-profile";
 import { rateLimit } from "@/server/rate-limit";
@@ -239,4 +239,24 @@ export async function quickStartAction(payload: {
   });
   if (r.ok) redirect("/proveedor/alta?bienvenida=1");
   return r;
+}
+
+export async function setAvatarAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const [file] = await files(f, "avatar");
+    if (!file) return { error: "Elegí una foto (JPG, PNG o WEBP)." };
+    await setProviderAvatar(actor, adminProviderId(actor), file);
+    revalidateProvider();
+    return { ok: true, message: "¡Listo! Tu foto ya se ve en tu perfil." };
+  });
+}
+
+export async function removeAvatarAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await removeProviderAvatar(actor, adminProviderId(actor));
+    revalidateProvider();
+    return { ok: true, message: "Quitamos la foto." };
+  });
 }

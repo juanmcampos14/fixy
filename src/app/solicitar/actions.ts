@@ -58,6 +58,6 @@ export async function bookableProvidersAction(categorySlug: string, zoneId: stri
   return list.map((p) => ({
     slug: p.slug, displayName: p.displayName, kind: p.kind, isDemo: p.isDemo, description: p.description, yearsExperience: p.yearsExperience,
     rating: p.rating, reviews: p.reviews, completedJobs: p.completedJobs, identityVerified: p.identityVerified, credentials: p.credentials,
-    visitFeeMinor: p.visitFeeMinor, visitFeeCredited: p.visitFeeCredited, priceRefs: p.priceRefs, availabilityMatch: p.availabilityMatch, sameZone: p.sameZone,
+    visitFeeMinor: p.visitFeeMinor, visitFeeCredited: p.visitFeeCredited, priceRefs: p.priceRefs, availabilityMatch: p.availabilityMatch, sameZone: p.sameZone, avatarUrl: p.avatarUrl,
   }));
 }

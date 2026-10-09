@@ -4,7 +4,7 @@ import { getOnboardingState, getProviderSetup, requireProviderContext } from "@/
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { ProfileForm } from "@/components/provider/profile-form";
-import { CoverageSection, DocumentsSection, PayoutsSection, PortfolioSection } from "@/components/provider/sections";
+import { AvatarSection, CoverageSection, DocumentsSection, PayoutsSection, PortfolioSection } from "@/components/provider/sections";
 import { updateProfileAction } from "../alta/actions";
 import { VisitPricingSection } from "@/components/provider/visit-pricing";
 
@@ -26,6 +26,7 @@ export default async function ProfilePage() {
       />
       <div className="space-y-5">
         {p.status !== "approved" && <p className="text-[15px] text-muted">Tu perfil público se publica cuando el equipo de Fixy lo aprueba.</p>}
+        <AvatarSection provider={p} />
         <Card as="section" id="perfil" aria-labelledby="perfil-t">
           <CardHeader title={<span id="perfil-t">Datos del perfil</span>} description="El nombre, la descripción y los años de experiencia se publican. CUIT, contacto y facturación son privados." />
           <ProfileForm

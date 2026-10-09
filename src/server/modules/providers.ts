@@ -423,7 +423,7 @@ export async function profileFacts(db: Db | Tx, providerIds: string[]): Promise<
   if (!providerIds.length) return new Map();
   const rows = await db<{
     id: string; dlen: number; phone: boolean; years: boolean; cats: number; zones: number; base: boolean; slots: number; photos: number;
-    identity_status: string; id_docs: number; creds_missing: number; refs: number; visit: boolean; payouts: boolean;
+    identity_status: string; id_docs: number; creds_missing: number; refs: number; visit: boolean; payouts: boolean; avatar: boolean;
   }[]>`
     select p.id, length(p.description)::int as dlen, coalesce(p.contact_phone, '') <> '' as phone, p.years_experience is not null as years,
       (select count(*)::int from provider_categories c where c.provider_id = p.id) as cats,
@@ -438,10 +438,11 @@ export async function profileFacts(db: Db | Tx, providerIds: string[]): Promise<
           and d.credential_type_id = rc.credential_type_id and d.status <> 'rejected')) as creds_missing,
       (select count(*)::int from provider_price_refs r where r.provider_id = p.id) as refs,
       p.visit_configured_at is not null as visit,
-      exists (select 1 from provider_bank_accounts b where b.provider_id = p.id) as payouts
+      exists (select 1 from provider_bank_accounts b where b.provider_id = p.id) as payouts,
+      p.avatar_file_id is not null as avatar
     from providers p where p.id in ${db(providerIds)}`;
   return new Map(rows.map((r) => [r.id, {
-    descriptionLength: r.dlen, hasPhone: r.phone, hasYears: r.years, categories: r.cats, zones: r.zones, hasBaseZone: r.base,
+    hasAvatar: r.avatar, descriptionLength: r.dlen, hasPhone: r.phone, hasYears: r.years, categories: r.cats, zones: r.zones, hasBaseZone: r.base,
     availabilitySlots: r.slots, photos: r.photos,
     identity: r.identity_status === "verified" ? "verified" : r.id_docs > 0 ? "uploaded" : "none",
     credentialsComplete: r.cats > 0 && r.creds_missing === 0, priceRefs: r.refs, visitConfigured: r.visit, payoutsEnabled: r.payouts,
@@ -493,5 +494,29 @@ export async function quickStartProvider(actor: Actor, input: z.input<typeof qui
       await tx`insert into provider_price_refs (provider_id, category_id, title, from_minor, note, sort) values (${providerId}, ${r.categoryId}, ${r.title}, ${r.fromMinor}, '', ${i++})`;
     await audit(tx, actor, "provider.quickstart", "provider", providerId, null, { aiAssisted: d.aiAssisted, categories: d.categoryIds.length, zones: d.zoneIds.length, priceRefs: i });
     return providerId;
+  });
+}
+
+// ───────── Foto de perfil ─────────
+
+/** Sube o reemplaza la foto de perfil (pública). Solo imágenes; la anterior queda en el historial de archivos. */
+export async function setProviderAvatar(actor: Actor, providerId: string, file: { data: Buffer; name: string }) {
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    const fileId = await storeFile(tx, {
+      data: file.data, originalName: file.name, uploadedBy: actor.id, purpose: "provider_avatar",
+      ownerType: "provider", ownerId: providerId, visibility: "public", allowPdf: false,
+    });
+    await tx`update providers set avatar_file_id = ${fileId} where id = ${providerId}`;
+    await audit(tx, actor, "provider.avatar_set", "provider", providerId, null);
+    return fileId;
+  });
+}
+
+export async function removeProviderAvatar(actor: Actor, providerId: string) {
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    await tx`update providers set avatar_file_id = null where id = ${providerId}`;
+    await audit(tx, actor, "provider.avatar_removed", "provider", providerId, null);
   });
 }

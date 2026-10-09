@@ -42,7 +42,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
   const [saving, startSave] = useTransition();
 
   const strength = useMemo(() => profileStrength({
-    descriptionLength: d.description.trim().length, hasPhone: phone.trim().length >= 6, hasYears: d.yearsExperience !== "",
+    hasAvatar: false, descriptionLength: d.description.trim().length, hasPhone: phone.trim().length >= 6, hasYears: d.yearsExperience !== "",
     categories: d.categoryIds.length, zones: d.zoneIds.length, hasBaseZone: !!d.baseZoneId,
     availabilitySlots: PRESETS.find((p) => p.key === d.availability)?.slots ?? 0, photos: 0, identity: "none",
     credentialsComplete: false, priceRefs: d.priceRefs.filter((p) => p.categoryId && p.title && Number(p.fromPesos) > 0).length, visitConfigured: false, payoutsEnabled: false,

@@ -4,6 +4,7 @@
  * (sin superar a la reputación ni a la disponibilidad).
  */
 export type ProfileFacts = {
+  hasAvatar: boolean;
   descriptionLength: number;
   hasPhone: boolean;
   hasYears: boolean;
@@ -23,13 +24,14 @@ export type StrengthItem = { key: string; label: string; hint: string; points: n
 
 export function profileStrength(f: ProfileFacts): { score: number; level: string; items: StrengthItem[] } {
   const items: StrengthItem[] = [
+    { key: "avatar", label: "Foto de perfil", hint: "Los clientes eligen mucho más a profesionales con foto: genera confianza.", points: 10, earned: f.hasAvatar ? 10 : 0, href: "/proveedor/perfil#foto" },
     { key: "description", label: "Descripción de tu servicio", hint: "Contá qué hacés, cómo trabajás y qué te diferencia (al menos 120 caracteres).", points: 10, earned: f.descriptionLength >= 120 ? 10 : f.descriptionLength >= 30 ? 5 : 0, href: "/proveedor/alta#perfil" },
     { key: "phone", label: "Teléfono de contacto", hint: "Solo lo usa Fixy para avisarte de pedidos: no se publica.", points: 5, earned: f.hasPhone ? 5 : 0, href: "/proveedor/alta#perfil" },
     { key: "years", label: "Años de experiencia", hint: "Los clientes lo miran al elegir.", points: 5, earned: f.hasYears ? 5 : 0, href: "/proveedor/alta#perfil" },
     { key: "coverage", label: "Rubros y zonas", hint: "Sin rubros y zonas no aparecés en ninguna búsqueda.", points: 10, earned: f.categories > 0 && f.zones > 0 ? 10 : 0, href: "/proveedor/alta#servicios" },
     { key: "base", label: "Zona base", hint: "Te priorizamos en pedidos cerca de tu base.", points: 5, earned: f.hasBaseZone ? 5 : 0, href: "/proveedor/alta#servicios" },
-    { key: "availability", label: "Días y horarios", hint: "Te mostramos cuando tu disponibilidad coincide con la del cliente.", points: 10, earned: f.availabilitySlots > 0 ? 10 : 0, href: "/proveedor/alta#servicios" },
-    { key: "photos", label: "Fotos de trabajos (3 o más)", hint: "Los perfiles con fotos reciben más elecciones.", points: 15, earned: f.photos >= 3 ? 15 : f.photos > 0 ? 8 : 0, href: "/proveedor/alta#portfolio" },
+    { key: "availability", label: "Días y horarios", hint: "Te mostramos cuando tu disponibilidad coincide con la del cliente.", points: 5, earned: f.availabilitySlots > 0 ? 5 : 0, href: "/proveedor/alta#servicios" },
+    { key: "photos", label: "Fotos de trabajos (3 o más)", hint: "Los perfiles con fotos reciben más elecciones.", points: 10, earned: f.photos >= 3 ? 10 : f.photos > 0 ? 5 : 0, href: "/proveedor/alta#portfolio" },
     { key: "identity", label: "Identidad verificada", hint: "Muestra el sello de verificación en tu perfil.", points: 15, earned: f.identity === "verified" ? 15 : f.identity === "uploaded" ? 8 : 0, href: "/proveedor/alta#documentacion" },
     { key: "credentials", label: "Matrículas de tus rubros", hint: "Obligatorias en gas y electricidad.", points: 5, earned: f.credentialsComplete ? 5 : 0, href: "/proveedor/alta#documentacion" },
     { key: "prices", label: "Precios de referencia \"desde\" (2 o más)", hint: "El cliente ve cuánto sale antes de elegirte.", points: 10, earned: f.priceRefs >= 2 ? 10 : f.priceRefs === 1 ? 5 : 0, href: "/proveedor/perfil#visita" },

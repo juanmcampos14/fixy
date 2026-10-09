@@ -9,6 +9,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Badge, DemoBadge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/category-icon";
 import { Stars } from "@/components/provider/stars";
+import { ProviderAvatar } from "@/components/domain/provider-avatar";
 import { REGION_LABEL, groupZones } from "@/components/provider/constants";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +50,10 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             </Badge>
             {p.is_demo && <DemoBadge />}
           </div>
-          <h1 className="mt-3 text-3xl font-extrabold sm:text-4xl">{p.display_name}</h1>
+          <div className="mt-3 flex items-center gap-4">
+            <ProviderAvatar url={p.avatarUrl} name={p.display_name} className="h-20 w-20 text-2xl sm:h-24 sm:w-24" />
+            <h1 className="text-3xl font-extrabold sm:text-4xl">{p.display_name}</h1>
+          </div>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] text-muted">
             {rating.average != null ? <Stars rating={rating.average} /> : <span>Todavía sin reseñas</span>}
             {rating.count > 0 && <span>{rating.count} {rating.count === 1 ? "reseña" : "reseñas"} de trabajos completados</span>}

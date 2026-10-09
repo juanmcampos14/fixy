@@ -45,7 +45,7 @@ export type OwnProvider = {
   responsible_name: string; contact_email: string; contact_phone: string | null; description: string; years_experience: number | null;
   billing_info: string | null; accepting_jobs: boolean; max_active_jobs: number; base_zone_id: string | null; status: string;
   identity_status: string; payouts_status: string; payout_provider: string | null; review_note: string | null;
-  submitted_at: Date | null; approved_at: Date | null; is_demo: boolean;
+  submitted_at: Date | null; approved_at: Date | null; is_demo: boolean; avatar_file_id: string | null;
 };
 
 export async function getOwnProvider(userId: string, providerId: string): Promise<OwnProvider | null> {
@@ -53,7 +53,7 @@ export async function getOwnProvider(userId: string, providerId: string): Promis
     const [p] = await tx<OwnProvider[]>`
       select id, slug, kind, display_name, legal_name, tax_id, responsible_name, contact_email, contact_phone, description,
         years_experience, billing_info, accepting_jobs, max_active_jobs, base_zone_id, status, identity_status, payouts_status,
-        payout_provider, review_note, submitted_at, approved_at, is_demo
+        payout_provider, review_note, submitted_at, approved_at, is_demo, avatar_file_id
       from providers where id = ${providerId}`;
     return p ?? null;
   });
@@ -302,8 +302,8 @@ export async function getDisputeForProvider(userId: string, disputeId: string) {
 /** Solo columnas públicas; solo proveedores aprobados. */
 export async function getPublicProfile(slug: string) {
   const db = sql();
-  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null }[]>`
-    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at
+  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null; avatar_file_id: string | null }[]>`
+    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at, avatar_file_id
     from provider_public where slug = ${slug} and status = 'approved'`;
   if (!p) return null;
   const [categories, zones, portfolio, credentials, reviews] = await Promise.all([
@@ -330,7 +330,7 @@ export async function getPublicProfile(slug: string) {
     select r.title, r.from_minor, r.note, c.name as category from provider_price_refs r join categories c on c.id = r.category_id
     where r.provider_id = ${p.id} order by c.sort, r.sort`;
   return {
-    provider: p, categories, zones, credentials, reviews,
+    provider: { ...p, avatarUrl: p.avatar_file_id ? publicFileUrl(p.avatar_file_id) : null }, categories, zones, credentials, reviews,
     portfolio: portfolio.map((x) => ({ id: x.id, caption: x.caption, url: publicFileUrl(x.file_id) })),
     rating: { average: avg ? Number(avg) : null, count: n },
     visit: visit ?? { visit_fee_minor: 0, visit_fee_credited: false },

@@ -10,7 +10,7 @@ import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { ButtonLink } from "@/components/ui/button";
 import { DemoBadge } from "@/components/ui/badge";
 import { ProfileForm } from "@/components/provider/profile-form";
-import { CoverageSection, Done, DocumentsSection, PayoutsSection, PortfolioSection, ProviderStatusCard, TermsSection } from "@/components/provider/sections";
+import { AvatarSection, CoverageSection, Done, DocumentsSection, PayoutsSection, PortfolioSection, ProviderStatusCard, TermsSection } from "@/components/provider/sections";
 import { submitForReviewAction, updateProfileAction } from "./actions";
 import { QuickStart } from "@/components/provider/quick-start";
 import { StrengthMeter } from "@/components/provider/strength-meter";
@@ -97,6 +97,7 @@ export default async function AltaPage({ searchParams }: { searchParams: Promise
           </ol>
         </Card>
 
+        <AvatarSection provider={provider} />
         <Card as="section" id="perfil" aria-labelledby="perfil-t" className="scroll-mt-24">
           <CardHeader title={<span id="perfil-t">Perfil</span>} description="El nombre, la descripción y los años de experiencia se publican. El resto es privado." />
           <ProfileForm

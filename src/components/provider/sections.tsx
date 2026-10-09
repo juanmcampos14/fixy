@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { publicFileUrl } from "@/server/storage";
 /* eslint-disable @next/next/no-img-element */
 /** Secciones del alta y del perfil del proveedor (componentes de servidor). */
 import { CircleCheck, CircleDashed, FileText, ImagePlus, Trash2 } from "lucide-react";
 import type { OnboardingChecklist } from "@/server/modules/providers";
 import type { OwnProvider, ProviderSetup } from "@/server/queries/provider";
 import {
-  acceptTermsAction, addPortfolioAction, removePortfolioAction, updateCoverageAction, uploadDocumentAction,
+  acceptTermsAction, addPortfolioAction, removePortfolioAction, updateCoverageAction, setAvatarAction, removeAvatarAction, uploadDocumentAction,
 } from "@/app/proveedor/alta/actions";
 import { identityStatusLabel, payoutsStatusLabel, providerStatusLabel } from "@/server/domain/labels";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -152,6 +153,38 @@ export function CoverageSection({ setup, provider, id = "servicios" }: { setup: 
         </fieldset>
         <SubmitButton pendingText="Guardando…">Guardar servicios y zonas</SubmitButton>
       </ActionForm>
+    </Card>
+  );
+}
+
+export function AvatarSection({ provider, id = "foto" }: { provider: OwnProvider; id?: string }) {
+  const url = provider.avatar_file_id ? publicFileUrl(provider.avatar_file_id) : null;
+  return (
+    <Card as="section" id={id} aria-labelledby={`${id}-t`} className="scroll-mt-24">
+      <CardHeader title={<span id={`${id}-t`}>Foto de perfil</span>} description="Los clientes eligen mucho más a profesionales con foto: genera confianza. Usá una foto tuya (o el logo, si sos empresa), de frente y con buena luz." />
+      <div className="flex flex-wrap items-center gap-5">
+        {url ? (
+          <img src={url} alt={`Foto de ${provider.display_name}`} className="h-28 w-28 rounded-full object-cover ring-4 ring-fixy-50" />
+        ) : (
+          <span className="grid h-28 w-28 place-items-center rounded-full bg-cream text-3xl font-extrabold text-muted ring-1 ring-line" aria-hidden>
+            {provider.display_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+          </span>
+        )}
+        <div className="min-w-0 flex-1 space-y-3">
+          <ActionForm action={setAvatarAction} className="flex flex-wrap items-end gap-3" resetOnSuccess>
+            <Field label={url ? "Cambiar foto" : "Subir foto"} htmlFor={`${id}-file`} required>
+              <input id={`${id}-file`} name="avatar" type="file" accept="image/jpeg,image/png,image/webp" required className="block w-full text-sm file:mr-3 file:h-11 file:rounded-full file:border-0 file:bg-fixy-50 file:px-4 file:font-semibold file:text-fixy-800" />
+            </Field>
+            <SubmitButton variant={url ? "secondary" : "primary"} pendingText="Subiendo…"><ImagePlus className="h-4 w-4" aria-hidden /> {url ? "Cambiar" : "Subir foto"}</SubmitButton>
+          </ActionForm>
+          {url && (
+            <ActionForm action={removeAvatarAction}>
+              <SubmitButton variant="ghost" size="sm">Quitar foto</SubmitButton>
+            </ActionForm>
+          )}
+          <p className="text-xs text-muted">JPG, PNG o WEBP, hasta 8 MB. Se ve en tu perfil público y en la lista donde te eligen los clientes.</p>
+        </div>
+      </div>
     </Card>
   );
 }
