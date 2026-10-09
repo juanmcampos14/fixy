@@ -18,6 +18,9 @@ import { formatMoney } from "@/lib/format";
 import { geocodeAddress, reverseGeocode } from "@/server/geo";
 import { nearestZoneCode } from "@/lib/zone-centroids";
 import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client";
+import { classifyIntent } from "./intent";
+import { addRequestDetails, notifyRequestUpdate } from "@/server/modules/requests";
+import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
 
 export type Inbound = {
@@ -33,7 +36,7 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = "idle" | "problem" | "location" | "address" | "street" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = "idle" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
   description?: string;
@@ -47,6 +50,10 @@ type State = {
   extra?: string;
   /** Fotos recibidas por WhatsApp para este pedido (ids de archivos privados). */
   photos?: string[];
+  /** Pedido existente al que se le suman fotos o detalles. */
+  targetRequestId?: string;
+  /** Fotos recibidas antes de saber a qué pedido van. */
+  pendingPhotos?: string[];
 };
 
 type Zone = { id: string; code: string; name: string; region: string; match_names: string[] };
@@ -128,6 +135,21 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     ctx.out.push({ kind: "text", text: "Te ayudo a conseguir un profesional para tu casa u oficina. Contame el problema en una oración. Escribí *cambiar* si el oficio no es el correcto, o *cancelar* para empezar de nuevo." });
     return s;
   }
+  // Pedidos existentes (solo con número vinculado a una cuenta)
+  if (ctx.userId) {
+    if (reply === "my_requests") return showStatus(s, ctx);
+    if (reply === "add_details") return askWhichRequest({ ...s, step: "pick_request" }, ctx);
+    if (reply === "new_req") {
+      ctx.out.push({ kind: "text", text: "Dale. Contame qué problema tenés y te muestro profesionales que pueden ir." });
+      return { step: "problem", photos: s.pendingPhotos };
+    }
+    if (reply === "add_done") {
+      ctx.out.push({ kind: "text", text: "Listo. Si necesitás algo más, escribime cuando quieras." });
+      return { step: "done" };
+    }
+    if (reply.startsWith("upd:")) return startAddTo(s, reply.slice(4), ctx);
+    if (msg.type === "image" && (s.step === "add_to" || s.step === "pick_request" || ["idle", "done"].includes(s.step))) return onPhotoForExisting(s, msg, ctx);
+  }
   if (msg.type === "image") return onPhoto(s, msg, ctx);
   if ((reply === "change_cat" || t === "cambiar") && s.description) return askCategory(s, ctx);
   if (reply.startsWith("cat:") && s.description) {
@@ -140,9 +162,42 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     case "done":
     case "awaiting_account":
       if (s.step === "awaiting_account" && !text) return s;
+      if (ctx.userId && text) {
+        const open = await openRequests(ctx.userId);
+        if (open.length) {
+          const { intent, requestId } = await classifyIntent(text, open);
+          if (intent === "status") return showStatus(s, ctx);
+          if (intent === "add_details") return requestId ? startAddTo(s, requestId, ctx) : askWhichRequest({ ...s, step: "pick_request" }, ctx);
+          if (intent === "new_request") return onProblem({ step: "problem" }, text, ctx);
+          ctx.out.push({
+            kind: "buttons", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, ¿en qué te ayudo? Tenés ${open.length === 1 ? `el pedido *${open[0].code}* abierto` : `${open.length} pedidos abiertos`}.`,
+            buttons: [{ id: "my_requests", title: "Cómo van mis pedidos" }, { id: "add_details", title: "Sumar fotos o datos" }, { id: "new_req", title: "Pedido nuevo" }],
+          });
+          return { step: "done" };
+        }
+      }
       if (msg.type === "text" && text.length >= 12 && !isGreeting(text)) return onProblem({ step: "problem" }, text, ctx);
       ctx.out.push({ kind: "text", text: `Hola${ctx.name ? ` ${ctx.name}` : ""}, soy Fixy. Contame qué problema tenés (por ejemplo: «gotea la canilla de la cocina») y te muestro profesionales que pueden ir. Si querés, mandame fotos: se suman al pedido.` });
       return { step: "problem" };
+
+    case "pick_request":
+      return askWhichRequest(s, ctx);
+
+    case "add_to": {
+      if (!s.targetRequestId || !text) return s;
+      if (/^(listo|nada mas|nada más|eso es todo|gracias|ok)$/.test(t)) {
+        ctx.out.push({ kind: "text", text: "Perfecto. Te aviso por acá cuando haya novedades." });
+        return { step: "done" };
+      }
+      try {
+        const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
+        await addRequestDetails(actor!, s.targetRequestId, text);
+        ctx.out.push({ kind: "buttons", text: "Listo, lo sumé al pedido y le avisamos al profesional. ¿Algo más? Podés mandar fotos o escribir.", buttons: [{ id: "add_done", title: "Eso es todo" }] });
+      } catch (e) {
+        ctx.out.push({ kind: "text", text: isDomainError(e) ? e.message : "No pude sumarlo. Probá de nuevo." });
+      }
+      return s;
+    }
 
     case "problem":
       if (text.length < 10) {
@@ -493,4 +548,113 @@ export async function attachWhatsAppPhotos(requestId: string, who: { phone: stri
       await tx`update whatsapp_media set request_id = ${requestId} where id = ${r.id}`;
     }
   });
+}
+
+// ───────────────────────── Pedidos existentes ─────────────────────────
+
+/** Pedidos abiertos del cliente: sin contratar todavía o con un trabajo en curso. */
+async function openRequests(userId: string) {
+  return sql()<{ id: string; code: string; title: string }[]>`
+    select r.id, r.code, r.title from service_requests r
+    where (r.created_by = ${userId} or r.responsible_user_id = ${userId})
+      and (r.status in ('submitted','searching','with_quotes','no_coverage')
+        or (r.status = 'converted' and exists (select 1 from jobs j where j.request_id = r.id and j.status not in ('completed','cancelled'))))
+    order by r.created_at desc limit 9`;
+}
+
+async function askWhichRequest(s: State, ctx: Ctx): Promise<State> {
+  const open = await openRequests(ctx.userId!);
+  if (!open.length) {
+    ctx.out.push({ kind: "text", text: "No tenés pedidos abiertos. Contame qué problema tenés y armamos uno nuevo." });
+    return { step: "problem", photos: s.pendingPhotos };
+  }
+  if (open.length === 1) return startAddTo(s, open[0].id, ctx);
+  ctx.out.push({
+    kind: "list", text: "¿A qué pedido querés sumarle fotos o datos?", button: "Elegir pedido",
+    sections: [{ title: "Tus pedidos", rows: [...open.map((o) => ({ id: `upd:${o.id}`, title: o.code, description: o.title })), { id: "new_req", title: "Pedido nuevo" }] }],
+  });
+  return { ...s, step: "pick_request" };
+}
+
+async function startAddTo(s: State, requestId: string, ctx: Ctx): Promise<State> {
+  const open = await openRequests(ctx.userId!);
+  const r = open.find((o) => o.id === requestId);
+  if (!r) return askWhichRequest(s, ctx);
+  const next: State = { step: "add_to", targetRequestId: r.id };
+  if (s.pendingPhotos?.length) {
+    await attachWhatsAppPhotos(r.id, { phone: ctx.phone, fileIds: s.pendingPhotos });
+    await systemTx((tx) => notifyRequestUpdate(tx, r.id, r.code, "sumó fotos"));
+    ctx.out.push({ kind: "buttons", text: `Sumé ${s.pendingPhotos.length === 1 ? "la foto" : `las ${s.pendingPhotos.length} fotos`} a *${r.code}* (${r.title}) y le avisamos al profesional. ¿Algo más?`, buttons: [{ id: "add_done", title: "Eso es todo" }] });
+    return next;
+  }
+  ctx.out.push({ kind: "buttons", text: `Pedido *${r.code}* (${r.title}). Mandame las fotos o escribí lo que quieras sumar.`, buttons: [{ id: "add_done", title: "Nada más" }] });
+  return next;
+}
+
+async function onPhotoForExisting(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
+  if (!msg.fileId) {
+    ctx.out.push({ kind: "text", text: "No pude guardar esa foto. Probá mandarla de nuevo (JPG o PNG, hasta 8 MB)." });
+    return s;
+  }
+  if (s.step === "add_to" && s.targetRequestId) {
+    const [r] = await sql()<{ code: string }[]>`select code from service_requests where id = ${s.targetRequestId}`;
+    await attachWhatsAppPhotos(s.targetRequestId, { phone: ctx.phone, fileIds: [msg.fileId] });
+    await systemTx((tx) => notifyRequestUpdate(tx, s.targetRequestId!, r.code, "sumó fotos"));
+    if ((msg.text ?? "").trim().length >= 3) {
+      const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
+      await addRequestDetails(actor!, s.targetRequestId, msg.text!.trim()).catch(() => null);
+    }
+    ctx.out.push({ kind: "buttons", text: "Foto sumada al pedido. ¿Algo más?", buttons: [{ id: "add_done", title: "Eso es todo" }] });
+    return s;
+  }
+  const open = await openRequests(ctx.userId!);
+  if (!open.length) return onPhoto(s, msg, ctx);
+  // Foto con texto: si describe un problema nuevo, arranca un pedido nuevo; si es para uno existente, va ahí.
+  const caption = (msg.text ?? "").trim();
+  if (caption.length >= 10) {
+    const { intent, requestId } = await classifyIntent(caption, open);
+    if (intent === "new_request") return onPhoto(s, msg, ctx);
+    if (intent === "add_details" && requestId) return startAddTo({ ...s, pendingPhotos: [msg.fileId] }, requestId, ctx);
+  }
+  const pendingPhotos = [...(s.pendingPhotos ?? []), msg.fileId].slice(0, MAX_PHOTOS);
+  ctx.out.push({
+    kind: "list", text: "Recibí la foto. ¿Es para un pedido que ya hiciste o para uno nuevo?", button: "Elegir",
+    sections: [{ title: "Tus pedidos", rows: [...open.map((o) => ({ id: `upd:${o.id}`, title: o.code, description: o.title })), { id: "new_req", title: "Pedido nuevo" }] }],
+  });
+  return { step: "pick_request", pendingPhotos };
+}
+
+/** Cómo va cada pedido abierto, en lenguaje simple. */
+async function showStatus(s: State, ctx: Ctx): Promise<State> {
+  const base = env().APP_URL.replace(/\/$/, "");
+  const rows = await sql()<{ id: string; code: string; title: string; status: string; request_mode: string; target: string | null; inv_status: string | null; respond_by: Date | null; invited: number; quotes: number; job_status: string | null; job_pro: string | null }[]>`
+    select r.id, r.code, r.title, r.status, r.request_mode, tp.display_name as target,
+      (select i.status from request_invitations i where i.request_id = r.id and i.provider_id = r.target_provider_id order by i.created_at desc limit 1) as inv_status,
+      (select i.respond_by from request_invitations i where i.request_id = r.id and i.provider_id = r.target_provider_id order by i.created_at desc limit 1) as respond_by,
+      (select count(*)::int from request_invitations i where i.request_id = r.id) as invited,
+      (select count(*)::int from quotes q where q.request_id = r.id and q.status = 'sent') as quotes,
+      (select j.status from jobs j where j.request_id = r.id and j.status <> 'cancelled' order by j.created_at desc limit 1) as job_status,
+      (select pp.display_name from jobs j join provider_public pp on pp.id = j.provider_id where j.request_id = r.id and j.status <> 'cancelled' order by j.created_at desc limit 1) as job_pro
+    from service_requests r left join provider_public tp on tp.id = r.target_provider_id
+    where r.id in ${sql()((await openRequests(ctx.userId!)).map((o) => o.id).concat("00000000-0000-0000-0000-000000000000"))}
+    order by r.created_at desc`;
+  if (!rows.length) {
+    ctx.out.push({ kind: "buttons", text: "No tenés pedidos abiertos en este momento.", buttons: [{ id: "new_req", title: "Pedido nuevo" }] });
+    return { step: "done" };
+  }
+  const line = (r: (typeof rows)[number]) => {
+    let st: string;
+    if (r.job_status) st = `${jobStatusLabel[r.job_status] ?? r.job_status}${r.job_pro ? ` con ${r.job_pro}` : ""}.`;
+    else if (r.request_mode === "direct" && r.target) {
+      st = r.inv_status === "quoted" ? `${r.target} aceptó y propuso día para la visita: confirmala en Fixy.`
+        : r.inv_status === "declined" || r.inv_status === "expired" ? `${r.target} no pudo tomarlo. Elegí otro profesional en Fixy.`
+        : `Esperando la respuesta de ${r.target}.`;
+    } else if (r.quotes > 0) st = `Tenés ${r.quotes} presupuesto${r.quotes === 1 ? "" : "s"} para comparar.`;
+    else if (r.invited > 0) st = `Lo enviamos a ${r.invited} profesional${r.invited === 1 ? "" : "es"}; todavía no respondieron.`;
+    else st = requestStatusLabel[r.status] === "Buscando a mano" ? "Nuestro equipo está buscando un profesional para vos." : `${requestStatusLabel[r.status] ?? r.status}.`;
+    return `*${r.code}* · ${r.title}\n${st}\n${base}/app/solicitudes/${r.id}`;
+  };
+  ctx.out.push({ kind: "text", previewUrl: false, text: rows.map(line).join("\n\n") });
+  ctx.out.push({ kind: "buttons", text: "¿Querés hacer algo más?", buttons: [{ id: "add_details", title: "Sumar fotos o datos" }, { id: "new_req", title: "Pedido nuevo" }] });
+  return { step: "done" };
 }

@@ -506,3 +506,37 @@ export async function expireDirectBookings() {
     return expired.length;
   });
 }
+
+// ───────────────────────── Detalles agregados después ─────────────────────────
+
+/**
+ * El cliente suma información a un pedido abierto (texto). Queda al final de la descripción, fechado,
+ * y se avisa a los profesionales invitados o al del trabajo. Las fotos se adjuntan aparte (request_attachments).
+ */
+export async function addRequestDetails(actor: Actor, requestId: string, text: string) {
+  const note = z.string().trim().min(3, "Contame qué querés sumar.").max(1000).parse(text);
+  return systemTx(async (tx) => {
+    if (!(await check(tx, "is_request_client", actor, requestId))) throw forbidden();
+    const [r] = await tx<{ status: string; description: string; code: string }[]>`select status, description, code from service_requests where id = ${requestId} for update`;
+    if (r.status === "cancelled") throw invalid("Ese pedido está cancelado.");
+    const stamp = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
+    const next = `${r.description}\n\nAgregado por el cliente (${stamp}): ${note}`;
+    if (next.length > 4000) throw invalid("El pedido ya tiene mucha información. Escribile al profesional por el chat del pedido.");
+    await tx`update service_requests set description = ${next} where id = ${requestId}`;
+    await recordEvent(tx, { entityType: "request", entityId: requestId, action: "details_added", actorId: actor.id });
+    await notifyRequestUpdate(tx, requestId, r.code, "sumó detalles");
+  });
+}
+
+/** Avisa a los profesionales que están evaluando o tienen el trabajo que el cliente actualizó el pedido. */
+export async function notifyRequestUpdate(tx: Tx, requestId: string, code: string, what: string) {
+  const provs = await tx<{ provider_id: string; inv_id: string | null; job_id: string | null }[]>`
+    select i.provider_id, i.id as inv_id, (select j.id from jobs j where j.request_id = ${requestId} and j.provider_id = i.provider_id and j.status <> 'cancelled' limit 1) as job_id
+    from request_invitations i where i.request_id = ${requestId} and i.status in ('invited','viewed','quoted')`;
+  for (const p of provs) {
+    await notify(tx, await providerRecipients(tx, p.provider_id), {
+      type: "invitation", title: `El cliente ${what} · ${code}`, body: "Revisá el pedido actualizado.",
+      link: p.job_id ? `/proveedor/trabajos/${p.job_id}` : `/proveedor/oportunidades/${p.inv_id}`,
+    });
+  }
+}

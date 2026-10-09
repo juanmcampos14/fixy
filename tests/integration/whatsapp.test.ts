@@ -3,7 +3,9 @@ import { createHmac } from "node:crypto";
 import { sql } from "@/server/db/client";
 import { consumeWhatsAppLink, handleInbound, parseWebhook, type Inbound } from "@/server/whatsapp/bot";
 import { toGraphPayload, verifySignature } from "@/server/whatsapp/client";
-import { actor, invitationFor, providerId, simpleQuote } from "./helpers";
+import { actor, catId, invitationFor, providerId, simpleQuote, zoneId } from "./helpers";
+import * as props from "@/server/modules/properties";
+import * as requests from "@/server/modules/requests";
 import { storeFile } from "@/server/storage";
 import { processWhatsAppOutbox } from "@/server/whatsapp/outbox";
 
@@ -178,5 +180,34 @@ describe("WhatsApp", () => {
       expect(summary).toContain("Tu pedido");
       expect(summary).toContain("Mendoza 1234 (Escobar)");
     }
+  });
+
+  it("con pedidos abiertos entiende si quiere sumar detalles o saber cómo va (no lo trata como pedido nuevo)", async () => {
+    const PHONE4 = "5491155550404";
+    const diego = await actor("diego");
+    await sql()`update users set whatsapp_phone = null where whatsapp_phone = ${PHONE4}`;
+    await sql()`update users set whatsapp_phone = ${PHONE4} where id = ${diego.id}`;
+    await sql()`delete from whatsapp_conversations where phone = ${PHONE4}`;
+    const propId = await props.createProperty(diego, { kind: "home", label: `Depto ${Date.now()}`, addressLine: "Av. Santa Fe 3500", zoneId: await zoneId("caba-palermo") });
+    const reqId = await requests.createRequest(diego, {
+      propertyId: propId, categoryId: await catId("electricidad"), title: "Necesito un electricista", description: "Se corta la luz cuando prendo el horno.",
+      answers: {}, urgency: "normal", preferredWindows: [],
+    });
+    const [req] = await sql()<{ id: string; code: string }[]>`select id, code from service_requests where id = ${reqId}`;
+    const m4 = (m: Partial<Inbound>) => msg({ from: PHONE4, ...m });
+
+    await handleInbound(m4({ text: "puedo agregar por aca mas detalles a mi pedido?" }));
+    const first = outText(await lastOut(PHONE4));
+    expect(first).not.toMatch(/No me queda claro qué oficio/);
+    if (listIds(await lastOut(PHONE4)).length) await handleInbound(m4({ type: "interactive", replyId: `upd:${req.id}` }));
+    await handleInbound(m4({ text: "El tablero está en el pasillo, al lado de la puerta" }));
+    const [r] = await sql()<{ description: string }[]>`select description from service_requests where id = ${req.id}`;
+    expect(r.description).toContain("Agregado por el cliente");
+    expect(r.description).toContain("al lado de la puerta");
+
+    await handleInbound(m4({ type: "interactive", replyId: "add_done" }));
+    await handleInbound(m4({ text: "encontraron candidatos?" }));
+    const outs = await sql()<{ body: Record<string, unknown> }[]>`select body from whatsapp_messages where phone = ${PHONE4} and direction = 'out' order by id desc limit 2`;
+    expect(outs.map((o) => outText(o.body)).join(" ")).toContain(req.code);
   });
 });
