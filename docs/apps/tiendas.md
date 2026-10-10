@@ -2,21 +2,36 @@
 
 Plan elegido (ver `docs/research/apps-moviles.md`): app con **Capacitor** para iOS y Android, publicada a nombre de **FLIPS S.R.L.** (CUIT 30-71915647-5).
 
-## 1. D-U-N-S de FLIPS S.R.L. (gratis, 5 días hábiles aprox.)
+## 1. D-U-N-S de FLIPS S.R.L. (gratis, ~5 días hábiles)
 Lo exigen Apple y Google para cuentas de empresa. Se pide una sola vez y sirve para las dos.
 
-1. Crear (o usar) un **Apple Account de la empresa**, idealmente con un mail del dominio (ej. `apps@fixy.solutions`), con verificación en dos pasos activada.
-2. Entrar a la herramienta de Apple: https://developer.apple.com/enroll/duns-lookup/
-3. Buscar **"FLIPS S.R.L."** con el domicilio legal. Si aparece, anotar el número de 9 dígitos.
-4. Si no aparece: **"Submit your information"** con los datos exactamente como en el estatuto / constancia de AFIP:
-   - Razón social: FLIPS S.R.L.
-   - Domicilio legal (calle, número, ciudad, código postal, provincia) — *pendiente de completar*
-   - Teléfono de la empresa
-   - Contacto: nombre, cargo (socio gerente) y mail del dominio
-5. Dun & Bradstreet puede escribir o llamar para confirmar datos (tipo de empresa, cantidad de empleados). Responder rápido.
-6. Al recibir el número, esperar 1–2 días hábiles más antes de usarlo en Apple (sincronización).
+**Antes de empezar, tené a mano:** razón social exacta (como en el estatuto/AFIP), domicilio legal, teléfono de la empresa,
+nombre y apellido legales del socio gerente, y un mail del dominio (ej. `apps@fixy.solutions`). Si tenés el estatuto o la
+constancia de inscripción en PDF, mejor: D&B a veces lo pide.
 
-> No pagar servicios "express": no acortan el plazo.
+**Paso 1 — Apple Account de la empresa**
+1. Entrá a https://account.apple.com → "Crear tu Apple Account".
+2. Nombre y apellido: los **tuyos reales** (no "Fixy"); mail: el del dominio. Activá la verificación en dos pasos con tu celular.
+
+**Paso 2 — Herramienta D-U-N-S de Apple**
+1. Entrá a https://developer.apple.com/enroll/duns-lookup/ e iniciá sesión con ese Apple Account.
+2. Elegí el país **Argentina** y completá: razón social `FLIPS S.R.L.`, domicilio legal, ciudad, código postal y provincia.
+3. Tocá buscar. Si aparece FLIPS S.R.L., anotá el número de 9 dígitos y listo (pasá al paso 4).
+4. Si no aparece (lo más probable), elegí la opción para **enviar tus datos a Dun & Bradstreet** y completá:
+   - datos de la empresa (los mismos de arriba, sin abreviar distinto), teléfono y sitio web `https://www.fixy.solutions`;
+   - tus datos de contacto: nombre, cargo (socio gerente) y mail del dominio.
+5. Enviá. Te llega un mail de confirmación con un número de pedido: guardalo.
+
+**Paso 3 — Esperar**
+- D&B tarda hasta **5 días hábiles** (no se puede acelerar). Puede llamarte o escribirte para confirmar el tipo de empresa o la cantidad de empleados: respondé rápido.
+- Si pasan **dos semanas** sin respuesta, escribiles desde https://support.dnb.com/?CUST=APPLEDEV con el número de pedido.
+- Si te dice "Your organization is not listed as a legal entity", mandá el estatuto o la constancia de AFIP por ese mismo soporte.
+
+**Paso 4 — Usarlo**
+- Cuando llegue el número, esperá **2 días hábiles** más (Apple lo recibe de D&B) y seguí con la inscripción de Apple (punto 2).
+- El mismo número se usa en Google Play (punto 3).
+
+> No pagues servicios "express" de terceros: no acortan el plazo.
 
 ## 2. Apple Developer Program (USD 99/año)
 Requisitos: D-U-N-S, sitio web público de la empresa (www.fixy.solutions, con FLIPS S.R.L. en el pie), mail del dominio y que quien inscribe tenga **autoridad legal** para obligar a la empresa (socio gerente o con poder).
