@@ -149,6 +149,8 @@ function Driver({ shared, rig, follower }: { shared: React.RefObject<Shared>; ri
 
 export default function FixyStage() {
   const [on, setOn] = useState(false);
+  // El globito y la zona táctil aparecen solo cuando el 3D arrancó de verdad (si WebGL falla, queda la ilustración).
+  const [ready, setReady] = useState(false);
   const [bubble, setBubble] = useState<{ text: string; key: number } | null>(null);
   const rig = useRef<Rig>(newRig());
   const follower = useRef<HTMLDivElement>(null);
@@ -226,7 +228,7 @@ export default function FixyStage() {
         camera={{ position: [0, 0, 1000], zoom: 1, near: 1, far: 4000 }}
         dpr={[1, 1.75]}
         gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
-        onCreated={() => { document.documentElement.dataset.fixy3d = "on"; }}
+        onCreated={() => { document.documentElement.dataset.fixy3d = "on"; setReady(true); }}
         style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 30 }}
         aria-hidden
         className="print:hidden"
@@ -239,7 +241,7 @@ export default function FixyStage() {
       </Canvas>
 
       {/* Acompaña a Fixy: globito de diálogo y zona para tocarlo */}
-      <div ref={follower} className="pointer-events-none fixed left-0 top-0 z-30 print:hidden" style={{ willChange: "transform" }}>
+      <div ref={follower} hidden={!ready} className="pointer-events-none fixed left-0 top-0 z-30 print:hidden" style={{ willChange: "transform" }}>
         <button
           type="button"
           onClick={poke}
