@@ -7,7 +7,7 @@ Plan elegido (ver `docs/research/apps-moviles.md`): app con **Capacitor** para i
 |---|---|
 | D-U-N-S | **966002122** (registrado por D&B como "Flips", Husares 2248) |
 | Apple Developer Program | Inscripción enviada · Enrollment ID **S72QC3DHN2** · cuenta titular hola@fixy.solutions · esperando verificación de Apple |
-| Google Play Console | Pendiente |
+| Google Play Console | Cuenta de organización creada con jcinfluencers@gmail.com · en revisión (estatuto y DNI) |
 
 ## 1. D-U-N-S de FLIPS S.R.L. (gratis, ~5 días hábiles)
 Lo exigen Apple y Google para cuentas de empresa. Se pide una sola vez y sirve para las dos.
