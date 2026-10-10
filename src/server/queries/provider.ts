@@ -45,7 +45,7 @@ export type OwnProvider = {
   responsible_name: string; contact_email: string; contact_phone: string | null; description: string; years_experience: number | null;
   billing_info: string | null; accepting_jobs: boolean; max_active_jobs: number; base_zone_id: string | null; status: string;
   identity_status: string; payouts_status: string; payout_provider: string | null; review_note: string | null;
-  submitted_at: Date | null; approved_at: Date | null; is_demo: boolean; avatar_file_id: string | null;
+  submitted_at: Date | null; approved_at: Date | null; is_demo: boolean; avatar_file_id: string | null; social_links: Record<string, string>;
 };
 
 export async function getOwnProvider(userId: string, providerId: string): Promise<OwnProvider | null> {
@@ -57,7 +57,7 @@ export async function getOwnProvider(userId: string, providerId: string): Promis
         case when app.provider_role(${userId}, id) = 'admin' then tax_id end as tax_id,
         responsible_name, contact_email, contact_phone, description,
         years_experience, case when app.provider_role(${userId}, id) = 'admin' then billing_info end as billing_info, accepting_jobs, max_active_jobs, base_zone_id, status, identity_status, payouts_status,
-        payout_provider, review_note, submitted_at, approved_at, is_demo, avatar_file_id
+        payout_provider, review_note, submitted_at, approved_at, is_demo, avatar_file_id, social_links
       from providers where id = ${providerId}`;
     return p ?? null;
   });
@@ -80,8 +80,9 @@ export async function getProviderSetup(userId: string, providerId: string) {
     const selectedZones = (await tx<{ zone_id: string }[]>`select zone_id from provider_zones where provider_id = ${providerId}`).map((r) => r.zone_id);
     const availability = await tx<{ weekday: number; start_minute: number; end_minute: number }[]>`
       select weekday, start_minute, end_minute from provider_availability where provider_id = ${providerId} order by weekday, start_minute`;
-    const portfolioRows = await tx<{ id: string; file_id: string; caption: string }[]>`
-      select id, file_id, caption from provider_portfolio where provider_id = ${providerId} order by created_at`;
+    const portfolioRows = await tx<{ id: string; file_id: string; caption: string; is_pdf: boolean; file_name: string | null }[]>`
+      select pp.id, pp.file_id, pp.caption, f.mime_type = 'application/pdf' as is_pdf, f.original_name as file_name
+      from provider_portfolio pp left join files f on f.id = pp.file_id where pp.provider_id = ${providerId} order by pp.created_at`;
     const documents = await tx<{ id: string; kind: string; status: string; expires_on: string | null; review_note: string | null; created_at: Date; credential_name: string | null; file_id: string; file_name: string | null }[]>`
       select d.id, d.kind, d.status, d.expires_on, d.review_note, d.created_at, ct.name as credential_name, d.file_id, f.original_name as file_name
       from provider_documents d left join credential_types ct on ct.id = d.credential_type_id left join files f on f.id = d.file_id
@@ -308,8 +309,8 @@ export async function getDisputeForProvider(userId: string, disputeId: string) {
 /** Solo columnas públicas; solo proveedores aprobados. */
 export async function getPublicProfile(slug: string) {
   const db = sql();
-  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null; avatar_file_id: string | null; status: string }[]>`
-    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at, avatar_file_id, status
+  const [p] = await db<{ id: string; slug: string; kind: string; display_name: string; description: string; years_experience: number | null; identity_status: string; is_demo: boolean; approved_at: Date | null; avatar_file_id: string | null; status: string; social_links: Record<string, string> }[]>`
+    select id, slug, kind, display_name, description, years_experience, identity_status, is_demo, approved_at, avatar_file_id, status, social_links
     from provider_public where slug = ${slug} and status in ('pending','in_review','approved')`;
   if (!p) return null;
   const [categories, zones, portfolio, credentials, reviews] = await Promise.all([
@@ -317,8 +318,8 @@ export async function getPublicProfile(slug: string) {
       select c.id, c.name, c.icon from provider_categories pc join categories c on c.id = pc.category_id where pc.provider_id = ${p.id} and c.active order by c.sort, c.name`,
     db<{ name: string; region: string }[]>`
       select z.name, z.region from provider_zones pz join zones z on z.id = pz.zone_id where pz.provider_id = ${p.id} and z.active order by z.sort, z.name`,
-    db<{ id: string; file_id: string; caption: string }[]>`
-      select pp.id, pp.file_id, pp.caption from provider_portfolio pp join files f on f.id = pp.file_id
+    db<{ id: string; file_id: string; caption: string; is_pdf: boolean; file_name: string }[]>`
+      select pp.id, pp.file_id, pp.caption, f.mime_type = 'application/pdf' as is_pdf, f.original_name as file_name from provider_portfolio pp join files f on f.id = pp.file_id
       where pp.provider_id = ${p.id} and f.visibility = 'public' order by pp.created_at`,
     db<{ name: string; expires_on: string | null }[]>`
       select ct.name, cp.expires_on from provider_credentials_public cp join credential_types ct on ct.id = cp.credential_type_id
@@ -337,7 +338,7 @@ export async function getPublicProfile(slug: string) {
     where r.provider_id = ${p.id} order by c.sort, r.sort`;
   return {
     provider: { ...p, avatarUrl: p.avatar_file_id ? publicFileUrl(p.avatar_file_id) : null }, categories, zones, credentials, reviews,
-    portfolio: portfolio.map((x) => ({ id: x.id, caption: x.caption, url: publicFileUrl(x.file_id) })),
+    portfolio: portfolio.map((x) => ({ id: x.id, caption: x.caption, url: publicFileUrl(x.file_id), isPdf: x.is_pdf, fileName: x.file_name })),
     rating: { average: avg ? Number(avg) : null, count: n },
     visit: visit ?? { visit_fee_minor: 0, visit_fee_credited: false },
     priceRefs,

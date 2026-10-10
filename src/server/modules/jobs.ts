@@ -1,4 +1,5 @@
 /** Órdenes de trabajo: confirmación, ejecución, evidencias, adicionales, reprogramaciones, cierre y cancelación. */
+import { maskContactInfo } from "@/server/domain/contact-guard";
 import { rateLimit } from "@/server/rate-limit";
 import { z } from "zod";
 import type { Tx } from "@/server/db/client";
@@ -144,6 +145,54 @@ export async function addEvidence(actor: Actor, jobId: string, input: { kind: "b
     await tx`insert into job_evidence (job_id, file_id, kind, note, created_by) values (${jobId}, ${fileId}, ${input.kind}, ${input.note.trim().slice(0, 1000)}, ${actor.id})`;
     await recordEvent(tx, { entityType: "job", entityId: jobId, action: "evidence_added", actorId: actor.id, data: { kind: input.kind } });
     await notify(tx, await clientRecipients(tx, job.request_id), { type: "job_status", title: `Nuevo avance registrado · ${job.code}`, link: `/app/trabajos/${jobId}`, email: false });
+  });
+}
+
+/** Varias fotos de una vez (con la misma nota y momento): un solo aviso al cliente. */
+export async function addEvidenceBatch(actor: Actor, jobId: string, input: { kind: "before" | "progress" | "after" | "note"; note: string }, photos: { data: Buffer; name: string }[]) {
+  if (!photos.length && input.note.trim().length < 2) throw invalid("Agregá fotos o una nota.");
+  if (photos.length > 10) throw invalid("Podés subir hasta 10 fotos por vez.");
+  return systemTx(async (tx) => {
+    const job = await loadJob(tx, jobId);
+    await requireSide(tx, actor, job, ["provider", "technician"]);
+    if (!["confirmed", "on_the_way", "in_progress", "pending_approval"].includes(job.status)) throw invalid("Solo se registran avances en trabajos activos.");
+    const note = maskContactInfo(input.note.trim().slice(0, 1000)).text;
+    const entries = photos.length ? photos : [null];
+    for (const [i, file] of entries.entries()) {
+      const fileId = file ? await storeFile(tx, { data: file.data, originalName: file.name, uploadedBy: actor.id, purpose: "job_evidence", ownerType: "job", ownerId: jobId, allowPdf: false }) : null;
+      await tx`insert into job_evidence (job_id, file_id, kind, note, created_by) values (${jobId}, ${fileId}, ${input.kind}, ${i === 0 ? note : ""}, ${actor.id})`;
+    }
+    await recordEvent(tx, { entityType: "job", entityId: jobId, action: "evidence_added", actorId: actor.id, data: { kind: input.kind, photos: photos.length } });
+    await notify(tx, await clientRecipients(tx, job.request_id), {
+      type: "job_status", title: photos.length > 1 ? `${photos.length} fotos nuevas del trabajo · ${job.code}` : `Nuevo avance registrado · ${job.code}`, link: `/app/trabajos/${jobId}`, email: false,
+    });
+  });
+}
+
+/**
+ * Fotos del trabajo que el profesional mandó por WhatsApp (ya guardadas y privadas): se suman como avances.
+ * Solo fotos de ese mismo número que todavía no se usaron.
+ */
+export async function addEvidenceFromWhatsApp(actor: Actor, jobId: string, kind: "before" | "progress" | "after", phone: string, fileIds: string[]) {
+  if (!fileIds.length) return 0;
+  return systemTx(async (tx) => {
+    const job = await loadJob(tx, jobId);
+    await requireSide(tx, actor, job, ["provider", "technician"]);
+    if (!["confirmed", "on_the_way", "in_progress", "pending_approval"].includes(job.status)) throw invalid("Ese trabajo ya no admite avances.");
+    const media = await tx<{ id: number; file_id: string }[]>`
+      select id, file_id from whatsapp_media where phone = ${phone} and request_id is null and file_id in ${tx(fileIds.slice(0, 10))}`;
+    for (const m of media) {
+      await tx`update files set purpose = 'job_evidence', owner_type = 'job', owner_id = ${jobId} where id = ${m.file_id} and owner_id is null`;
+      await tx`insert into job_evidence (job_id, file_id, kind, note, created_by) values (${jobId}, ${m.file_id}, ${kind}, '', ${actor.id})`;
+      await tx`update whatsapp_media set request_id = ${job.request_id} where id = ${m.id}`;
+    }
+    if (media.length) {
+      await recordEvent(tx, { entityType: "job", entityId: jobId, action: "evidence_added", actorId: actor.id, data: { kind, photos: media.length, channel: "whatsapp" } });
+      await notify(tx, await clientRecipients(tx, job.request_id), {
+        type: "job_status", title: media.length > 1 ? `${media.length} fotos nuevas del trabajo · ${job.code}` : `Nuevo avance registrado · ${job.code}`, link: `/app/trabajos/${jobId}`, email: false,
+      });
+    }
+    return media.length;
   });
 }
 

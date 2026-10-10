@@ -1,8 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
+import { SOCIAL_NETWORKS } from "@/lib/social";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { BadgeCheck, Building2, MapPin, UserRound } from "lucide-react";
+import { BadgeCheck, Building2, ExternalLink, FileText, MapPin, UserRound } from "lucide-react";
 import { getPublicProfile } from "@/server/queries/provider";
 import { formatMoney, formatMonth, formatDate } from "@/lib/format";
 import { ButtonLink } from "@/components/ui/button";
@@ -61,6 +62,18 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             {p.years_experience != null && <span>· {p.years_experience} {p.years_experience === 1 ? "año" : "años"} de experiencia</span>}
           </p>
           <p className="mt-4 whitespace-pre-line text-[16px] leading-relaxed text-ink-2">{p.description}</p>
+          {SOCIAL_NETWORKS.some((n) => p.social_links?.[n.key]) && (
+            <ul aria-label="Redes y sitio web" className="mt-4 flex flex-wrap gap-2">
+              {SOCIAL_NETWORKS.filter((n) => p.social_links?.[n.key]).map((n) => (
+                <li key={n.key}>
+                  <a href={p.social_links[n.key]} target="_blank" rel="nofollow ugc noopener noreferrer"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-semibold text-fixy-800 ring-1 ring-line hover:ring-fixy-500">
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />{n.label}<span className="sr-only"> de {p.display_name} (se abre en otra pestaña)</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="md:w-56">
           <div className="mb-3 rounded-2xl bg-white p-4 text-center ring-1 ring-line">
@@ -96,7 +109,13 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
                 {portfolio.map((x) => (
                   <li key={x.id}>
                     <figure>
-                      <img src={x.url} alt={x.caption || `Trabajo de ${p.display_name}`} className="aspect-[4/3] w-full rounded-2xl object-cover ring-1 ring-line" loading="lazy" />
+                      {x.isPdf ? (
+                        <a href={x.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white p-3 text-center text-sm text-ink-2 ring-1 ring-line hover:ring-fixy-500">
+                          <FileText className="h-8 w-8 text-fixy-700" aria-hidden /><span className="line-clamp-2 break-all">{x.caption || "Ver PDF"}</span>
+                        </a>
+                      ) : (
+                        <img src={x.url} alt={x.caption || `Trabajo de ${p.display_name}`} className="aspect-[4/3] w-full rounded-2xl object-cover ring-1 ring-line" loading="lazy" />
+                      )}
                       {x.caption && <figcaption className="mt-1 text-sm text-muted">{x.caption}</figcaption>}
                     </figure>
                   </li>

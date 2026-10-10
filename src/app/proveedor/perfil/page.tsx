@@ -4,7 +4,7 @@ import { getOnboardingState, getProviderSetup, requireProviderContext } from "@/
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { ProfileForm } from "@/components/provider/profile-form";
-import { AvatarSection, CoverageSection, DocumentsSection, PayoutsSection, PortfolioSection } from "@/components/provider/sections";
+import { AvatarSection, CoverageSection, DocumentsSection, PayoutsSection, PortfolioSection, SocialLinksSection } from "@/components/provider/sections";
 import { updateProfileAction } from "../alta/actions";
 import { VisitPricingSection } from "@/components/provider/visit-pricing";
 
@@ -42,6 +42,7 @@ export default async function ProfilePage() {
         <VisitPricingSection providerId={provider.id} />
         <CoverageSection setup={setup} provider={p} />
         <PortfolioSection setup={setup} />
+        <SocialLinksSection provider={p} />
         <DocumentsSection setup={setup} checklist={state.checklist} />
         <PayoutsSection provider={p} />
       </div>

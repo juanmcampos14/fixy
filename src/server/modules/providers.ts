@@ -2,6 +2,8 @@
  * Proveedores: registro abierto, perfil, cobertura, documentación, configuración de cobros
  * y revisión administrativa. Estados separados: operativo, identidad, credenciales, cobros.
  */
+import { maskContactInfo } from "@/server/domain/contact-guard";
+import { normalizeSocialLinks, type SocialKey } from "@/lib/social";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
@@ -115,22 +117,27 @@ export async function updateCoverage(actor: Actor, providerId: string, input: z.
   });
 }
 
+export const PORTFOLIO_MAX = 20;
+
 export async function addPortfolioItem(actor: Actor, providerId: string, file: { data: Buffer; name: string }, caption: string) {
+  return addPortfolioItems(actor, providerId, [file], caption);
+}
+
+/** Fotos o PDF (catálogo, trabajos) para el perfil público. Varios por vez, misma descripción. */
+export async function addPortfolioItems(actor: Actor, providerId: string, files: { data: Buffer; name: string }[], caption: string) {
+  if (!files.length) throw invalid("Elegí al menos una foto o un PDF.");
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
     const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from provider_portfolio where provider_id = ${providerId}`;
-    if (n >= 12) throw invalid("Podés cargar hasta 12 fotos de trabajos.");
-    const fileId = await storeFile(tx, {
-      data: file.data,
-      originalName: file.name,
-      uploadedBy: actor.id,
-      purpose: "portfolio",
-      ownerType: "provider",
-      ownerId: providerId,
-      visibility: "public",
-      allowPdf: false,
-    });
-    await tx`insert into provider_portfolio (provider_id, file_id, caption) values (${providerId}, ${fileId}, ${caption.slice(0, 200)})`;
+    if (n + files.length > PORTFOLIO_MAX) throw invalid(`Podés tener hasta ${PORTFOLIO_MAX} archivos en tu portfolio (te quedan ${Math.max(0, PORTFOLIO_MAX - n)}).`);
+    const text = maskContactInfo(caption.trim().slice(0, 200)).text;
+    for (const file of files) {
+      const fileId = await storeFile(tx, {
+        data: file.data, originalName: file.name, uploadedBy: actor.id, purpose: "portfolio",
+        ownerType: "provider", ownerId: providerId, visibility: "public", allowPdf: true,
+      });
+      await tx`insert into provider_portfolio (provider_id, file_id, caption) values (${providerId}, ${fileId}, ${text})`;
+    }
   });
 }
 
@@ -140,6 +147,18 @@ export async function removePortfolioItem(actor: Actor, providerId: string, item
     await tx`delete from provider_portfolio where id = ${itemId} and provider_id = ${providerId}`;
   });
 }
+
+/** Redes sociales públicas (opcionales). Solo plataformas conocidas y sitios https; nunca mensajería ni teléfonos. */
+export async function updateSocialLinks(actor: Actor, providerId: string, input: Partial<Record<SocialKey, string>>) {
+  const { links, errors } = normalizeSocialLinks(input);
+  if (errors.length) throw invalid(errors.join(" "));
+  return systemTx(async (tx) => {
+    await assertProviderAdmin(tx, actor, providerId);
+    await tx`update providers set social_links = ${tx.json(links as never)} where id = ${providerId}`;
+    await audit(tx, actor, "provider.social_links", "provider", providerId, null, { networks: Object.keys(links) });
+  });
+}
+
 
 export const documentSchema = z.object({
   kind: z.enum(["identity", "credential", "tax", "other"]),

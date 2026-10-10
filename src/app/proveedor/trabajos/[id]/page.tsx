@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PhotoPicker } from "@/components/ui/photo-picker";
 import Link from "next/link";
 import { AccessRequirementsView } from "@/components/domain/access-requirements";
 import { notFound } from "next/navigation";
@@ -139,21 +140,22 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             {active && (
               <ActionForm action={addEvidenceAction} className="mt-5 space-y-4 rounded-2xl bg-cream/60 p-4 ring-1 ring-line" resetOnSuccess>
                 <input type="hidden" name="jobId" value={id} />
-                <h3 className="font-bold">Registrar un avance</h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Tipo" htmlFor="ev-kind" required>
-                    <Select id="ev-kind" name="kind" defaultValue="progress">
-                      {Object.entries(EVIDENCE_KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                    </Select>
-                  </Field>
-                  <Field label="Foto (JPG, PNG o WEBP)" htmlFor="ev-photo">
-                    <input id="ev-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" className="block w-full text-sm file:mr-3 file:h-11 file:rounded-full file:border-0 file:bg-fixy-50 file:px-4 file:font-semibold file:text-fixy-800" />
-                  </Field>
-                </div>
-                <Field label="Nota" htmlFor="ev-note" hint="Agregá una foto, una nota o ambas.">
+                <h3 className="font-bold">Sumar fotos o una nota</h3>
+                <fieldset>
+                  <legend className="mb-1.5 text-[15px] font-semibold">¿De qué momento son?</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(EVIDENCE_KIND_LABEL).map(([k, l]) => (
+                      <label key={k} className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-white px-4 text-sm font-semibold ring-1 ring-[#d3dfdc] has-[:checked]:bg-fixy-700 has-[:checked]:text-white has-[:checked]:ring-fixy-700 has-[:focus-visible]:ring-3">
+                        <input type="radio" name="kind" value={k} defaultChecked={k === (d.job.status === "in_progress" || d.job.status === "pending_approval" ? "after" : "before")} className="sr-only" />{l}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <PhotoPicker name="photos" max={10} label="Fotos" hint="Hasta 10 por vez. Podés sacarlas con la cámara o elegirlas de la galería." />
+                <Field label="Nota" htmlFor="ev-note" hint="Qué hiciste, qué materiales usaste, recomendaciones para el cliente.">
                   <Textarea id="ev-note" name="note" maxLength={1000} className="min-h-20" />
                 </Field>
-                <SubmitButton variant="soft" pendingText="Guardando…">Registrar avance</SubmitButton>
+                <SubmitButton pendingText="Subiendo…">Guardar y avisar al cliente</SubmitButton>
               </ActionForm>
             )}
           </Card>

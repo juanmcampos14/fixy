@@ -1,5 +1,6 @@
 "use server";
 
+import { SOCIAL_NETWORKS } from "@/lib/social";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -10,7 +11,7 @@ import { requireActor } from "@/server/auth/session";
 import type { Actor } from "@/server/auth/actor";
 import { forbidden } from "@/server/domain/errors";
 import {
-  acceptProviderTerms, addPortfolioItem, coverageSchema, createProvider, documentSchema, providerProfileSchema, removePortfolioItem,
+  acceptProviderTerms, addPortfolioItems, updateSocialLinks, coverageSchema, createProvider, documentSchema, providerProfileSchema, removePortfolioItem,
   setupPayouts, submitForReview, updateCoverage, updateProviderProfile, uploadProviderDocument, quickStartProvider, quickStartSchema, setProviderAvatar, removeProviderAvatar,
 } from "@/server/modules/providers";
 import { AVAILABILITY_PRESETS, draftProviderProfile, type AvailabilityPreset } from "@/server/assistant/provider-profile";
@@ -110,11 +111,21 @@ export async function updateCoverageAction(_: ActionState, f: FormData): Promise
 export async function addPortfolioAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = await requireActor();
-    const [file] = await files(f, "photo");
-    if (!file) return { error: "Elegí una foto (JPG, PNG o WEBP)." };
-    await addPortfolioItem(actor, adminProviderId(actor), file, str(f, "caption"));
+    const list = (await files(f, "photos")).concat(await files(f, "photo"));
+    if (!list.length) return { error: "Elegí al menos una foto o un PDF." };
+    await addPortfolioItems(actor, adminProviderId(actor), list, str(f, "caption"));
     revalidateProvider();
-    return { ok: true, message: "Sumamos la foto a tu portfolio." };
+    return { ok: true, message: list.length === 1 ? "Lo sumamos a tu portfolio." : `Sumamos ${list.length} archivos a tu portfolio.` };
+  });
+}
+
+export async function updateSocialLinksAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const input = Object.fromEntries(SOCIAL_NETWORKS.map((n) => [n.key, str(f, n.key)]));
+    await updateSocialLinks(actor, adminProviderId(actor), input);
+    revalidateProvider();
+    return { ok: true, message: "Guardamos tus redes." };
   });
 }
 

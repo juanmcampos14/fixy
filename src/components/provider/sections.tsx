@@ -6,7 +6,7 @@ import { CircleCheck, CircleDashed, FileText, ImagePlus, Trash2 } from "lucide-r
 import type { OnboardingChecklist } from "@/server/modules/providers";
 import type { OwnProvider, ProviderSetup } from "@/server/queries/provider";
 import {
-  acceptTermsAction, addPortfolioAction, removePortfolioAction, updateCoverageAction, setAvatarAction, removeAvatarAction, uploadDocumentAction,
+  acceptTermsAction, addPortfolioAction, removePortfolioAction, updateSocialLinksAction, updateCoverageAction, setAvatarAction, removeAvatarAction, uploadDocumentAction,
 } from "@/app/proveedor/alta/actions";
 import { identityStatusLabel, payoutsStatusLabel, providerStatusLabel } from "@/server/domain/labels";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -17,6 +17,8 @@ import { Checkbox, ChoiceChip, Field, Input, Select } from "@/components/ui/fiel
 import { CategoryIcon } from "@/components/category-icon";
 import { ButtonLink } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { SOCIAL_NETWORKS } from "@/lib/social";
+import { PhotoPicker } from "@/components/ui/photo-picker";
 import { DOCUMENT_KIND_LABEL, DOCUMENT_STATUS_LABEL, REGION_LABEL, WEEKDAYS, WEEKDAY_ORDER, groupZones } from "./constants";
 
 export function Done({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -189,40 +191,65 @@ export function AvatarSection({ provider, id = "foto" }: { provider: OwnProvider
   );
 }
 
-export function PortfolioSection({ setup, id = "portfolio" }: { setup: ProviderSetup; id?: string }) {
+export function SocialLinksSection({ provider, id = "redes" }: { provider: OwnProvider; id?: string }) {
+  const links = provider.social_links ?? {};
   return (
     <Card as="section" id={id} aria-labelledby={`${id}-t`} className="scroll-mt-24">
-      <CardHeader title={<span id={`${id}-t`}>Portfolio</span>} description="Fotos de trabajos tuyos. Son públicas en tu perfil. Recomendado, no obligatorio (hasta 12)." />
+      <CardHeader title={<span id={`${id}-t`}>Redes y sitio web</span>} description="Opcional. Se muestran en tu perfil público para que los clientes vean más trabajos tuyos." />
+      <ActionForm action={updateSocialLinksAction} className="grid gap-4 sm:grid-cols-2">
+        {SOCIAL_NETWORKS.map((n) => (
+          <Field key={n.key} label={n.label} htmlFor={`${id}-${n.key}`}>
+            <Input id={`${id}-${n.key}`} name={n.key} defaultValue={links[n.key] ?? ""} placeholder={n.placeholder} maxLength={300} autoComplete="off" />
+          </Field>
+        ))}
+        <div className="sm:col-span-2">
+          <p className="mb-3 text-xs text-muted">Sin WhatsApp, Telegram ni teléfonos: los clientes te contactan y te contratan dentro de Fixy, así el trabajo y el pago quedan protegidos.</p>
+          <SubmitButton variant="soft" pendingText="Guardando…">Guardar redes</SubmitButton>
+        </div>
+      </ActionForm>
+    </Card>
+  );
+}
+
+export function PortfolioSection({ setup, id = "portfolio" }: { setup: ProviderSetup; id?: string }) {
+  const left = 20 - setup.portfolio.length;
+  return (
+    <Card as="section" id={id} aria-labelledby={`${id}-t`} className="scroll-mt-24">
+      <CardHeader title={<span id={`${id}-t`}>Portfolio</span>} description="Fotos de trabajos tuyos o PDF (catálogo, antes y después). Son públicos en tu perfil y ayudan a que te elijan. Hasta 20." />
       {setup.portfolio.length > 0 ? (
         <ul className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {setup.portfolio.map((p) => (
             <li key={p.id} className="overflow-hidden rounded-2xl bg-cream/60 ring-1 ring-line">
-              <img src={p.url} alt={p.caption || "Foto de trabajo"} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+              {p.is_pdf ? (
+                <a href={p.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-white p-3 text-center text-sm text-ink-2">
+                  <FileText className="h-8 w-8 text-fixy-700" aria-hidden /><span className="line-clamp-2 break-all">{p.file_name ?? "Documento PDF"}</span>
+                </a>
+              ) : (
+                <img src={p.url} alt={p.caption || "Foto de trabajo"} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+              )}
               <div className="flex items-start justify-between gap-2 p-2">
                 <p className="min-w-0 text-sm">{p.caption || <span className="text-muted">Sin descripción</span>}</p>
                 <ActionForm action={removePortfolioAction}>
                   <input type="hidden" name="itemId" value={p.id} />
-                  <SubmitButton variant="ghost" size="sm" className="h-11 w-11 px-0"><Trash2 className="h-4 w-4" aria-hidden /><span className="sr-only">Quitar foto</span></SubmitButton>
+                  <SubmitButton variant="ghost" size="sm" className="h-11 w-11 px-0"><Trash2 className="h-4 w-4" aria-hidden /><span className="sr-only">Quitar</span></SubmitButton>
                 </ActionForm>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mb-4 text-sm text-muted">Todavía no cargaste fotos.</p>
+        <p className="mb-4 text-sm text-muted">Todavía no cargaste trabajos.</p>
       )}
-      {setup.portfolio.length < 12 && (
-        <ActionForm action={addPortfolioAction} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end" resetOnSuccess>
-          <Field label="Foto (JPG, PNG o WEBP)" htmlFor={`${id}-photo`} required>
-            <input id={`${id}-photo`} name="photo" type="file" accept="image/jpeg,image/png,image/webp" required className="block w-full text-sm file:mr-3 file:h-11 file:rounded-full file:border-0 file:bg-fixy-50 file:px-4 file:font-semibold file:text-fixy-800" />
-          </Field>
-          <Field label="Descripción breve" htmlFor={`${id}-cap`}>
+      {left > 0 && (
+        <ActionForm action={addPortfolioAction} className="space-y-3" resetOnSuccess>
+          <PhotoPicker name="photos" max={Math.min(8, left)} allowPdf label="Sumar trabajos" hint={`Hasta ${Math.min(8, left)} por vez (te quedan ${left}). Las fotos se achican antes de subir.`} />
+          <Field label="Descripción breve" htmlFor={`${id}-cap`} hint="Se aplica a todo lo que subas en esta tanda.">
             <Input id={`${id}-cap`} name="caption" maxLength={200} placeholder="Ej.: tablero nuevo en departamento" />
           </Field>
-          <SubmitButton variant="soft" pendingText="Subiendo…"><ImagePlus className="h-4 w-4" aria-hidden /> Subir</SubmitButton>
+          <SubmitButton variant="soft" pendingText="Subiendo…"><ImagePlus className="h-4 w-4" aria-hidden /> Subir al portfolio</SubmitButton>
         </ActionForm>
       )}
-      <p className="mt-3 text-xs text-muted">No subas fotos con datos personales, direcciones o caras de clientes.</p>
+      <p className="mt-3 text-xs text-muted">No subas fotos con datos personales, direcciones, caras de clientes ni datos de contacto.</p>
     </Card>
   );
 }

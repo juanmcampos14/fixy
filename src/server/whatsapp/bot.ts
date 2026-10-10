@@ -21,6 +21,7 @@ import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client
 import { classifyIntent, type OpenRequest } from "./intent";
 import { looksLikeAddress, looksLikeQuestion, parseBudget, understand, type Expecting, type Understood } from "./understand";
 import { addRequestDetails, notifyRequestUpdate } from "@/server/modules/requests";
+import { addEvidenceFromWhatsApp } from "@/server/modules/jobs";
 import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
 import { SUPPORT_EMAIL } from "@/lib/contact";
@@ -39,7 +40,7 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = "idle" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = "idle" | "evidence_job" | "evidence_kind" | "evidence" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
   description?: string;
@@ -59,6 +60,9 @@ type State = {
   targetRequestId?: string;
   /** Fotos recibidas antes de saber a qué pedido van. */
   pendingPhotos?: string[];
+  /** Profesional mandando fotos de un trabajo: trabajo y momento elegidos. */
+  evJobId?: string;
+  evKind?: "before" | "progress" | "after";
 };
 
 type Zone = { id: string; code: string; name: string; region: string; match_names: string[] };
@@ -168,6 +172,11 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     return s;
   }
   if (reply === "link_account") return sendLinkOnly(s, ctx);
+  // Profesional con trabajos activos: las fotos pueden ser avances de un trabajo.
+  if (ctx.userId) {
+    const ev = await evidenceStep(s, msg, reply, t, ctx);
+    if (ev) return ev;
+  }
   if (reply === "new_req" && !ctx.userId) {
     ctx.out.push({ kind: "text", text: "Dale. Contame qué problema tenés y te muestro profesionales que pueden ir." });
     return { step: "problem" };
@@ -198,6 +207,9 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
   switch (s.step) {
     case "idle":
     case "done":
+    case "evidence_job":
+    case "evidence_kind":
+    case "evidence":
     case "awaiting_account": {
       if (s.step === "awaiting_account" && !text) return s;
       if (!text) return s;
@@ -545,6 +557,89 @@ async function send(s: State, ctx: Ctx): Promise<State> {
     text: `Último paso: creá tu cuenta o ingresá desde este link y tu pedido se envía (lo guardamos 7 días).${s.photos?.length ? " Las fotos que me mandaste se suman solas." : ""} Así también quedan vinculados tu WhatsApp y tu cuenta.\n\n${base}/wa/${token}`,
   });
   return { ...s, step: "awaiting_account" };
+}
+
+// ───────────────────────── Profesionales: fotos de un trabajo ─────────────────────────
+
+const EV_KINDS = [{ id: "before", title: "Antes" }, { id: "progress", title: "Durante" }, { id: "after", title: "Terminado" }] as const;
+
+/** Trabajos activos donde la persona es administradora del profesional o el técnico asignado. */
+async function activeProviderJobs(userId: string) {
+  return sql()<{ id: string; code: string; title: string }[]>`
+    select j.id, j.code, r.title from jobs j join service_requests r on r.id = j.request_id
+    where j.status in ('confirmed','on_the_way','in_progress','pending_approval')
+      and (exists (select 1 from provider_members m where m.provider_id = j.provider_id and m.user_id = ${userId} and m.active and m.role = 'admin')
+        or (j.assigned_user_id = ${userId} and exists (select 1 from provider_members m where m.provider_id = j.provider_id and m.user_id = ${userId} and m.active)))
+    order by j.scheduled_date nulls last, j.created_at desc limit 8`;
+}
+
+async function saveEvidence(s: State, ctx: Ctx, jobId: string, kind: "before" | "progress" | "after", fileIds: string[]): Promise<State> {
+  try {
+    const actor = await systemTx((tx) => loadActor(tx, ctx.userId!));
+    const n = await addEvidenceFromWhatsApp(actor!, jobId, kind, ctx.phone, fileIds);
+    const [j] = await sql()<{ code: string }[]>`select code from jobs where id = ${jobId}`;
+    ctx.out.push({
+      kind: "buttons", text: `Listo, sumé ${n === 1 ? "la foto" : `${n} fotos`} al trabajo *${j?.code}* y le avisamos al cliente. Si querés, mandá más: van al mismo trabajo.`,
+      buttons: [{ id: "ev_done", title: "Eso es todo" }, { id: "ev_change", title: "Cambiar momento" }],
+    });
+    return { step: "evidence", evJobId: jobId, evKind: kind };
+  } catch (e) {
+    ctx.out.push({ kind: "text", text: isDomainError(e) ? e.message : "No pude sumar las fotos. Probá de nuevo desde Fixy." });
+    return { step: "idle" };
+  }
+}
+
+/** Devuelve el estado siguiente si el mensaje es parte del flujo de fotos de un trabajo; si no, null. */
+async function evidenceStep(s: State, msg: Inbound, reply: string, t: string, ctx: Ctx): Promise<State | null> {
+  if (reply === "ev_done" && s.step === "evidence") {
+    ctx.out.push({ kind: "text", text: "Perfecto. Cualquier otra foto, mandala cuando quieras." });
+    return { step: "done" };
+  }
+  if (reply === "ev_change" && s.evJobId) {
+    ctx.out.push({ kind: "buttons", text: "¿De qué momento son las próximas fotos?", buttons: EV_KINDS.map((k) => ({ id: `evk:${k.id}`, title: k.title })) });
+    return { step: "evidence_kind", evJobId: s.evJobId, pendingPhotos: [] };
+  }
+  if (reply.startsWith("evj:")) {
+    ctx.out.push({ kind: "buttons", text: "¿De qué momento son?", buttons: EV_KINDS.map((k) => ({ id: `evk:${k.id}`, title: k.title })) });
+    return { ...s, step: "evidence_kind", evJobId: reply.slice(4) };
+  }
+  if (reply.startsWith("evk:") && s.evJobId) {
+    const kind = reply.slice(4) as "before" | "progress" | "after";
+    if (s.pendingPhotos?.length) return saveEvidence(s, ctx, s.evJobId, kind, s.pendingPhotos);
+    ctx.out.push({ kind: "text", text: "Dale, mandame las fotos." });
+    return { step: "evidence", evJobId: s.evJobId, evKind: kind };
+  }
+  if (msg.type === "image") {
+    if (!msg.fileId) return null;
+    if (s.step === "evidence" && s.evJobId && s.evKind) return saveEvidence(s, ctx, s.evJobId, s.evKind, [msg.fileId]);
+    if ((s.step === "evidence_kind" || s.step === "evidence_job")) return { ...s, pendingPhotos: [...(s.pendingPhotos ?? []), msg.fileId].slice(0, 10) };
+    if (!["idle", "done", "evidence"].includes(s.step)) return null; // está armando un pedido como cliente
+    const jobs = await activeProviderJobs(ctx.userId!);
+    if (!jobs.length) return null;
+    const open = await openRequests(ctx.userId!);
+    const pendingPhotos = [msg.fileId];
+    if (jobs.length === 1 && !open.length) {
+      ctx.out.push({ kind: "buttons", text: `Recibí la foto. ¿Es del trabajo *${jobs[0].code}* (${jobs[0].title})? ¿De qué momento?`, buttons: EV_KINDS.map((k) => ({ id: `evk:${k.id}`, title: k.title })) });
+      return { step: "evidence_kind", evJobId: jobs[0].id, pendingPhotos };
+    }
+    ctx.out.push({
+      kind: "list", text: "Recibí la foto. ¿De qué trabajo es?", button: "Elegir",
+      sections: [
+        { title: "Tus trabajos", rows: jobs.map((j) => ({ id: `evj:${j.id}`, title: j.code, description: j.title.slice(0, 70) })) },
+        { title: "Otra opción", rows: [{ id: "ev_client", title: "Es para un pedido mío", description: "Como cliente" }] },
+      ],
+    });
+    return { step: "evidence_job", pendingPhotos };
+  }
+  if (reply === "ev_client" && s.pendingPhotos?.length) {
+    // Las fotos son de un pedido propio como cliente: sigue el flujo de siempre.
+    return askWhichRequest({ step: "pick_request", pendingPhotos: s.pendingPhotos }, ctx);
+  }
+  if (s.step === "evidence" && msg.type === "text" && /^(listo|eso es todo|nada mas|gracias|ok)$/.test(t)) {
+    ctx.out.push({ kind: "text", text: "Perfecto. Cualquier otra foto, mandala cuando quieras." });
+    return { step: "done" };
+  }
+  return null;
 }
 
 // ───────────────────────── Fuera del guion: preguntas, estado, sumar datos ─────────────────────────

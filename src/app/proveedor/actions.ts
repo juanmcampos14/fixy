@@ -11,7 +11,7 @@ import { parseArsToMinor } from "@/server/domain/money";
 import { declineInvitation } from "@/server/modules/requests";
 import { acceptBooking, createQuote, placeBid, quoteSchema, withdrawQuote } from "@/server/modules/quotes";
 import {
-  addEvidence, assignTechnician, cancelJob, confirmJob, decideReschedule, finishJob, markOnTheWay, proposeExtra, proposeReschedule,
+  addEvidenceBatch, assignTechnician, cancelJob, confirmJob, decideReschedule, finishJob, markOnTheWay, proposeExtra, proposeReschedule,
   startJob, withdrawExtra,
 } from "@/server/modules/jobs";
 import { replyDispute, replyReview } from "@/server/modules/disputes";
@@ -179,12 +179,12 @@ export async function addEvidenceAction(_: ActionState, f: FormData): Promise<Ac
   return act(async () => {
     const actor = await requireActor();
     const id = str(f, "jobId");
-    const [file] = await files(f, "photo");
+    const photos = (await files(f, "photos")).concat(await files(f, "photo")).slice(0, 10);
     const kind = str(f, "kind") as "before" | "progress" | "after" | "note";
-    if (!["before", "progress", "after", "note"].includes(kind)) return { error: "Elegí el tipo de avance." };
-    await addEvidence(actor, id, { kind, note: str(f, "note") }, file);
+    if (!["before", "progress", "after", "note"].includes(kind)) return { error: "Elegí de qué momento son." };
+    await addEvidenceBatch(actor, id, { kind: photos.length && kind === "note" ? "progress" : kind, note: str(f, "note") }, photos);
     revalidatePath(jobPath(id));
-    return { ok: true, message: "Registramos el avance. El cliente lo puede ver." };
+    return { ok: true, message: photos.length ? `Sumamos ${photos.length === 1 ? "la foto" : `${photos.length} fotos`}. El cliente ya las puede ver.` : "Registramos la nota. El cliente la puede ver." };
   });
 }
 
