@@ -90,3 +90,22 @@
     }
   }
 }
+
+/* ── Fixy 3D ── */
+html[data-fixy3d="on"] .fixy-fallback { visibility: hidden; }
+.fixy-bubble { animation: fixy-bubble-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; transform-origin: 50% 100%; }
+.fixy-bubble::after {
+  content: ""; position: absolute; left: calc(50% - var(--bubble-shift, 0px)); bottom: -7px; width: 14px; height: 14px;
+  background: white; border-right: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line);
+  transform: translateX(-50%) rotate(45deg);
+}
+@keyframes fixy-bubble-in { from { opacity: 0; scale: 0.6; } to { opacity: 1; scale: 1; } }
+
+/* ── Landing ── */
+@keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -12px; } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes blob {
+  0%, 100% { border-radius: 48% 52% 44% 56% / 55% 45% 55% 45%; }
+  50% { border-radius: 56% 44% 52% 48% / 45% 55% 45% 55%; }
+}
+@keyframes marquee { from { translate: 0 0; } to { translate: -50% 0; } }
