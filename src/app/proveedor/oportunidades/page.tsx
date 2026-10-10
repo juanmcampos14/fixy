@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getOnboardingState, listInvitations, requireProviderContext } from "@/server/queries/provider";
+import { rematchOpenRequests } from "@/server/modules/requests";
 import { urgencyLabel, quoteStatusLabel } from "@/server/domain/labels";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
@@ -16,6 +17,8 @@ const TONE: Record<string, Tone> = { invited: "brand", viewed: "info", quoted: "
 
 export default async function OpportunitiesPage() {
   const { actor, provider } = await requireProviderContext({ adminOnly: true });
+  // Al entrar, se suman los pedidos abiertos de su rubro y zona que todavía no le llegaron (por ejemplo, si se registró después).
+  await rematchOpenRequests({ providerId: provider.id }).catch(() => 0);
   const [rows, state] = await Promise.all([listInvitations(actor.id, provider.id), getOnboardingState(actor.id, provider.id)]);
   const open = rows.filter((r) => r.status === "invited" || r.status === "viewed");
   const rest = rows.filter((r) => !(r.status === "invited" || r.status === "viewed"));
@@ -23,8 +26,9 @@ export default async function OpportunitiesPage() {
     <>
       <PageHeader title="Oportunidades" description="Solicitudes de tu zona y especialidad a las que te invitamos a cotizar." />
       {state && !state.eligibility.eligible && (
-        <Alert tone="info" title="Por ahora no recibís oportunidades nuevas" className="mb-5">
+        <Alert tone="warn" title="Te llegan pedidos, pero para aceptarlos tenés que verificar tu cuenta" className="mb-5">
           <ul className="list-disc pl-5">{state.eligibility.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+          <Link href="/proveedor/alta" className="mt-2 inline-block font-semibold underline">Completar ahora</Link>
         </Alert>
       )}
       {rows.length === 0 ? (

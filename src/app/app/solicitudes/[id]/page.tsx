@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { rematchOpenRequests } from "@/server/modules/requests";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BadgeCheck, CalendarDays, CircleCheck, CircleMinus, Clock, MessageCircle, Star } from "lucide-react";
@@ -27,8 +28,12 @@ export default async function RequestDetail({ params, searchParams }: { params: 
   const { id } = await params;
   const { nueva } = await searchParams;
   const actor = await requireActor(`/app/solicitudes/${id}`);
-  const data = await getClientRequest(actor.id, id);
+  let data = await getClientRequest(actor.id, id);
   if (!data) notFound();
+  // Sin cobertura todavía: se vuelve a buscar por si se sumaron profesionales de la zona.
+  if (data.r.status === "no_coverage" && (await rematchOpenRequests({ requestId: id }).catch(() => 0)) > 0) {
+    data = (await getClientRequest(actor.id, id)) ?? data;
+  }
   const { r, quotes, quoteItems, invitations, threads, job, photos, events } = data;
   const inv = Object.fromEntries(invitations.map((i) => [i.status, i.n])) as Record<string, number>;
   const invitedTotal = invitations.reduce((s, i) => s + i.n, 0);

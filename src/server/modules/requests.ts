@@ -235,7 +235,7 @@ export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | nu
   const chosen = candidates.slice(0, limit);
   let invited = 0;
   for (const [i, c] of chosen.entries()) {
-    const id = await inviteProviderTx(tx, requestId, c.providerId, "matching", actor?.id ?? null, { position: i + 1, score: c.score, reasons: c.reasons });
+    const id = await inviteProviderTx(tx, requestId, c.providerId, "matching", actor?.id ?? null, { position: i + 1, score: c.score, reasons: c.reasons }, null, c.verified);
     if (id) invited++;
   }
   const [{ total }] = await tx<{ total: number }[]>`select count(*)::int as total from request_invitations where request_id = ${requestId} and status not in ('declined','expired')`;
@@ -253,6 +253,56 @@ export async function runMatchingTx(tx: Tx, requestId: string, actor: Actor | nu
     await notify(tx, await staffRecipients(tx), { type: "request_received", title: `Pedido para conseguir a mano · ${r.code}`, link: `/admin/solicitudes/${requestId}` });
   }
   await recordEvent(tx, { entityType: "request", entityId: requestId, action: "matching_run", actorId: actor?.id ?? null, data: { candidates: candidates.length, invited } });
+  return invited;
+}
+
+/**
+ * Vuelve a buscar profesionales para pedidos abiertos que quedaron sin cobertura o con pocos invitados
+ * (por ejemplo, porque el profesional se sumó después). Completa hasta el cupo de invitaciones activas;
+ * nunca re-invita a quien ya fue invitado. Lo corre el cron y también se puede acotar a un profesional.
+ */
+export async function rematchOpenRequests(opts: { providerId?: string; requestId?: string } = {}): Promise<number> {
+  const reqs = await sql()<{ id: string }[]>`
+    select r.id from service_requests r
+    where r.status in ('no_coverage','searching') and r.request_mode in ('quotes','budget') and not r.needs_review
+      and r.category_id is not null and r.created_at > now() - interval '14 days'
+      ${opts.requestId ? sql()`and r.id = ${opts.requestId}` : sql()``}
+      ${opts.providerId ? sql()`and exists (
+        select 1 from properties p join provider_zones pz on pz.zone_id = p.zone_id join provider_categories pc on pc.provider_id = pz.provider_id and pc.category_id = r.category_id
+        where p.id = r.property_id and pz.provider_id = ${opts.providerId})
+        and not exists (select 1 from request_invitations i where i.request_id = r.id and i.provider_id = ${opts.providerId})` : sql()``}
+    order by r.created_at limit 50`;
+  let invited = 0;
+  for (const r of reqs) {
+    invited += await systemTx(async (tx) => {
+      const [cur] = await tx<{ status: RequestStatus; request_mode: string }[]>`select status, request_mode from service_requests where id = ${r.id} for update`;
+      if (!["no_coverage", "searching"].includes(cur.status)) return 0;
+      const limit = cur.request_mode === "budget"
+        ? Number(await getSetting<number>(tx, "matching.budget_invite_limit", 15))
+        : Number(await getSetting<number>(tx, "matching.invite_limit", 4));
+      const [{ active }] = await tx<{ active: number }[]>`
+        select count(*)::int as active from request_invitations where request_id = ${r.id} and status in ('invited','viewed','quoted')`;
+      if (active >= limit) return 0;
+      const verified = await findCandidates(tx, r.id, { excludeInvited: true, verifiedOnly: true });
+      const all = verified.length ? verified : await findCandidates(tx, r.id, { excludeInvited: true });
+      const chosen = all.slice(0, limit - active);
+      if (!chosen.length) return 0;
+      let n = 0;
+      for (const [i, c] of chosen.entries()) {
+        if (await inviteProviderTx(tx, r.id, c.providerId, "matching", null, { position: active + i + 1, score: c.score, reasons: c.reasons }, null, c.verified)) n++;
+      }
+      if (n && cur.status === "no_coverage") {
+        await transitionRequest(tx, r.id, "no_coverage", "searching", "system", null);
+        const [{ code }] = await tx<{ code: string }[]>`select code from service_requests where id = ${r.id}`;
+        await notify(tx, await clientRecipients(tx, r.id), {
+          type: "request_received", title: `Encontramos profesionales para tu pedido · ${code}`,
+          body: `Le enviamos tu pedido a ${n} profesional${n === 1 ? "" : "es"} de tu zona. Te avisamos cuando respondan.`, link: `/app/solicitudes/${r.id}`,
+        });
+      }
+      await recordEvent(tx, { entityType: "request", entityId: r.id, action: "rematch", data: { invited: n } });
+      return n;
+    });
+  }
   return invited;
 }
 

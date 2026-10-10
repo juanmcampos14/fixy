@@ -5,7 +5,7 @@ import { sql } from "@/server/db/client";
 import { expireQuotes } from "@/server/modules/quotes";
 import { processReviewTasks } from "@/server/modules/disputes";
 import { processReviewDisputeDeadlines } from "@/server/modules/review-disputes";
-import { expireDirectBookings } from "@/server/modules/requests";
+import { expireDirectBookings, rematchOpenRequests } from "@/server/modules/requests";
 import { processWhatsAppOutbox } from "@/server/whatsapp/outbox";
 
 /** Tareas periódicas (llamar con cron externo): envíos pendientes y vencimiento de presupuestos. */
@@ -18,10 +18,15 @@ async function run(req: Request) {
   const reviews = await processReviewTasks();
   const reviewDisputes = await processReviewDisputeDeadlines();
   const expiredBookings = await expireDirectBookings();
+  // Pedidos sin cobertura o con pocos invitados: se suman profesionales que se registraron después.
+  const rematched = await rematchOpenRequests().catch((e) => {
+    console.error("[cron] rematch:", e instanceof Error ? e.message : "error");
+    return 0;
+  });
   const outbox = await processOutbox(100);
   const whatsapp = await processWhatsAppOutbox(100);
   const expired = await sql().begin((tx) => expireQuotes(tx as never));
-  return Response.json({ outbox, whatsapp, expiredQuotes: expired, reviews, reviewDisputes, expiredBookings });
+  return Response.json({ outbox, whatsapp, expiredQuotes: expired, reviews, reviewDisputes, expiredBookings, rematched });
 }
 
 // Vercel Cron llama con GET y envía "Authorization: Bearer $CRON_SECRET".
