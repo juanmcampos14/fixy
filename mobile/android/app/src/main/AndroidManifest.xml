@@ -18,6 +18,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Links de Fixy que abren la app (App Links verificados con /.well-known/assetlinks.json) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="www.fixy.solutions" />
+                <data android:path="/" />
+                <data android:pathPrefix="/app" />
+                <data android:pathPrefix="/proveedor" />
+                <data android:pathPrefix="/solicitar" />
+                <data android:pathPrefix="/wa" />
+                <data android:pathPrefix="/pagos" />
+                <data android:pathPrefix="/notificaciones" />
+                <data android:pathPrefix="/profesionales" />
+                <data android:pathPrefix="/invitacion" />
+                <data android:pathPrefix="/recuperar" />
+                <data android:pathPrefix="/ingresar" />
+                <data android:pathPrefix="/registro" />
+                <data android:pathPrefix="/sumate" />
+            </intent-filter>
         </activity>
 
         <provider
