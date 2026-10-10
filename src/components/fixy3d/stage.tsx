@@ -74,7 +74,8 @@ function Driver({ shared, rig, follower }: { shared: React.RefObject<Shared>; ri
     let tx = rect.left + rect.width / 2;
     let ty = rect.bottom;
     // Si su lugar no está a la vista (o en el celular), acompaña desde la esquina inferior izquierda, más chico.
-    const visible = rect.bottom >= size + 70 && rect.top < H - 60;
+    // Visible = sus pies entran en pantalla (si quedan muy abajo, no flota encima del contenido: se asoma desde el borde).
+    const visible = rect.bottom >= size + 70 && rect.bottom <= H + size * 0.2;
     let peek = false;
     if ((mobile && !inline) || !visible) {
       size = mobile ? 96 : 120;
