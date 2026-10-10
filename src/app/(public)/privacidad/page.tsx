@@ -82,6 +82,10 @@ export default function Privacy() {
         para la rectificación, actualización o supresión. Algunos datos pueden conservarse si una ley lo exige o si son necesarios para un Trabajo o reclamo en curso.
       </p>
       <p>
+        También podés eliminar tu cuenta vos mismo, en cualquier momento, desde <strong>Mi cuenta → Eliminar mi cuenta</strong> (en la web o en la app). Al hacerlo borramos tu nombre, email,
+        teléfonos, WhatsApp, direcciones y datos bancarios, y conservamos sin datos que te identifiquen solo los registros que la ley nos obliga a guardar.
+      </p>
+      <p>
         La AGENCIA DE ACCESO A LA INFORMACIÓN PÚBLICA, en su carácter de Órgano de Control de la Ley N° 25.326, tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten
         afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales.
       </p>

@@ -11,6 +11,7 @@ export default async function ClientLayout({ children }: { children: React.React
     { href: "/app/propiedades", label: "Propiedades", icon: "house" },
     { href: "/app/pagos", label: "Pagos", icon: "receipt" },
     { href: "/app/organizaciones", label: actor.organizations.length ? "Organizaciones" : "Mi empresa", icon: "building" },
+    { href: "/app/cuenta", label: "Mi cuenta", icon: "user" },
   ];
   return (
     <PanelShell actor={actor} area="client" nav={nav}>

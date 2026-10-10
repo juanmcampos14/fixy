@@ -1,9 +1,18 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { googleConfigured } from "@/server/auth/google";
 
-/** "Continuar con Google" + separador. No se muestra si no está configurado. */
-export function GoogleButton({ next, signup }: { next?: string; signup?: boolean }) {
-  if (!googleConfigured()) return null;
+/** Dentro de la app de Fixy (iOS/Android) el navegador se identifica con "FixyApp". */
+export async function inFixyApp() {
+  return /\bFixyApp\//.test((await headers()).get("user-agent") ?? "");
+}
+
+/**
+ * "Continuar con Google" + separador. No se muestra si no está configurado ni dentro de la app:
+ * Google no permite iniciar sesión dentro de vistas web embebidas (en la app se ingresa con email).
+ */
+export async function GoogleButton({ next, signup }: { next?: string; signup?: boolean }) {
+  if (!googleConfigured() || (await inFixyApp())) return null;
   return (
     <div className="mb-5">
       {/* Navegación completa (no prefetch): el flujo sale a Google y vuelve. */}

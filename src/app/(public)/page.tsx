@@ -41,10 +41,13 @@ function Sticker({ icon: Icon, className, tone }: { icon: typeof Wrench; classNa
   );
 }
 
-export default async function Landing() {
-  const categories = await listCategories(sql());
+export default async function Landing({ searchParams }: { searchParams: Promise<{ cuenta?: string }> }) {
+  const [categories, sp] = await Promise.all([listCategories(sql()), searchParams]);
   return (
     <>
+      {sp.cuenta === "eliminada" && (
+        <p role="status" className="mx-auto mt-4 max-w-6xl rounded-2xl bg-white px-4 py-3 text-[15px] ring-1 ring-line sm:px-6">Tu cuenta fue eliminada. Gracias por haber usado Fixy.</p>
+      )}
       <FixyLayer />
       <FixyHoverBridge />
 

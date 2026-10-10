@@ -45,7 +45,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
               <Bell className="h-5 w-5" aria-hidden />
               {unread > 0 && <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-spark px-1 text-[11px] font-bold text-ink">{unread > 99 ? "99+" : unread}</span>}
             </Link>
-            <span className="hidden max-w-40 truncate px-2 text-sm font-medium text-ink-2 md:inline" title={actor.email}>{actor.fullName}</span>
+            <Link href="/app/cuenta" className="hidden max-w-40 truncate rounded-full px-2 py-2 text-sm font-medium text-ink-2 hover:bg-ink/5 md:inline" title={`${actor.email} · Mi cuenta`}>{actor.fullName}</Link>
             <form action={logoutAction}>
               <button className="grid h-10 w-10 place-items-center rounded-full hover:bg-ink/5" aria-label="Cerrar sesión" title="Cerrar sesión">
                 <LogOut className="h-5 w-5" aria-hidden />
