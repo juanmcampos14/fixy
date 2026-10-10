@@ -38,9 +38,12 @@ export async function notify(
         values ('email', ${userId}, ${db.json({ subject: n.title, text: n.body ?? "", link: n.link ?? null } as never)})`;
     }
     // WhatsApp solo a quienes vincularon su número (lo hicieron escribiéndonos: hay consentimiento).
+    // Los avisos de profesionales, además, solo si los activaron (y no se dieron de baja).
     if (n.whatsapp) {
+      const providerOnly = n.whatsapp.audience === "provider";
       await db`insert into outbox (channel, recipient_user_id, payload)
-        select 'whatsapp', id, ${db.json(n.whatsapp as never)} from users where id = ${userId} and whatsapp_phone is not null and disabled_at is null`;
+        select 'whatsapp', id, ${db.json(n.whatsapp as never)} from users
+        where id = ${userId} and whatsapp_phone is not null and disabled_at is null and (${!providerOnly} or wa_provider_alerts)`;
     }
   }
 }

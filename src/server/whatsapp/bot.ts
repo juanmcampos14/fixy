@@ -24,6 +24,7 @@ import { addRequestDetails, notifyRequestUpdate } from "@/server/modules/request
 import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
 import { SUPPORT_EMAIL } from "@/lib/contact";
+import { consumeAlertsCode, setAlertsByPhone } from "@/server/modules/whatsapp-alerts";
 
 export type Inbound = {
   id: string;
@@ -132,6 +133,26 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
   const text = (msg.text ?? "").trim();
   const t = norm(text);
   const reply = msg.replyId ?? "";
+
+  // Avisos para profesionales: código de vinculación enviado desde el panel, baja y alta.
+  const code = text.match(/c[oó]digo\D{0,12}(\d{6})\b/i)?.[1] ?? (/^\d{6}$/.test(t) && ["idle", "done"].includes(s.step) ? t : null);
+  if (code) {
+    const r = await consumeAlertsCode(ctx.phone, code);
+    ctx.out.push({ kind: "text", text: r.ok
+      ? `Listo ${r.firstName}, tu WhatsApp quedó vinculado. Te vamos a avisar por acá cuando haya pedidos de tu rubro y zona, cuando un cliente te elija y cuando te contraten. Para dejar de recibirlos, escribí *BAJA*.`
+      : r.error });
+    return s;
+  }
+  if (/^(baja|stop|parar avisos|no quiero (mas )?avisos|no me manden mas( mensajes)?|desuscribir(me)?)$/.test(t)) {
+    const done = await setAlertsByPhone(ctx.phone, false);
+    ctx.out.push({ kind: "text", text: done ? "Listo, no te vamos a mandar más avisos de pedidos por WhatsApp. Si querés volver a recibirlos, escribí *ALTA* o activalos desde tu panel." : "Listo, no te vamos a mandar avisos por acá." });
+    return s;
+  }
+  if (/^(alta|activar avisos|quiero avisos)$/.test(t) && ctx.userId) {
+    const done = await setAlertsByPhone(ctx.phone, true);
+    ctx.out.push({ kind: "text", text: done ? "Listo, vas a recibir por acá los pedidos nuevos de tu rubro y zona. Para dejar de recibirlos, escribí *BAJA*." : "Los avisos de pedidos son para profesionales registrados en Fixy. Podés sumarte en fixy.solutions/sumate." });
+    return s;
+  }
 
   // Comandos globales
   if (reply === "cancel" || /^(cancelar|salir|empezar de nuevo|reiniciar|nuevo pedido|nuevo)$/.test(t)) {

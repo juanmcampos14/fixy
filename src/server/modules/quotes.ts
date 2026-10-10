@@ -353,6 +353,7 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
       title: `¡Te contrataron! · ${job.code}`,
       body: "El cliente aceptó tu presupuesto. Vas a poder confirmar el trabajo cuando se registre el pago.",
       link: `/proveedor/trabajos/${job.id}`,
+      whatsapp: { audience: "provider", template: "hired", params: [job.code], requestId: job.id, text: `¡Te contrataron! El cliente aceptó tu presupuesto del trabajo ${job.code}.` },
     });
     await audit(tx, actor, "quote.accept", "job", job.id, null, { quoteId, totalMinor: q.total_minor });
     // Reserva directa con visita sin cargo: el profesional ya aceptó, queda confirmada.

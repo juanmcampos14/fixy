@@ -199,7 +199,10 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
     on conflict (request_id, provider_id) do nothing returning id`;
   if (!inserted.length) return null;
   await tx`insert into conversations (request_id, provider_id) values (${requestId}, ${providerId}) on conflict do nothing`;
-  const [r] = await tx<{ code: string; title: string; request_mode: string; budget_minor: number | null }[]>`select code, title, request_mode, budget_minor from service_requests where id = ${requestId}`;
+  const [r] = await tx<{ code: string; title: string; request_mode: string; budget_minor: number | null; category: string | null; zone: string }[]>`
+    select r.code, r.title, r.request_mode, r.budget_minor, lower(c.name) as category, z.name as zone
+    from service_requests r join properties p on p.id = r.property_id join zones z on z.id = p.zone_id left join categories c on c.id = r.category_id
+    where r.id = ${requestId}`;
   const budget = r.request_mode === "budget" && r.budget_minor ? Number(r.budget_minor) : null;
   const [refInfo] = referralId ? await tx<{ from_name: string; fee_bps: number }[]>`
     select p.display_name as from_name, pr.fee_bps from provider_referrals pr join providers p on p.id = pr.from_provider_id where pr.id = ${referralId}` : [];
@@ -211,6 +214,16 @@ async function inviteProviderTx(tx: Tx, requestId: string, providerId: string, s
       ? (source === "client" ? `${r.title}. Respondé para coordinar la visita.` : budget ? `${r.title}. Anotate por ese precio u ofrecé menos para ganarlo.` : r.title)
       : `${r.title}. Para aceptarlo, primero verificá tu cuenta: cargá tu DNI y enviá tu perfil a revisión. Te damos prioridad.`,
     link: `/proveedor/oportunidades/${inserted[0].id}`,
+    // WhatsApp, solo si el profesional activó los avisos.
+    whatsapp: {
+      audience: "provider",
+      requestId: inserted[0].id,
+      ...(source === "client" || refInfo
+        ? { template: "chosenYou" as const, params: [r.category ?? "servicios", r.zone, r.title], text: `Un cliente te eligió para un trabajo de ${r.category ?? "servicios"} en ${r.zone}: «${r.title}». Respondé lo antes posible desde Fixy.` }
+        : budget
+          ? { template: "budgetOffer" as const, params: [formatMoney(budget), r.category ?? "servicios", r.zone, r.title], text: `Un cliente ofrece ${formatMoney(budget)} por un trabajo de ${r.category ?? "servicios"} en ${r.zone}: «${r.title}». Anotate por ese precio u ofrecé menos.` }
+          : { template: "newOpportunity" as const, params: [r.category ?? "servicios", r.zone, r.title], text: `Tenés un pedido nuevo de ${r.category ?? "servicios"} en ${r.zone}: «${r.title}». Revisalo y respondé desde Fixy.` }),
+    },
   });
   if (!verified) {
     const [p] = await tx<{ display_name: string }[]>`select display_name from providers where id = ${providerId}`;

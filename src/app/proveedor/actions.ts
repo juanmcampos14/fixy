@@ -18,6 +18,7 @@ import { replyDispute, replyReview } from "@/server/modules/disputes";
 import { openReviewDispute } from "@/server/modules/review-disputes";
 import { addPriceRef, addProviderMember, deactivateProviderMember, removePriceRef, updateVisitSettings } from "@/server/modules/providers";
 import { requestWithdrawal, saveBankAccount } from "@/server/modules/withdrawals";
+import { createAlertsCode, setProviderAlerts } from "@/server/modules/whatsapp-alerts";
 import { formatMoney } from "@/lib/format";
 
 function adminProviderId(actor: Actor): string {
@@ -97,6 +98,24 @@ export async function placeBidAction(_: ActionState, f: FormData): Promise<Actio
   });
   if (r.ok) redirect(`/proveedor/oportunidades/${invitationId}?enviado=1`);
   return r;
+}
+
+/** Avisos por WhatsApp: código para vincular el número desde el teléfono, y activar/desactivar. */
+export async function whatsappAlertsCodeAction(_: ActionState, _f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    const code = await createAlertsCode(actor);
+    return { ok: true, data: { code } };
+  });
+}
+
+export async function whatsappAlertsToggleAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await setProviderAlerts(actor, str(f, "on") === "1");
+    revalidatePath("/proveedor");
+    return { ok: true };
+  });
 }
 
 export async function declineInvitationAction(_: ActionState, f: FormData): Promise<ActionState> {

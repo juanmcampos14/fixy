@@ -13,6 +13,8 @@ import { StrengthMeter } from "@/components/provider/strength-meter";
 import { getProfileStrength } from "@/server/modules/providers";
 import { providerBalance } from "@/server/modules/withdrawals";
 import { sql } from "@/server/db/client";
+import { alertsState } from "@/server/modules/whatsapp-alerts";
+import { WhatsAppAlerts } from "@/components/provider/whatsapp-alerts";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Inicio" };
@@ -24,6 +26,7 @@ export default async function ProviderHome() {
     isAdmin ? getOnboardingState(actor.id, provider.id) : Promise.resolve(null),
   ]);
   const [strength, balance] = isAdmin ? await Promise.all([getProfileStrength(sql(), provider.id), providerBalance(sql(), provider.id)]) : [null, null];
+  const alerts = await alertsState(actor.id);
   const pendingActions = dash.toConfirm.length + dash.extrasWaiting.length + dash.reschedulesToAnswer.length + dash.openDisputes.length;
 
   return (
@@ -38,12 +41,24 @@ export default async function ProviderHome() {
       <div className="space-y-5">
         {isAdmin && state && provider.status !== "approved" && (
           <Alert tone="info" title="Completá tu alta">
-            Revisá lo que falta en <Link href="/proveedor/alta">Alta de proveedor</Link>. Las oportunidades llegan cuando se cumplen los requisitos.
+            Ya te pueden llegar pedidos de tu rubro y zona; para aceptarlos, completá lo que falta en <Link href="/proveedor/alta">Alta de proveedor</Link>.
           </Alert>
         )}
         {strength && strength.score < 100 && <Card><StrengthMeter {...strength} max={3} /></Card>}
+        {!alerts.on && (
+          <Card className="ring-2 ring-[#25D366]/30">
+            <CardHeader title="Avisos por WhatsApp" />
+            <WhatsAppAlerts {...alerts} />
+          </Card>
+        )}
         {isAdmin && state && <ProviderStatusCard provider={state.provider} checklist={state.checklist} eligibility={state.eligibility} />}
 
+        {alerts.on && (
+          <Card>
+            <CardHeader title="Avisos por WhatsApp" />
+            <WhatsAppAlerts {...alerts} />
+          </Card>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           {isAdmin && <Stat label="Oportunidades abiertas" value={dash.newOpps} hint="Nuevas o vistas, sin cotizar" />}
           <Stat label={isAdmin ? "Trabajos activos" : "Trabajos asignados activos"} value={dash.activeJobs.length} />

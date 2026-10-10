@@ -7,7 +7,7 @@
 import { sql } from "@/server/db/client";
 import { env } from "@/server/env";
 import { sendWhatsApp } from "./client";
-import { WA_LANGUAGE, WA_TEMPLATES, type WaNotice } from "./templates";
+import { WA_LANGUAGE, WA_TEMPLATES, waParam, type WaNotice } from "./templates";
 
 const MAX_ATTEMPTS = 6;
 
@@ -29,9 +29,10 @@ export async function processWhatsAppOutbox(limit = 50) {
       }
       const first = r.full_name.split(" ")[0] || "¡hola!";
       const t = WA_TEMPLATES[r.payload.template];
+      const path = t?.path ?? "/app/solicitudes/";
       const result = r.in_window || !t
-        ? await sendWhatsApp(r.phone, { kind: "text", text: `${r.payload.text}\n\n${base}/app/solicitudes/${r.payload.requestId}` })
-        : await sendWhatsApp(r.phone, { kind: "template", name: t.name, language: WA_LANGUAGE, params: [first, ...r.payload.params], buttonParam: r.payload.requestId });
+        ? await sendWhatsApp(r.phone, { kind: "text", text: `${r.payload.text}\n\n${base}${path}${r.payload.requestId}` })
+        : await sendWhatsApp(r.phone, { kind: "template", name: t.name, language: WA_LANGUAGE, params: [waParam(first), ...r.payload.params.map((p) => waParam(p))], buttonParam: r.payload.requestId });
       if (result !== "failed") {
         await tx`update outbox set status = 'sent', sent_at = now(), attempts = attempts + 1 where id = ${r.id}`;
         await tx`insert into delivery_attempts (outbox_id, adapter, ok) values (${r.id}, 'whatsapp', true)`;
