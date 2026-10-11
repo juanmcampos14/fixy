@@ -9,10 +9,10 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { acceptQuoteAction, chooseProviderAction, switchToQuotesAction } from "../../actions";
 
 export async function listOtherProviders(categoryId: string, propertyId: string, requestId: string) {
-  const [p] = await sql()<{ zone_id: string; windows: string[] }[]>`
-    select p.zone_id, r.preferred_windows as windows from properties p join service_requests r on r.property_id = p.id where r.id = ${requestId} and p.id = ${propertyId}`;
+  const [p] = await sql()<{ zone_id: string; windows: string[]; sandbox: boolean }[]>`
+    select p.zone_id, r.preferred_windows as windows, u.sandbox from properties p join service_requests r on r.property_id = p.id join users u on u.id = r.created_by where r.id = ${requestId} and p.id = ${propertyId}`;
   if (!p) return [];
-  return listBookableProviders(sql(), { categoryId, zoneId: p.zone_id, preferredWindows: p.windows ?? [], excludeInvitedFor: requestId, limit: 6 });
+  return listBookableProviders(sql(), { categoryId, zoneId: p.zone_id, preferredWindows: p.windows ?? [], excludeInvitedFor: requestId, limit: 6, sandbox: p.sandbox });
 }
 
 type Invite = { id: string; status: string; respond_by: Date | null; provider_name: string; provider_slug: string };

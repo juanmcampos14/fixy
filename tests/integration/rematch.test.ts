@@ -12,7 +12,8 @@ describe("volver a buscar profesionales", () => {
       select z.id as zone_id, c.id as category_id from zones z cross join categories c
       where z.active and c.active and not c.requires_review and z.code <> 'otra-zona'
         and not exists (select 1 from provider_zones pz join provider_categories pc on pc.provider_id = pz.provider_id
-                        where pz.zone_id = z.id and pc.category_id = c.id)
+                        join providers p on p.id = pz.provider_id
+                        where pz.zone_id = z.id and pc.category_id = c.id and not p.sandbox)
       limit 1`;
     expect(pair).toBeTruthy();
     const propertyId = await createProperty(ana, { kind: "home", label: `Casa rematch ${Date.now()}`, addressLine: "Calle Falsa 123", zoneId: pair.zone_id });

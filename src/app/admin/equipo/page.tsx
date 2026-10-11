@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/ui/form";
 import { EditAccessForm, InviteForm } from "@/components/admin/access-form";
 import { formatDateTime } from "@/lib/format";
-import { inviteMemberAction, removeMemberAction, revokeInvitationAction, updateMemberAccessAction } from "../actions";
+import { ReviewAccounts } from "@/components/admin/review-accounts";
+import { sql } from "@/server/db/client";
+import { generateReviewAccountsAction, inviteMemberAction, removeMemberAction, revokeInvitationAction, updateMemberAccessAction } from "../actions";
 
 export const metadata = { title: "Equipo y permisos" };
 export const dynamic = "force-dynamic";
@@ -20,12 +22,18 @@ export default async function TeamPage() {
   const actor = await requireStaff();
   if (!isPlatformAdmin(actor)) redirect("/admin?error=forbidden");
   const { members, invitations } = await listTeam();
+  const [hasReviewAccounts] = await sql()<{ n: number }[]>`select 1 as n from users where sandbox limit 1`.then((r) => [r.length > 0]);
   const isPartner = (p: Record<string, string>) => ADMIN_SECTIONS.every((s) => p[s.key] === PARTNER_PRESET[s.key]);
 
   return (
     <>
       <PageHeader eyebrow="Administración" title="Equipo y permisos" description="Invitá personas al panel y elegí, sección por sección, qué pueden ver y qué pueden hacer." />
       <div className="space-y-5">
+        <Card>
+          <CardHeader title="Cuentas para la revisión de las tiendas" description="Apple y Google piden un usuario de prueba para revisar la app. Se crean un cliente y un profesional de demostración que solo se ven entre sí: sus pedidos nunca les llegan a profesionales reales ni reciben correos." />
+          <ReviewAccounts action={generateReviewAccountsAction} exists={hasReviewAccounts} />
+        </Card>
+
         <Card>
           <CardHeader title="Invitar a alguien" description="Se crea un link de un solo uso que vence en 7 días. Mandáselo por WhatsApp o email; si ya tiene cuenta, también le avisamos en Fixy." />
           <InviteForm action={inviteMemberAction} sections={sections} />

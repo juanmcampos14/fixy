@@ -542,3 +542,12 @@ export async function revokeInvitationAction(_: ActionState, f: FormData): Promi
     return { ok: true, message: "Invitación anulada." };
   });
 }
+
+/** Cuentas de prueba para los revisores de App Store y Google Play. La contraseña se muestra una sola vez. */
+export async function generateReviewAccountsAction(_: ActionState, _f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const { ensureReviewAccounts } = await import("@/server/modules/review-accounts");
+    const r = await ensureReviewAccounts(await requireStaff());
+    return { ok: true, message: "Cuentas listas. Copiá la contraseña ahora: no se vuelve a mostrar.", data: r };
+  });
+}

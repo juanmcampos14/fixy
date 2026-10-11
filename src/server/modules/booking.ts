@@ -12,11 +12,11 @@ export type BookableProvider = {
 
 export async function listBookableProviders(
   db: Db,
-  q: { categoryId: string; zoneId: string; preferredWindows: string[]; limit?: number; excludeInvitedFor?: string },
+  q: { categoryId: string; zoneId: string; preferredWindows: string[]; limit?: number; excludeInvitedFor?: string; sandbox?: boolean },
 ): Promise<BookableProvider[]> {
   const [z] = await db<{ region: string }[]>`select region from zones where id = ${q.zoneId}`;
   if (!z) return [];
-  const candidates = await findCandidatesFor(db, { categoryId: q.categoryId, zoneId: q.zoneId, region: z.region, preferredWindows: q.preferredWindows, excludeInvitedFor: q.excludeInvitedFor });
+  const candidates = await findCandidatesFor(db, { categoryId: q.categoryId, zoneId: q.zoneId, region: z.region, preferredWindows: q.preferredWindows, excludeInvitedFor: q.excludeInvitedFor, sandbox: q.sandbox });
   const top = candidates.slice(0, q.limit ?? 12);
   if (!top.length) return [];
   const ids = top.map((c) => c.providerId);

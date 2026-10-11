@@ -44,6 +44,12 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   // Clave de Google para geocodificar en el servidor (la del navegador está restringida al sitio).
   GOOGLE_MAPS_SERVER_KEY: z.string().optional().default(""),
+  // Avisos push de las apps. Android: JSON de la cuenta de servicio de Firebase (tal cual o en base64).
+  FIREBASE_SERVICE_ACCOUNT: z.string().optional().default(""),
+  // iOS: clave .p8 de APNs (tal cual o en base64), su identificador y el del equipo de Apple.
+  APNS_KEY: z.string().optional().default(""),
+  APNS_KEY_ID: z.string().optional().default(""),
+  APNS_TEAM_ID: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

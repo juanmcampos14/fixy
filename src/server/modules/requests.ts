@@ -92,17 +92,17 @@ export type Candidate = {
  * y como desempate, menos invitaciones recientes (rotación justa).
  */
 export async function findCandidates(db: Db, requestId: string, opts: { excludeInvited?: boolean; verifiedOnly?: boolean } = {}): Promise<Candidate[]> {
-  const [r] = await db<{ category_id: string | null; zone_id: string; region: string; preferred_windows: string[] }[]>`
-    select r.category_id, p.zone_id, z.region, r.preferred_windows
-    from service_requests r join properties p on p.id = r.property_id join zones z on z.id = p.zone_id where r.id = ${requestId}`;
+  const [r] = await db<{ category_id: string | null; zone_id: string; region: string; preferred_windows: string[]; sandbox: boolean }[]>`
+    select r.category_id, p.zone_id, z.region, r.preferred_windows, u.sandbox
+    from service_requests r join properties p on p.id = r.property_id join zones z on z.id = p.zone_id join users u on u.id = r.created_by where r.id = ${requestId}`;
   if (!r || !r.category_id) return [];
-  return findCandidatesFor(db, { categoryId: r.category_id, zoneId: r.zone_id, region: r.region, preferredWindows: r.preferred_windows ?? [], excludeInvitedFor: opts.excludeInvited ? requestId : undefined, verifiedOnly: opts.verifiedOnly });
+  return findCandidatesFor(db, { categoryId: r.category_id, zoneId: r.zone_id, region: r.region, preferredWindows: r.preferred_windows ?? [], sandbox: r.sandbox, excludeInvitedFor: opts.excludeInvited ? requestId : undefined, verifiedOnly: opts.verifiedOnly });
 }
 
 /** Matching sin solicitud previa (para que el cliente elija profesional antes de enviar el pedido). */
 export async function findCandidatesFor(
   db: Db,
-  q: { categoryId: string; zoneId: string; region: string; preferredWindows: string[]; excludeInvitedFor?: string; verifiedOnly?: boolean },
+  q: { categoryId: string; zoneId: string; region: string; preferredWindows: string[]; excludeInvitedFor?: string; verifiedOnly?: boolean; sandbox?: boolean },
 ): Promise<Candidate[]> {
   const r = { category_id: q.categoryId, zone_id: q.zoneId, region: q.region, preferred_windows: q.preferredWindows };
   const requestId = q.excludeInvitedFor ?? null;
@@ -126,6 +126,8 @@ export async function findCandidatesFor(
     left join zones bz on bz.id = p.base_zone_id
     -- Se muestran todos los que cubren rubro y zona (verificados o no); rechazados y suspendidos no.
     where p.status in ('pending','in_review','approved') and p.accepting_jobs
+      -- Cuentas de revisión de tiendas: solo se cruzan entre sí, nunca con clientes o profesionales reales.
+      and p.sandbox = ${!!q.sandbox}
       and exists (select 1 from provider_categories pc where pc.provider_id = p.id and pc.category_id = ${r.category_id})
       and exists (select 1 from provider_zones pz where pz.provider_id = p.id and pz.zone_id = ${r.zone_id})
       ${requestId ? db`and not exists (select 1 from request_invitations i where i.request_id = ${requestId} and i.provider_id = p.id)` : db``}`;

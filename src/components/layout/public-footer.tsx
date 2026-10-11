@@ -5,7 +5,7 @@ import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
 
 const COLUMNS = [
-  { title: "Clientes", links: [["Pedir un servicio", "/solicitar"], ["Cómo funciona", "/#como-funciona"], ["Empresas", "/#empresas"], ["Trabajos grandes y obras", "/#trabajos-grandes"]] },
+  { title: "Clientes", links: [["Pedir un servicio", "/solicitar"], ["Cómo funciona", "/#como-funciona"], ["Empresas", "/#empresas"], ["Trabajos grandes y obras", "/#trabajos-grandes"], ["Ayuda y soporte", "/ayuda"]] },
   { title: "Profesionales", links: [["Ofrecé tus servicios", "/sumate"], ["Panel de profesionales", "/proveedor"]] },
   { title: "Legales", links: [["Términos y condiciones", "/terminos"], ["Condiciones para profesionales", "/terminos/profesionales"], ["Privacidad", "/privacidad"], ["Botón de arrepentimiento", "/arrepentimiento"]] },
 ];

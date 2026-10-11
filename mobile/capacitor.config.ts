@@ -20,6 +20,8 @@ const config: CapacitorConfig = {
   android: { backgroundColor: "#171721" },
   plugins: {
     SplashScreen: { launchShowDuration: 900, backgroundColor: "#171721", showSpinner: false },
+    // Con la app abierta, el aviso también se muestra (si no, llegaría en silencio).
+    PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
     StatusBar: { style: "DARK", backgroundColor: "#171721" },
   },
 };

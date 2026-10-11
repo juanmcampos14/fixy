@@ -95,6 +95,7 @@ export async function deleteAccount(actor: Actor, confirmation: string): Promise
       await tx`delete from whatsapp_links where phone = ${u.whatsapp_phone}`;
     }
     await tx`delete from whatsapp_link_codes where user_id = ${actor.id}`;
+    await tx`delete from push_devices where user_id = ${actor.id}`;
     await tx`delete from notifications where user_id = ${actor.id}`;
     await tx`update outbox set status = 'dead', last_error = 'Cuenta eliminada' where recipient_user_id = ${actor.id} and status in ('pending','failed')`;
     await tx`delete from password_resets where user_id = ${actor.id}`;

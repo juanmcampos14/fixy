@@ -9,6 +9,8 @@ export type Actor = {
   fullName: string;
   platformRole: PlatformRole;
   isDemo: boolean;
+  /** Cuenta de revisión de tiendas: solo se cruza con el profesional de prueba. */
+  sandbox?: boolean;
   organizations: { id: string; name: string; role: "admin" | "member" }[];
   providers: { id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[];
   /** Permisos por sección del panel (solo rol "team"). */
@@ -26,8 +28,8 @@ export const isStaff = (a: Actor | null) =>
 export const isPlatformAdmin = (a: Actor | null) => a?.platformRole === "admin";
 
 export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
-  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean }[]>`
-    select id, email, full_name, platform_role, is_demo from users where id = ${userId} and disabled_at is null`;
+  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean; sandbox: boolean }[]>`
+    select id, email, full_name, platform_role, is_demo, sandbox from users where id = ${userId} and disabled_at is null`;
   if (!u) return null;
   const orgs = await db<{ id: string; name: string; role: "admin" | "member" }[]>`
     select o.id, o.name, m.role from organization_members m join organizations o on o.id = m.organization_id
@@ -44,6 +46,7 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
     fullName: u.full_name,
     platformRole: u.platform_role,
     isDemo: u.is_demo,
+    sandbox: u.sandbox,
     organizations: [...orgs],
     providers: [...providers],
     permissions: Object.fromEntries(perms.map((p) => [p.section, p.level])) as Permissions,
