@@ -1,0 +1,5 @@
+
+# Credenciales de Firebase: nunca al repo (copia en ~/.fixy-keys)
+*firebase-adminsdk*.json
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
