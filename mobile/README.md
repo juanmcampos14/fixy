@@ -19,7 +19,7 @@ npx cap open ios      # abre Xcode: elegir un simulador y ▶︎
 npx cap open android  # abre Android Studio: elegir un emulador y ▶︎
 ```
 
-Ícono y pantalla de inicio: se generan desde `assets/` con `npx @capacitor/assets@3.0.5 generate --iconBackgroundColor '#fdfbf5' --splashBackgroundColor '#fdfbf5'`.
+Ícono y pantalla de inicio: se generan desde `assets/` con `npx @capacitor/assets@3.0.5 generate --iconBackgroundColor '#fdfbf5' --splashBackgroundColor '#171721' --splashBackgroundColorDark '#171721'`.
 
 ## Pendiente antes de publicar
 - Avisos push nativos (necesita la clave APNs de la cuenta de Apple y un proyecto de Firebase para Android).
