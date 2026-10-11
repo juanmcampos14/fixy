@@ -21,8 +21,5 @@ npx cap open android  # abre Android Studio: elegir un emulador y ▶︎
 
 Ícono y pantalla de inicio: se generan desde `assets/` con `npx @capacitor/assets@3.0.5 generate --iconBackgroundColor '#fdfbf5' --splashBackgroundColor '#171721' --splashBackgroundColorDark '#171721'`.
 
-## Pendiente antes de publicar
-- Avisos push nativos (necesita la clave APNs de la cuenta de Apple y un proyecto de Firebase para Android).
-- Links que abren la app (Universal Links / App Links) para los links de WhatsApp y los mails.
-- Ingresar con Apple (opcional mientras no haya ingreso con Google dentro de la app).
-- Fichas de las tiendas, capturas y formularios de privacidad.
+## Publicación
+Trámites, fichas, privacidad, avisos push y armado de paquetes: ver `docs/apps/tiendas.md`.

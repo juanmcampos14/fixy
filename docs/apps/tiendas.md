@@ -53,14 +53,35 @@ Requisitos: D-U-N-S, sitio web público de la empresa (www.fixy.solutions, con F
 3. Verificación: documento de la empresa (estatuto o constancia de inscripción), sitio web y teléfono. Las cuentas de organización **no** tienen la prueba cerrada obligatoria de 12 testers × 14 días.
 
 ## 4. Lo que tiene que estar listo en Fixy antes de publicar
-- [ ] Baja de cuenta desde la app (Apple 5.1.1(v) y Google): **bloqueante**.
-- [ ] Ingresar con Apple (recomendado para iOS).
-- [ ] Avisos push nativos, cámara y ubicación, pantalla sin conexión, links que abren la app (Apple 4.2).
-- [ ] Cuenta de prueba para revisores.
-- [ ] Fichas: capturas, textos, etiquetas de privacidad (Apple) y formulario de seguridad de datos (Google).
-- [ ] Domicilio legal y mail de contacto en Términos y Privacidad (`src/lib/legal.ts`).
+- [x] Baja de cuenta desde la app (Mi cuenta → Eliminar mi cuenta) y URL pública (`/ayuda#eliminar-cuenta`).
+- [x] Links que abren la app (falta cargar el Team ID de Apple y la huella de Play en `src/lib/app-links.ts`).
+- [x] Avisos push: servidor y apps listos; se encienden al cargar las credenciales (ver punto 5).
+- [x] Cámara, fotos, ubicación y pantalla sin conexión.
+- [x] Cuentas de prueba para revisores: se generan en *Operación → Equipo y permisos*.
+- [x] Fichas y capturas: [`fichas.md`](fichas.md) y [`capturas/`](capturas/).
+- [x] Privacidad: [`privacidad-tiendas.md`](privacidad-tiendas.md).
+- [x] Página de soporte: https://www.fixy.solutions/ayuda
+- [x] Firma de Android: clave de subida en `~/.fixy-keys/` (fuera del repo). **Guardar una copia de esa carpeta en un lugar seguro.**
+- [ ] Ingresar con Apple: opcional (dentro de la app no se ofrece el ingreso con Google).
 
-## Datos que faltan
-- Domicilio legal de FLIPS S.R.L.
-- Teléfono de la empresa.
-- Nombre del socio gerente (quien firma) y mail del dominio para Apple/Google.
+## 5. Encender los avisos push
+**Android (Firebase)**
+1. En el proyecto de Firebase, agregar una app Android con el paquete `solutions.fixy.app` y guardar `google-services.json` en `mobile/android/app/`.
+2. Configuración del proyecto → Cuentas de servicio → "Generar nueva clave privada". Ese JSON va a la variable `FIREBASE_SERVICE_ACCOUNT` de Vercel (tal cual o en base64). No se sube al repo.
+3. Recompilar la app de Android.
+
+**iOS (cuando Apple apruebe la cuenta)**
+1. developer.apple.com → Certificates, IDs & Profiles → Keys → crear una clave con "Apple Push Notifications service (APNs)". Se descarga un `.p8` una sola vez.
+2. Variables en Vercel: `APNS_KEY` (contenido del .p8), `APNS_KEY_ID` (el ID de la clave) y `APNS_TEAM_ID`.
+3. En Xcode, la app ya tiene la capacidad de notificaciones; solo hay que firmarla con el equipo.
+
+Los avisos salen junto con los correos (tarea programada cada 10 minutos).
+
+## 6. Armar los paquetes para subir
+```bash
+cd mobile && npx cap sync
+# Android: paquete firmado para Play Console
+cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew bundleRelease
+# → android/app/build/outputs/bundle/release/app-release.aab
+# iOS: abrir Xcode (npx cap open ios) → Product → Archive → Distribute App
+```
