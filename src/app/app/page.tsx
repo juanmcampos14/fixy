@@ -16,7 +16,7 @@ export default async function ClientHome() {
   const firstName = actor.fullName.split(" ")[0];
   return (
     <>
-      <section className="mb-8 flex items-center justify-between gap-4 overflow-hidden rounded-[28px] bg-gradient-to-br from-fixy-50 to-spark-100 p-6 ring-1 ring-line sm:p-8">
+      <section className="mb-8 flex items-center justify-between gap-4 overflow-hidden rounded-[28px] bg-gradient-to-br from-fixy-50 to-cream-2 p-6 ring-1 ring-line sm:p-8">
         <div>
           <h1 className="text-2xl font-extrabold sm:text-3xl">Hola, {firstName}</h1>
           <p className="mt-1 text-ink-2">¿Qué necesitás resolver hoy?</p>

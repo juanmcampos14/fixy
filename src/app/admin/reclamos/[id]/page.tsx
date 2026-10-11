@@ -77,14 +77,14 @@ export default async function DisputeAdminPage({ params }: { params: Promise<{ i
               >
                 <div className="mt-4 space-y-1.5">
                   <label htmlFor="res-kind" className="block text-[15px] font-semibold">Resolución</label>
-                  <select id="res-kind" name="resolution" required defaultValue="" className="block h-12 w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5">
+                  <select id="res-kind" name="resolution" required defaultValue="" className="block h-12 w-full rounded-xl border border-control bg-surface px-3.5">
                     <option value="" disabled>Elegí una resolución</option>
                     {Object.entries(disputeResolutionLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div className="mt-4 space-y-1.5">
                   <label htmlFor="res-amount" className="block text-[15px] font-semibold">Importe a reembolsar (solo reembolso parcial)</label>
-                  <input id="res-amount" name="refund" inputMode="decimal" placeholder="12.500,50" className="block h-12 w-full rounded-xl border border-[#d3dfdc] px-3.5" />
+                  <input id="res-amount" name="refund" inputMode="decimal" placeholder="12.500,50" className="block h-12 w-full rounded-xl border border-control px-3.5" />
                   <p className="text-sm text-muted">El reembolso total devuelve {formatMoney(refundable)} sin necesidad de indicar importe.</p>
                 </div>
                 {job.status === "pending_approval" && (

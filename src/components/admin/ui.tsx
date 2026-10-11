@@ -12,7 +12,7 @@ export function hoursSince(d: Date | string): number {
 /** Barra de filtros (GET): funciona sin JavaScript y deja la URL compartible. */
 export function FilterBar({ action, children, clearHref }: { action: string; children: React.ReactNode; clearHref?: string }) {
   return (
-    <form action={action} method="get" role="search" className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 ring-1 ring-line">
+    <form action={action} method="get" role="search" className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl bg-surface p-4 ring-1 ring-line">
       {children}
       <div className="flex gap-2">
         <button type="submit" className={buttonClass("primary", "md")}>Filtrar</button>
@@ -34,7 +34,7 @@ export function FilterField({ label, htmlFor, children, className }: { label: st
 /** Tabla con desplazamiento horizontal en pantallas chicas (la página nunca se desborda). */
 export function DataTable({ children, minWidth = 760, caption }: { children: React.ReactNode; minWidth?: number; caption?: string }) {
   return (
-    <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-line" tabIndex={0} aria-label={caption ? `${caption} (desplazable)` : undefined}>
+    <div className="overflow-x-auto rounded-2xl bg-surface ring-1 ring-line" tabIndex={0} aria-label={caption ? `${caption} (desplazable)` : undefined}>
       <table className="w-full text-left text-[15px]" style={{ minWidth }}>
         {caption && <caption className="sr-only">{caption}</caption>}
         {children}
@@ -62,11 +62,11 @@ export function Tabs({ items, current }: { items: { key: string; label: string; 
               aria-current={t.key === current ? "page" : undefined}
               className={cn(
                 "flex h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-4 text-sm font-semibold ring-1",
-                t.key === current ? "bg-ink text-white ring-ink" : "bg-white text-ink ring-line hover:ring-fixy-500",
+                t.key === current ? "bg-ivory text-onyx ring-ivory" : "bg-surface text-ink ring-line hover:ring-fixy-500",
               )}
             >
               {t.label}
-              {!!t.badge && <span className="rounded-full bg-spark px-1.5 text-xs font-bold text-ink">{t.badge}</span>}
+              {!!t.badge && <span className="rounded-full bg-spark px-1.5 text-xs font-bold text-onyx">{t.badge}</span>}
             </Link>
           </li>
         ))}
@@ -103,7 +103,7 @@ export function EventList({ items, empty = "Sin eventos registrados." }: { items
     <ol className="relative space-y-4 border-l-2 border-line pl-5">
       {items.map((e) => (
         <li key={e.id} className="relative">
-          <span className="absolute -left-[27px] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-fixy-500 ring-1 ring-fixy-200" aria-hidden />
+          <span className="absolute -left-[27px] top-1.5 h-3 w-3 rounded-full border-2 border-surface bg-fixy-500 ring-1 ring-fixy-200" aria-hidden />
           <p className="font-semibold leading-snug">{e.title}</p>
           <p className="text-xs text-muted">
             {formatDateTime(e.created_at)}
@@ -138,7 +138,7 @@ export function Pagination({ basePath, params, page, hasMore }: { basePath: stri
 /** Contenedor de sección con título (para páginas de detalle). */
 export function Section({ title, description, action, children, className, id }: { title: React.ReactNode; description?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string; id?: string }) {
   return (
-    <section aria-labelledby={id} className={cn("rounded-[var(--radius-card)] bg-white p-5 shadow-[var(--shadow-card)] ring-1 ring-line sm:p-6", className)}>
+    <section aria-labelledby={id} className={cn("rounded-[var(--radius-card)] bg-surface p-5 shadow-[var(--shadow-card)] ring-1 ring-line sm:p-6", className)}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id={id} className="text-lg font-bold text-ink">{title}</h2>

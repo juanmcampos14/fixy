@@ -13,7 +13,7 @@ export type { AddressValue, ZoneOption } from "./locate";
 
 const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur", OTRA: "Fuera de CABA y GBA" };
 const BA_CENTER = { lat: -34.6037, lng: -58.3816 };
-const control = "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
+const control = "block w-full rounded-xl border border-control bg-surface px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
 
 /**
  * Dirección + zona. Con clave de Google Maps: autocompletado (Places API New, solo Argentina, sesgado a AMBA),
@@ -159,7 +159,7 @@ export function AddressFields({ zones, defaultValue, onChange, required = true }
           />
           {busy === "loading" && <LoaderCircle className="absolute right-3.5 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-muted" aria-hidden />}
           {enabled && open && suggestions.length > 0 && (
-            <ul id={listId} role="listbox" className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-line">
+            <ul id={listId} role="listbox" className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-surface shadow-[var(--shadow-lift)] ring-1 ring-line">
               {suggestions.map((s, i) => (
                 <li key={s.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}
                   onMouseDown={(e) => { e.preventDefault(); choose(i); }}

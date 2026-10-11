@@ -38,7 +38,7 @@ export default async function OrgDetail({ params, searchParams }: { params: Prom
         <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold">Sedes</h2>{isAdmin && <ButtonLink size="sm" variant="secondary" href={`/app/propiedades/nueva?org=${id}`}><Plus className="h-4 w-4" aria-hidden />Agregar sede</ButtonLink>}</div>
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {sites.map((s) => (
-            <li key={s.id}><Link href={`/app/propiedades/${s.id}`} className="block rounded-2xl bg-white p-4 ring-1 ring-line hover:ring-fixy-500">
+            <li key={s.id}><Link href={`/app/propiedades/${s.id}`} className="block rounded-2xl bg-surface p-4 ring-1 ring-line hover:ring-fixy-500">
               <p className="font-bold">{s.label}</p>
               <p className="text-sm text-muted">{propertyKindLabel[s.kind]} · {s.zone_name}</p>
               <p className="mt-2 text-sm"><span className="font-semibold">{s.jobs}</span> trabajos · <span className="tabular font-semibold">{formatMoney(s.spent_minor)}</span> pagado</p>

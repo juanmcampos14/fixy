@@ -33,12 +33,12 @@ export function PanelNav({ items }: { items: NavItem[] }) {
                   aria-current={active(i) ? "page" : undefined}
                   className={cn(
                     "flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm font-semibold ring-1 transition-colors",
-                    active(i) ? "bg-ink text-white ring-ink" : "bg-white text-ink ring-line hover:ring-fixy-500",
+                    active(i) ? "bg-ivory text-onyx ring-ivory" : "bg-surface text-ink ring-line hover:ring-fixy-500",
                   )}
                 >
                   <I className="h-4 w-4" aria-hidden />
                   {i.label}
-                  {!!i.badge && <span className="rounded-full bg-spark px-1.5 text-xs font-bold text-ink">{i.badge}</span>}
+                  {!!i.badge && <span className="rounded-full bg-spark px-1.5 text-xs font-bold text-onyx">{i.badge}</span>}
                 </Link>
               </li>
             );
@@ -57,12 +57,12 @@ export function PanelNav({ items }: { items: NavItem[] }) {
                   aria-current={active(i) ? "page" : undefined}
                   className={cn(
                     "flex h-11 items-center gap-3 rounded-xl px-3 text-[15px] font-semibold transition-colors",
-                    active(i) ? "bg-white text-ink shadow-[var(--shadow-card)] ring-1 ring-line" : "text-ink-2 hover:bg-white/70",
+                    active(i) ? "bg-cream-2 text-ink" : "text-ink-2 hover:bg-surface",
                   )}
                 >
-                  <I className={cn("h-5 w-5", active(i) ? "text-fixy-700" : "text-muted")} aria-hidden />
+                  <I className={cn("h-5 w-5", active(i) ? "text-fixy-800" : "text-muted")} aria-hidden />
                   <span className="flex-1">{i.label}</span>
-                  {!!i.badge && <span className="rounded-full bg-spark px-2 text-xs font-bold text-ink">{i.badge}</span>}
+                  {!!i.badge && <span className="rounded-full bg-spark px-2 text-xs font-bold text-onyx">{i.badge}</span>}
                 </Link>
               </li>
             );

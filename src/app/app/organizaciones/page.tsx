@@ -17,8 +17,8 @@ export default async function Orgs() {
       ) : (
         <ul className="space-y-3">
           {actor.organizations.map((o) => (
-            <li key={o.id}><Link href={`/app/organizaciones/${o.id}`} className="flex items-center justify-between rounded-2xl bg-white p-4 ring-1 ring-line hover:ring-fixy-500">
-              <span className="flex items-center gap-3"><Building2 className="h-5 w-5 text-fixy-700" aria-hidden /><span className="font-semibold">{o.name}</span><span className="text-sm text-muted">{o.role === "admin" ? "Administrador/a" : "Miembro"}</span></span>
+            <li key={o.id}><Link href={`/app/organizaciones/${o.id}`} className="flex items-center justify-between rounded-2xl bg-surface p-4 ring-1 ring-line hover:ring-fixy-500">
+              <span className="flex items-center gap-3"><Building2 className="h-5 w-5 text-fixy-800" aria-hidden /><span className="font-semibold">{o.name}</span><span className="text-sm text-muted">{o.role === "admin" ? "Administrador/a" : "Miembro"}</span></span>
               <ChevronRight className="h-5 w-5 text-muted" aria-hidden />
             </Link></li>
           ))}

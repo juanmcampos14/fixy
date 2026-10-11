@@ -140,7 +140,7 @@ export default async function JobAdminPage({ params }: { params: Promise<{ id: s
                             >
                               <div className="mt-4 space-y-1.5">
                                 <label htmlFor={`amt-${c.id}`} className="block text-[15px] font-semibold">Importe a reembolsar (ARS)</label>
-                                <input id={`amt-${c.id}`} name="amount" inputMode="decimal" required defaultValue={minorToInput(refundable)} className="block h-12 w-full rounded-xl border border-[#d3dfdc] px-3.5" aria-describedby={`amt-${c.id}-hint`} />
+                                <input id={`amt-${c.id}`} name="amount" inputMode="decimal" required defaultValue={minorToInput(refundable)} className="block h-12 w-full rounded-xl border border-control px-3.5" aria-describedby={`amt-${c.id}-hint`} />
                                 <p id={`amt-${c.id}-hint`} className="text-sm text-muted">Formato 12.500,50</p>
                               </div>
                             </ConfirmAction>

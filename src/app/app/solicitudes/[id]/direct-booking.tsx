@@ -78,7 +78,7 @@ export function DirectBooking({ requestId, invitations, visit, others }: { reque
           <h2 id="others-title" className="mb-3 text-lg font-bold">{visit ? "¿Preferís otro profesional?" : "Otros profesionales disponibles"}</h2>
           <ul className="grid gap-3 sm:grid-cols-2">
             {others.map((p) => (
-              <li key={p.slug} className="flex flex-col rounded-2xl bg-white p-4 ring-1 ring-line">
+              <li key={p.slug} className="flex flex-col rounded-2xl bg-surface p-4 ring-1 ring-line">
                 <a href={`/profesionales/${p.slug}`} target="_blank" rel="noreferrer" className="font-bold hover:underline">{p.displayName}</a>
                 <p className="mt-0.5 text-sm text-muted">
                   {p.reviews ? <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-spark text-spark" aria-hidden />{p.rating} ({p.reviews})</span> : "Nuevo en Fixy"}
@@ -96,7 +96,7 @@ export function DirectBooking({ requestId, invitations, visit, others }: { reque
       )}
 
       {!active && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-[#c6d4d1] p-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-control p-4">
           <p className="min-w-0 flex-1 text-sm text-ink-2">¿Es una obra grande o preferís comparar? Podés pedir presupuestos a varios profesionales.</p>
           <ConfirmAction action={switchToQuotesAction} variant="ghost" size="sm" label="Pedir presupuestos a varios" title="Pedir presupuestos a varios profesionales" confirmLabel="Pedir presupuestos" hidden={{ requestId }}
             description="Invitamos a un grupo acotado de profesionales de tu zona a presupuestar y comparás las propuestas." />

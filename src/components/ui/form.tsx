@@ -104,7 +104,7 @@ export function ConfirmAction({
       <dialog
         ref={dialog}
         onClose={() => setOpen(false)}
-        className="m-auto w-[min(92vw,480px)] rounded-3xl bg-white p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-ink/40 backdrop:backdrop-blur-[2px]"
+        className="m-auto w-[min(92vw,480px)] rounded-3xl bg-surface p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-black/60 backdrop:backdrop-blur-[2px]"
         aria-labelledby={`${uid}-title`}
       >
         {open && (
@@ -116,7 +116,7 @@ export function ConfirmAction({
             {requireReason && (
               <div className="mt-4 space-y-1.5">
                 <label htmlFor={`${uid}-reason`} className="block text-[15px] font-semibold">{reasonLabel}</label>
-                <textarea id={`${uid}-reason`} name="reason" required minLength={3} className="block min-h-24 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+                <textarea id={`${uid}-reason`} name="reason" required minLength={3} className="block min-h-24 w-full rounded-xl border border-control px-3.5 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
               </div>
             )}
             {state.error && <Alert tone="danger" className="mt-4">{state.error}</Alert>}

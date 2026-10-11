@@ -42,7 +42,7 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
         {providers.map((p) => (
           <label key={p.slug} className="block cursor-pointer">
             <input type="radio" name="provider" value={p.slug} checked={chosen === p.slug} onChange={() => onChoose(p.slug)} className="peer sr-only" />
-            <span className={cn("block rounded-2xl border bg-white p-4 transition peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40", chosen === p.slug ? "border-fixy-700 bg-fixy-50/60 ring-1 ring-fixy-700" : "border-[#d3dfdc] hover:border-fixy-500")}>
+            <span className={cn("block rounded-2xl border bg-surface p-4 transition peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40", chosen === p.slug ? "border-fixy-700 bg-fixy-50/60 ring-1 ring-fixy-700" : "border-control hover:border-fixy-500")}>
               <span className="flex flex-wrap items-start justify-between gap-3">
                 <span className="flex min-w-0 items-start gap-3">
                 <ProviderAvatar url={p.avatarUrl} name={p.displayName} className="h-14 w-14 text-lg" />
@@ -86,7 +86,7 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
         ))}
         <label className="block cursor-pointer">
           <input type="radio" name="provider" value="quotes" checked={chosen === "quotes"} onChange={() => onChoose("quotes")} className="peer sr-only" />
-          <span className={cn("block rounded-2xl border border-dashed p-4 transition peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40", chosen === "quotes" ? "border-fixy-700 bg-fixy-50/60" : "border-[#c6d4d1] hover:border-fixy-500")}>
+          <span className={cn("block rounded-2xl border border-dashed p-4 transition peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40", chosen === "quotes" ? "border-fixy-700 bg-fixy-50/60" : "border-control hover:border-fixy-500")}>
             <span className="block font-semibold">Prefiero recibir presupuestos de varios profesionales</span>
             <span className="block text-sm text-muted">Recomendado para obras grandes o trabajos bien definidos. Invitamos a un grupo acotado y comparás propuestas.</span>
           </span>

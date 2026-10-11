@@ -25,7 +25,7 @@ const EXAMPLE = "Ej.: Soy gasista matriculado hace 12 años. Instalo y reparo ca
 
 const chip = (on: boolean) => cn(
   "inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-2 text-[15px] font-semibold ring-1 transition",
-  on ? "bg-fixy-700 text-white ring-fixy-700" : "bg-white text-ink ring-line hover:ring-fixy-500",
+  on ? "bg-fixy-700 text-white ring-fixy-700" : "bg-surface text-ink ring-line hover:ring-fixy-500",
 );
 
 export function QuickStart({ categories, zones, aiAvailable, defaultName }: { categories: Cat[]; zones: Zone[]; aiAvailable: boolean; defaultName: string }) {
@@ -93,8 +93,8 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
         <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Tipo de perfil">
           {([["individual", "Trabajo por mi cuenta", User], ["company", "Tengo una empresa o equipo", Building2]] as const).map(([k, label, I]) => (
             <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}
-              className={cn("flex min-h-16 items-center gap-2 rounded-2xl p-3 text-left font-semibold ring-1", kind === k ? "bg-fixy-50 ring-2 ring-fixy-600" : "bg-white ring-line")}>
-              <I className="h-5 w-5 shrink-0 text-fixy-700" aria-hidden />{label}
+              className={cn("flex min-h-16 items-center gap-2 rounded-2xl p-3 text-left font-semibold ring-1", kind === k ? "bg-fixy-50 ring-2 ring-fixy-600" : "bg-surface ring-line")}>
+              <I className="h-5 w-5 shrink-0 text-fixy-800" aria-hidden />{label}
             </button>
           ))}
         </div>
@@ -129,7 +129,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0 space-y-6">
-        <div className="rounded-2xl bg-white p-4 ring-1 ring-line lg:hidden"><StrengthMeter {...strength} compact /></div>
+        <div className="rounded-2xl bg-surface p-4 ring-1 ring-line lg:hidden"><StrengthMeter {...strength} compact /></div>
         <button type="button" onClick={() => setStep(1)} className="inline-flex items-center gap-1 text-sm font-semibold text-fixy-800"><ArrowLeft className="h-4 w-4" aria-hidden />Volver</button>
         {aiUsed && <Alert tone="ok" title="Armamos un borrador con lo que contaste">Revisalo: podés cambiar cualquier cosa antes de guardar.{d.tips.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm">{d.tips.map((t) => <li key={t}>{t}</li>)}</ul>}</Alert>}
 
@@ -229,7 +229,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
         </div>
       </div>
       <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
-        <div className="rounded-3xl bg-white p-5 ring-1 ring-line">
+        <div className="rounded-3xl bg-surface p-5 ring-1 ring-line">
           <StrengthMeter {...strength} max={4} links={false} />
         </div>
       </aside>

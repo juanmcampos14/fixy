@@ -131,7 +131,7 @@ export function QuoteForm({ invitationId, rule, allowFixed, windows, defaultDate
         </Field>
       </div>
 
-      <section aria-live="polite" aria-labelledby="q-preview" className="rounded-2xl bg-white p-4 ring-1 ring-line">
+      <section aria-live="polite" aria-labelledby="q-preview" className="rounded-2xl bg-surface p-4 ring-1 ring-line">
         <h3 id="q-preview" className="font-bold">Vista previa</h3>
         {preview.invalidRow && <p className="mt-1 text-sm text-warn">Hay importes o cantidades sin completar o con formato inválido.</p>}
         {preview.b && (

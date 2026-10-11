@@ -47,7 +47,7 @@ export function WithdrawForm({ availableMinor, bank, transferDate }: { available
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream p-3 ring-1 ring-line">
-          <p className="flex items-center gap-2 text-[15px]"><Landmark className="h-5 w-5 text-fixy-700" aria-hidden /><span><strong>{bank!.holder_name}</strong> · {describe(bank!)}</span></p>
+          <p className="flex items-center gap-2 text-[15px]"><Landmark className="h-5 w-5 text-fixy-800" aria-hidden /><span><strong>{bank!.holder_name}</strong> · {describe(bank!)}</span></p>
           <button type="button" onClick={() => setEditBank(true)} className="text-sm font-semibold text-fixy-800 underline">Cambiar cuenta</button>
         </div>
       )}

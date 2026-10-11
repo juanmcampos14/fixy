@@ -59,12 +59,12 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
   return (
     <>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-ink text-white">
+      <section className="relative overflow-hidden bg-graphite text-white">
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-fixy-500/20 blur-3xl" aria-hidden />
         <div className="absolute -bottom-32 left-10 h-80 w-80 rounded-full bg-spark/15 blur-3xl" aria-hidden />
         <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-14 sm:px-6 md:grid-cols-[1.3fr_1fr] md:py-20">
           <div className="motion-safe:animate-fade-up">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-fixy-100 ring-1 ring-white/15">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-fixy-800 ring-1 ring-white/15">
               {cat ? <CategoryIcon icon={cat.icon} className="h-4 w-4" /> : <Users className="h-4 w-4" aria-hidden />}
               {oficio ? `Para ${oficio.plural}` : "Para profesionales y empresas de servicios"}
             </p>
@@ -80,12 +80,12 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
             </div>
             <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-white/85">
               {["Alta sin costo", "0 % de comisión de Fixy", "Retirás tu saldo una vez por mes"].map((t) => (
-                <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-200" aria-hidden />{t}</li>
+                <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-800" aria-hidden />{t}</li>
               ))}
             </ul>
           </div>
           <div className="relative mx-auto w-full max-w-xs">
-            <div className="absolute inset-x-6 bottom-4 top-12 -z-0 rounded-[48px] bg-gradient-to-br from-fixy-500/40 to-spark/30" aria-hidden />
+            <div className="absolute inset-x-6 bottom-4 top-12 -z-0 rounded-full bg-[radial-gradient(closest-side,rgba(82,102,235,0.28),transparent)]" aria-hidden />
             <Mascot pose="wave" priority className="relative mx-auto h-72 w-auto sm:h-80" />
           </div>
         </div>
@@ -93,7 +93,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
 
       {demand.n >= 10 && cat && (
         <section className="mx-auto -mt-6 max-w-6xl px-4 sm:px-6">
-          <div className="relative rounded-2xl bg-white p-4 text-center shadow-[var(--shadow-card)] ring-1 ring-line">
+          <div className="relative rounded-2xl bg-surface p-4 text-center shadow-[var(--shadow-card)] ring-1 ring-line">
             <p className="font-semibold">{demand.n} pedidos de {cat.name.toLowerCase()} en los últimos 30 días.</p>
           </div>
         </section>
@@ -104,10 +104,10 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
         <h2 id="cf-t" className="text-2xl font-extrabold sm:text-3xl">Así trabajás con Fixy</h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((s, i) => (
-            <li key={s.title} className="rounded-[var(--radius-card)] bg-white p-5 ring-1 ring-line">
+            <li key={s.title} className="rounded-[var(--radius-card)] bg-surface p-5 ring-1 ring-line">
               <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-ink font-display font-bold text-white">{i + 1}</span>
-                <s.icon className="h-5 w-5 text-fixy-700" aria-hidden />
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-graphite font-display font-bold text-white">{i + 1}</span>
+                <s.icon className="h-5 w-5 text-fixy-800" aria-hidden />
               </div>
               <h3 className="mt-4 text-lg font-bold">{s.title}</h3>
               <p className="mt-1 text-[15px] text-muted">{s.text}</p>
@@ -118,13 +118,13 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
 
       {/* Reseñas */}
       <section aria-labelledby="rs-t" className="mx-auto mt-16 max-w-6xl px-4 sm:px-6">
-        <div className="grid items-center gap-6 rounded-[32px] bg-gradient-to-br from-fixy-50 via-white to-spark-100 p-6 ring-1 ring-line sm:p-10 md:grid-cols-[1fr_auto]">
+        <div className="grid items-center gap-6 rounded-[32px] bg-gradient-to-br from-fixy-50 via-surface to-cream-2 p-6 ring-1 ring-line sm:p-10 md:grid-cols-[1fr_auto]">
           <div>
             <h2 id="rs-t" className="text-2xl font-extrabold sm:text-3xl">Una reputación que vale</h2>
             <ul className="mt-5 space-y-3 text-[15px] text-ink-2">
-              <li className="flex gap-3"><BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden /><span><strong className="text-ink">Solo clientes reales:</strong> únicamente califica quien contrató y completó un trabajo con vos en Fixy.</span></li>
-              <li className="flex gap-3"><EyeOff className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden /><span><strong className="text-ink">Anónimas y diferidas:</strong> se publican días después y sin datos del cliente. Así cada opinión es sincera, y tu reputación también.</span></li>
-              <li className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden /><span><strong className="text-ink">Podés responder:</strong> una respuesta pública por reseña, para contar tu versión con respeto.</span></li>
+              <li className="flex gap-3"><BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden /><span><strong className="text-ink">Solo clientes reales:</strong> únicamente califica quien contrató y completó un trabajo con vos en Fixy.</span></li>
+              <li className="flex gap-3"><EyeOff className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden /><span><strong className="text-ink">Anónimas y diferidas:</strong> se publican días después y sin datos del cliente. Así cada opinión es sincera, y tu reputación también.</span></li>
+              <li className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden /><span><strong className="text-ink">Podés responder:</strong> una respuesta pública por reseña, para contar tu versión con respeto.</span></li>
             </ul>
           </div>
           <Mascot pose="celebrate" className="mx-auto hidden h-48 w-auto md:block" />
@@ -133,7 +133,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
 
       {/* Sin comisión + requisitos */}
       <section className="mx-auto mt-16 grid max-w-6xl gap-4 px-4 sm:px-6 md:grid-cols-2">
-        <article aria-labelledby="com-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
+        <article aria-labelledby="com-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line sm:p-8">
           <h2 id="com-t" className="text-2xl font-extrabold">0 % de comisión de Fixy</h2>
           <p className="mt-2 text-ink-2">Sin costo de alta, sin abono y <strong>sin comisión de Fixy</strong>. Cobrás el neto de tu presupuesto: solo se descuentan los costos de cobro de Mercado Pago y los impuestos del pago.</p>
           <figure className="mt-5 rounded-2xl bg-cream/60 p-4 ring-1 ring-line">
@@ -147,14 +147,14 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
           </figure>
           <p className="mt-3 text-xs text-muted">Fixy se sostiene con un cargo de servicio que paga el cliente, aparte de tu presupuesto. Los costos de Mercado Pago dependen del medio de pago y del plazo de acreditación; los ves en cada cobro.</p>
         </article>
-        <article aria-labelledby="req-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8">
+        <article aria-labelledby="req-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line sm:p-8">
           <h2 id="req-t" className="text-2xl font-extrabold">Qué necesitás</h2>
           <ul className="mt-4 space-y-3 text-[15px]">
-            <li className="flex gap-3"><FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />DNI (lo revisa nuestro equipo; no se publica).</li>
-            {credentials.map((c) => <li key={c.name} className="flex gap-3"><BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />{c.name} vigente (obligatoria para este oficio).</li>)}
-            <li className="flex gap-3"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Las zonas y horarios en los que trabajás.</li>
-            <li className="flex gap-3"><Banknote className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Tus datos bancarios (recién cuando retirás tu saldo).</li>
-            <li className="flex gap-3"><Star className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />Fotos de trabajos anteriores (recomendado).</li>
+            <li className="flex gap-3"><FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />DNI (lo revisa nuestro equipo; no se publica).</li>
+            {credentials.map((c) => <li key={c.name} className="flex gap-3"><BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />{c.name} vigente (obligatoria para este oficio).</li>)}
+            <li className="flex gap-3"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />Las zonas y horarios en los que trabajás.</li>
+            <li className="flex gap-3"><Banknote className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />Tus datos bancarios (recién cuando retirás tu saldo).</li>
+            <li className="flex gap-3"><Star className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />Fotos de trabajos anteriores (recomendado).</li>
           </ul>
           <p className="mt-4 text-sm text-muted">El alta toma unos 15 minutos. Podés completarla de a partes y te avisamos cuando estés habilitado.</p>
         </article>
@@ -165,7 +165,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
         <h2 id="zon-t" className="text-2xl font-extrabold sm:text-3xl">Dónde trabajamos</h2>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {byRegion.map((g) => (
-            <div key={g.label} className="rounded-2xl bg-white p-4 ring-1 ring-line">
+            <div key={g.label} className="rounded-2xl bg-surface p-4 ring-1 ring-line">
               <p className="font-bold">{g.label}</p>
               <p className="mt-1 text-sm text-muted">{g.names.join(" · ")}</p>
             </div>
@@ -175,14 +175,14 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
 
       {/* Invitar a un colega */}
       <section aria-labelledby="inv-t" className="mx-auto mt-16 max-w-6xl px-4 sm:px-6">
-        <div className="rounded-[32px] bg-ink p-6 text-white sm:p-10">
+        <div className="rounded-[32px] bg-graphite p-6 text-white sm:p-10">
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div className="max-w-xl">
               <h2 id="inv-t" className="text-2xl font-extrabold text-white sm:text-3xl">¿Conocés a alguien que trabaje bien?</h2>
               <p className="mt-2 text-white/80">Pasale este enlace. {ownApproved ? "Si se suma desde tu enlace, queda registrado que llegó por vos." : ""}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#25D366] px-6 font-semibold text-ink hover:brightness-95">
+              <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center gap-2 rounded-full bg-[#25D366] px-6 font-semibold text-onyx hover:brightness-95">
                 <MessageCircle className="h-5 w-5" aria-hidden /> Compartir por WhatsApp
               </a>
               <CopyLink url={shareUrl} />
@@ -194,7 +194,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
       {/* FAQ */}
       <section aria-labelledby="faq-t" className="mx-auto mt-16 max-w-3xl px-4 sm:px-6">
         <h2 id="faq-t" className="text-2xl font-extrabold sm:text-3xl">Preguntas frecuentes</h2>
-        <div className="mt-6 divide-y divide-line rounded-[var(--radius-card)] bg-white ring-1 ring-line">
+        <div className="mt-6 divide-y divide-line rounded-[var(--radius-card)] bg-surface ring-1 ring-line">
           {faqs.map(([q, a]) => (
             <details key={q} className="group px-5 py-4 [&_summary::-webkit-details-marker]:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
@@ -222,8 +222,8 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
             const c = categories.find((x) => x.slug === o.category);
             return (
               <li key={o.slug}>
-                <Link href={`/sumate/${o.slug}${ref ? `?ref=${ref}` : ""}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold ring-1 ring-line hover:ring-fixy-500">
-                  {c ? <CategoryIcon icon={c.icon} className="h-4 w-4 text-fixy-700" /> : <Users className="h-4 w-4 text-fixy-700" aria-hidden />}
+                <Link href={`/sumate/${o.slug}${ref ? `?ref=${ref}` : ""}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-sm font-semibold ring-1 ring-line hover:ring-fixy-500">
+                  {c ? <CategoryIcon icon={c.icon} className="h-4 w-4 text-fixy-800" /> : <Users className="h-4 w-4 text-fixy-800" aria-hidden />}
                   {o.plural.charAt(0).toUpperCase() + o.plural.slice(1)}
                 </Link>
               </li>

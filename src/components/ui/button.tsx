@@ -5,12 +5,12 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "soft";
 type Size = "sm" | "md" | "lg";
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-55 whitespace-nowrap select-none";
+  "inline-flex items-center justify-center gap-2 rounded-full font-normal transition-colors disabled:cursor-not-allowed disabled:opacity-55 whitespace-nowrap select-none";
 const variants: Record<Variant, string> = {
-  primary: "bg-fixy-700 text-white hover:bg-fixy-800 active:bg-fixy-800",
-  secondary: "bg-white text-ink ring-1 ring-inset ring-line hover:bg-cream-2 hover:ring-[#d6e2df]",
-  ghost: "text-ink hover:bg-ink/5",
-  danger: "bg-white text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-bg",
+  primary: "bg-fixy-700 text-white hover:bg-cobalt-hover active:bg-cobalt-hover",
+  secondary: "text-ink ring-1 ring-inset ring-control hover:bg-cream-2",
+  ghost: "text-ink hover:bg-ink/10",
+  danger: "text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-bg",
   soft: "bg-fixy-50 text-fixy-800 hover:bg-fixy-100",
 };
 const sizes: Record<Size, string> = {

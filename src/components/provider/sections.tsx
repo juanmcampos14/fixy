@@ -221,8 +221,8 @@ export function PortfolioSection({ setup, id = "portfolio" }: { setup: ProviderS
           {setup.portfolio.map((p) => (
             <li key={p.id} className="overflow-hidden rounded-2xl bg-cream/60 ring-1 ring-line">
               {p.is_pdf ? (
-                <a href={p.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-white p-3 text-center text-sm text-ink-2">
-                  <FileText className="h-8 w-8 text-fixy-700" aria-hidden /><span className="line-clamp-2 break-all">{p.file_name ?? "Documento PDF"}</span>
+                <a href={p.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-surface p-3 text-center text-sm text-ink-2">
+                  <FileText className="h-8 w-8 text-fixy-800" aria-hidden /><span className="line-clamp-2 break-all">{p.file_name ?? "Documento PDF"}</span>
                 </a>
               ) : (
                 <img src={p.url} alt={p.caption || "Foto de trabajo"} className="aspect-[4/3] w-full object-cover" loading="lazy" />

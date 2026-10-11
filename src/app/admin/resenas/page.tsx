@@ -61,7 +61,7 @@ async function AllReviews({ userId, q }: { userId: string; q?: string }) {
       <form className="mb-4 flex gap-2" method="get">
         <input type="hidden" name="tab" value="todas" />
         <label htmlFor="rq" className="sr-only">Buscar</label>
-        <input id="rq" name="q" defaultValue={q} placeholder="Buscar por trabajo, profesional o cliente" className="h-11 w-full max-w-md rounded-xl border border-[#d3dfdc] px-3.5" />
+        <input id="rq" name="q" defaultValue={q} placeholder="Buscar por trabajo, profesional o cliente" className="h-11 w-full max-w-md rounded-xl border border-control px-3.5" />
         <button className="h-11 rounded-full bg-fixy-700 px-5 font-semibold text-white">Buscar</button>
       </form>
       <DataTable caption="Reseñas" minWidth={980}>

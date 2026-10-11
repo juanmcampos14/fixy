@@ -16,7 +16,7 @@ export function WhatsAppAlerts({ linked, phoneTail, on }: { linked: boolean; pho
   return (
     <div className="space-y-3">
       <p className="flex items-start gap-2 text-[15px] text-ink-2">
-        <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />
+        <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />
         <span>Te avisamos al instante cuando hay un pedido de tu rubro y zona, cuando un cliente te elige y cuando te contratan. Responder rápido te ayuda a ganar más trabajos.</span>
       </p>
       {on ? (
@@ -35,7 +35,7 @@ export function WhatsAppAlerts({ linked, phoneTail, on }: { linked: boolean; pho
         <div className="space-y-2 rounded-2xl bg-cream/60 p-4 ring-1 ring-line">
           <p className="text-[15px]">Mandanos este código desde <strong>tu</strong> WhatsApp (vence en 30 minutos):</p>
           <p className="tabular font-display text-3xl font-extrabold tracking-widest">{code}</p>
-          <a href={waLink} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#25D366] px-5 font-semibold text-ink hover:brightness-95">
+          <a href={waLink} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#25D366] px-5 font-semibold text-onyx hover:brightness-95">
             <MessageCircle className="h-5 w-5" aria-hidden />Abrir WhatsApp y enviar
           </a>
           <p className="text-xs text-muted">Al enviarlo aceptás recibir avisos de Fixy por WhatsApp. Te das de baja cuando quieras escribiendo BAJA.</p>

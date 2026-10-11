@@ -42,7 +42,7 @@ const WINDOWS = [
 
 const chip = (on: boolean) => cn(
   "inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full px-4 py-1.5 text-left text-[15px] font-medium ring-1 transition-colors",
-  on ? "bg-fixy-700 text-white ring-fixy-700" : "bg-white text-ink ring-[#d3dfdc] hover:ring-fixy-500",
+  on ? "bg-fixy-700 text-white ring-fixy-700" : "bg-surface text-ink ring-control hover:ring-fixy-500",
 );
 
 export function ChatRequest(props: {
@@ -219,7 +219,7 @@ export function ChatRequest(props: {
         {/* 1. Problema */}
         {!sent ? (
           <li className="list-none">
-            <form onSubmit={(e) => { e.preventDefault(); send(); }} className="rounded-3xl bg-white p-3 shadow-[var(--shadow-card)] ring-1 ring-line focus-within:ring-2 focus-within:ring-fixy-600">
+            <form onSubmit={(e) => { e.preventDefault(); send(); }} className="rounded-3xl bg-surface p-3 shadow-[var(--shadow-card)] ring-1 ring-line focus-within:ring-2 focus-within:ring-fixy-600">
               <label htmlFor="problem" className="sr-only">Contá el problema</label>
               <Textarea id="problem" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={4000} autoFocus
                 placeholder="Ej.: Gotea la canilla de la cocina y pierde agua abajo de la mesada."
@@ -288,7 +288,7 @@ export function ChatRequest(props: {
                     {locating ? "Buscando tu ubicación…" : "Compartir mi ubicación"}
                   </button>
                 )}
-                <button type="button" onClick={() => setTyping(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-5 font-semibold text-fixy-800 ring-1 ring-[#d3dfdc]">
+                <button type="button" onClick={() => setTyping(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-surface px-5 font-semibold text-fixy-800 ring-1 ring-control">
                   <Pencil className="h-4 w-4" aria-hidden />Escribir la dirección
                 </button>
               </div>
@@ -322,7 +322,7 @@ export function ChatRequest(props: {
             <ul className="mt-3 space-y-3">
               {pros.map((p) => <li key={p.slug}><ProCard p={p} onChoose={() => setChosen(p.slug)} /></li>)}
             </ul>
-            <div className="mt-3 rounded-2xl border border-dashed border-[#c6d4d1] p-3">
+            <div className="mt-3 rounded-2xl border border-dashed border-control p-3">
               {!budgetOpen ? (
                 <button type="button" onClick={() => setBudgetOpen(true)} className="w-full text-left">
                   <span className="flex items-center gap-2 font-semibold text-fixy-800"><HandCoins className="h-4 w-4" aria-hidden />Decir cuánto quiero pagar</span>
@@ -345,7 +345,7 @@ export function ChatRequest(props: {
               )}
             </div>
             <button type="button" onClick={() => setChosen("quotes")}
-              className={cn("mt-3 w-full rounded-2xl px-4 py-3 text-left font-semibold", pros.length ? "border border-dashed border-[#c6d4d1] text-fixy-800" : "bg-fixy-700 text-center text-white")}>
+              className={cn("mt-3 w-full rounded-2xl px-4 py-3 text-left font-semibold", pros.length ? "border border-dashed border-control text-fixy-800" : "bg-fixy-700 text-center text-white")}>
               {pros.length ? "Prefiero que me manden presupuestos varios" : "Hacer el pedido igual"}
             </button>
           </Bot>
@@ -374,8 +374,8 @@ export function ChatRequest(props: {
                 <div id="details" hidden={!detailsOpen} className="space-y-5 border-t border-line p-4">
                   {props.loggedIn && (
                     <div>
-                      <label htmlFor="photos" className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-[#c6d4d1] p-3 hover:border-fixy-500">
-                        <Camera className="h-6 w-6 text-fixy-700" aria-hidden />
+                      <label htmlFor="photos" className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-control p-3 hover:border-fixy-500">
+                        <Camera className="h-6 w-6 text-fixy-800" aria-hidden />
                         <span><span className="block font-semibold">Fotos del problema</span><span className="block text-sm text-muted">{photoNames.length ? photoNames.join(", ") : "Hasta 6 fotos. Ayudan a que llegue preparado."}</span></span>
                       </label>
                       <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(e) => setPhotoNames(Array.from(e.target.files ?? []).map((f) => f.name).slice(0, 6))} />
@@ -456,7 +456,7 @@ function Bot({ children, tone, wide }: { children: React.ReactNode; tone?: "warn
       </span>
       <div className={cn("min-w-0 rounded-3xl rounded-tl-md px-4 py-3 text-[16px] leading-relaxed shadow-[var(--shadow-card)] ring-1",
         wide ? "flex-1" : "max-w-[85%]",
-        tone === "danger" ? "bg-danger-bg ring-danger/20" : tone === "warn" ? "bg-warn-bg ring-warn/20" : "bg-white ring-line")}>
+        tone === "danger" ? "bg-danger-bg ring-danger/20" : tone === "warn" ? "bg-warn-bg ring-warn/20" : "bg-surface ring-line")}>
         {children}
       </div>
     </li>
@@ -478,7 +478,7 @@ function Typing({ label }: { label: string }) {
       <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-fixy-50 ring-1 ring-fixy-500/20">
         <Mascot pose="think" animate={false} className="h-9 w-auto translate-y-1" />
       </span>
-      <span className="inline-flex items-center gap-2 rounded-3xl bg-white px-4 py-3 text-muted ring-1 ring-line">
+      <span className="inline-flex items-center gap-2 rounded-3xl bg-surface px-4 py-3 text-muted ring-1 ring-line">
         <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />{label}
       </span>
     </li>
@@ -487,7 +487,7 @@ function Typing({ label }: { label: string }) {
 
 function ProCard({ p, onChoose }: { p: BookableProviderCard; onChoose: () => void }) {
   return (
-    <div className="rounded-2xl bg-white p-4 ring-1 ring-[#d3dfdc]">
+    <div className="rounded-2xl bg-surface p-4 ring-1 ring-control">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-lg font-bold leading-tight">{p.displayName}</p>

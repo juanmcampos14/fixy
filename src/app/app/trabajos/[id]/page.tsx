@@ -86,7 +86,7 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
 
         {job.visit_code && !(job as { checked_in_at?: Date | null }).checked_in_at && ["confirmed", "on_the_way"].includes(job.status) && (
           <Card className="flex flex-wrap items-center gap-4 ring-2 ring-fixy-500/30">
-            <div className="grid h-16 min-w-28 place-items-center rounded-2xl bg-ink px-4 font-display text-3xl font-extrabold tracking-[0.25em] text-white" aria-label={`Código de visita ${job.visit_code.split("").join(" ")}`}>{job.visit_code}</div>
+            <div className="grid h-16 min-w-28 place-items-center rounded-2xl bg-ivory px-4 font-display text-3xl font-extrabold tracking-[0.25em] text-onyx" aria-label={`Código de visita ${job.visit_code.split("").join(" ")}`}>{job.visit_code}</div>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold">Tu código de visita</h2>
               <p className="text-ink-2">Dáselo al profesional cuando llegue: así queda registrado que la visita ocurrió. No lo compartas antes.</p>

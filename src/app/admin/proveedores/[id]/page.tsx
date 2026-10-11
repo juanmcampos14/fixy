@@ -86,14 +86,14 @@ export default async function ProviderAdminPage({ params }: { params: Promise<{ 
         <StatusCard label="Operativo" status={p.status} labels={providerStatusLabel} />
         <StatusCard label="Identidad" status={p.identity_status} labels={identityStatusLabel} />
         <StatusCard label="Cobros" status={p.payouts_status} labels={payoutsStatusLabel} hint={p.has_payout_account ? `Cuenta configurada (${p.payout_provider ?? "—"})` : "Sin cuenta de cobro"} />
-        <div className="rounded-2xl bg-white p-4 ring-1 ring-line">
+        <div className="rounded-2xl bg-surface p-4 ring-1 ring-line">
           <div className="text-sm text-muted">Credenciales y vencimientos</div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {required.length === 0 ? <Badge tone="neutral">No requiere</Badge> : credSummary.problems ? <Badge tone="warn">{credSummary.problems} con problemas</Badge> : <Badge tone="ok">Todas vigentes</Badge>}
             {soonExpiring.length > 0 && <Badge tone="warn">{soonExpiring.length} vencida(s) o por vencer (30 días)</Badge>}
           </div>
         </div>
-        <div className="col-span-2 rounded-2xl bg-white p-4 ring-1 ring-line lg:col-span-1">
+        <div className="col-span-2 rounded-2xl bg-surface p-4 ring-1 ring-line lg:col-span-1">
           <div className="text-sm text-muted">Recibe oportunidades</div>
           <div className="mt-1.5">{eligibility.eligible ? <Badge tone="ok">Elegible</Badge> : <Badge tone="danger">No elegible</Badge>}</div>
         </div>
@@ -141,11 +141,11 @@ export default async function ProviderAdminPage({ params }: { params: Promise<{ 
                       >
                         <div className="mt-4 space-y-1.5">
                           <label htmlFor={`exp-${d.id}`} className="block text-[15px] font-semibold">Vencimiento <span className="text-sm font-normal text-muted">(opcional)</span></label>
-                          <input id={`exp-${d.id}`} type="date" name="expiresOn" defaultValue={d.expires_on ?? ""} className="block h-12 w-full rounded-xl border border-[#d3dfdc] px-3.5" />
+                          <input id={`exp-${d.id}`} type="date" name="expiresOn" defaultValue={d.expires_on ?? ""} className="block h-12 w-full rounded-xl border border-control px-3.5" />
                         </div>
                         <div className="mt-4 space-y-1.5">
                           <label htmlFor={`note-${d.id}`} className="block text-[15px] font-semibold">Nota <span className="text-sm font-normal text-muted">(opcional)</span></label>
-                          <textarea id={`note-${d.id}`} name="reason" className="block min-h-20 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-3" />
+                          <textarea id={`note-${d.id}`} name="reason" className="block min-h-20 w-full rounded-xl border border-control px-3.5 py-3" />
                         </div>
                       </ConfirmAction>
                       {d.status !== "rejected" && (
@@ -305,7 +305,7 @@ export default async function ProviderAdminPage({ params }: { params: Promise<{ 
 
 function StatusCard({ label, status, labels, hint }: { label: string; status: string; labels: Record<string, string>; hint?: string }) {
   return (
-    <div className="rounded-2xl bg-white p-4 ring-1 ring-line">
+    <div className="rounded-2xl bg-surface p-4 ring-1 ring-line">
       <div className="text-sm text-muted">{label}</div>
       <div className="mt-1.5"><StatusBadge status={status} labels={labels} /></div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}

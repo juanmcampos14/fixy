@@ -24,7 +24,7 @@ export default async function MockCheckout({ params }: { params: Promise<{ ref: 
   return (
     <div className="min-h-dvh bg-[repeating-linear-gradient(135deg,#fff9f1_0_22px,#fdf1e2_22px_44px)]">
       <main id="contenido" className="mx-auto max-w-md px-4 py-10">
-        <div className="rounded-[28px] bg-white p-6 shadow-[var(--shadow-lift)] ring-1 ring-line">
+        <div className="rounded-[28px] bg-surface p-6 shadow-[var(--shadow-lift)] ring-1 ring-line">
           <div className="flex items-center justify-between">
             <Logo size="sm" />
             <span className="inline-flex items-center gap-1 rounded-full bg-warn-bg px-3 py-1 text-xs font-bold text-warn"><TriangleAlert className="h-3.5 w-3.5" aria-hidden />MODO DE PRUEBA</span>

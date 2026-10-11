@@ -25,10 +25,10 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
             <Logo size="sm" />
           </Link>
           {areas.length > 1 && (
-            <nav aria-label="Cambiar de panel" className="ml-1 flex rounded-full bg-white p-1 ring-1 ring-line">
+            <nav aria-label="Cambiar de panel" className="ml-1 flex rounded-full bg-surface p-1 ring-1 ring-line">
               {areas.map((a) => (
                 <Link key={a.key} href={a.href} aria-current={a.key === area ? "page" : undefined}
-                  className={cn("rounded-full px-3 py-1.5 text-[13px] font-semibold", a.key === area ? "bg-ink text-white" : "text-ink-2 hover:bg-ink/5")}>
+                  className={cn("rounded-full px-3 py-1.5 text-[13px] font-semibold", a.key === area ? "bg-ivory text-onyx" : "text-ink-2 hover:bg-ink/10")}>
                   {a.label}
                 </Link>
               ))}
@@ -36,18 +36,18 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
           )}
           <div className="ml-auto flex items-center gap-1">
             {area === "client" && !actor.providers.length && !canAccessAdmin(actor) && (
-              <Link href="/sumate" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/5 sm:inline">Ofrecé tus servicios</Link>
+              <Link href="/sumate" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/10 sm:inline">Ofrecé tus servicios</Link>
             )}
             {area === "provider" && (
-              <Link href="/solicitar" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/5 sm:inline">Pedir un servicio</Link>
+              <Link href="/solicitar" className="hidden rounded-full px-3 py-2 text-sm font-semibold text-fixy-800 hover:bg-ink/10 sm:inline">Pedir un servicio</Link>
             )}
-            <Link href="/notificaciones" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-ink/5" aria-label={`Notificaciones${unread ? `: ${unread} sin leer` : ""}`}>
+            <Link href="/notificaciones" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-ink/10" aria-label={`Notificaciones${unread ? `: ${unread} sin leer` : ""}`}>
               <Bell className="h-5 w-5" aria-hidden />
-              {unread > 0 && <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-spark px-1 text-[11px] font-bold text-ink">{unread > 99 ? "99+" : unread}</span>}
+              {unread > 0 && <span className="absolute right-1 top-1 grid min-w-5 place-items-center rounded-full bg-spark px-1 text-[11px] font-bold text-onyx">{unread > 99 ? "99+" : unread}</span>}
             </Link>
-            <Link href="/app/cuenta" className="hidden max-w-40 truncate rounded-full px-2 py-2 text-sm font-medium text-ink-2 hover:bg-ink/5 md:inline" title={`${actor.email} · Mi cuenta`}>{actor.fullName}</Link>
+            <Link href="/app/cuenta" className="hidden max-w-40 truncate rounded-full px-2 py-2 text-sm font-medium text-ink-2 hover:bg-ink/10 md:inline" title={`${actor.email} · Mi cuenta`}>{actor.fullName}</Link>
             <form action={logoutAction}>
-              <button className="grid h-10 w-10 place-items-center rounded-full hover:bg-ink/5" aria-label="Cerrar sesión" title="Cerrar sesión">
+              <button className="grid h-10 w-10 place-items-center rounded-full hover:bg-ink/10" aria-label="Cerrar sesión" title="Cerrar sesión">
                 <LogOut className="h-5 w-5" aria-hidden />
               </button>
             </form>

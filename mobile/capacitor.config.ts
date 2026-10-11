@@ -16,11 +16,11 @@ const config: CapacitorConfig = {
   },
   // La web reconoce la app (p. ej., para ocultar "Ingresar con Google": Google no permite iniciar sesión dentro de apps así).
   appendUserAgent: "FixyApp/1.0",
-  ios: { contentInset: "automatic", backgroundColor: "#fff9f1" },
-  android: { backgroundColor: "#fff9f1" },
+  ios: { contentInset: "automatic", backgroundColor: "#171721" },
+  android: { backgroundColor: "#171721" },
   plugins: {
-    SplashScreen: { launchShowDuration: 900, backgroundColor: "#fff9f1", showSpinner: false },
-    StatusBar: { style: "LIGHT", backgroundColor: "#fff9f1" },
+    SplashScreen: { launchShowDuration: 900, backgroundColor: "#171721", showSpinner: false },
+    StatusBar: { style: "DARK", backgroundColor: "#171721" },
   },
 };
 

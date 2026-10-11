@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
 export function Card({ className, as: As = "div", ...props }: React.HTMLAttributes<HTMLElement> & { as?: "div" | "section" | "article" | "li" }) {
-  return <As className={cn("rounded-[var(--radius-card)] bg-white p-5 shadow-[var(--shadow-card)] ring-1 ring-line sm:p-6", className)} {...props} />;
+  return <As className={cn("rounded-[var(--radius-card)] bg-surface p-5 sm:p-6", className)} {...props} />;
 }
 
 export function CardHeader({ title, description, action, className }: { title: React.ReactNode; description?: React.ReactNode; action?: React.ReactNode; className?: string }) {
@@ -22,7 +22,7 @@ export function PageHeader({ title, description, eyebrow, action, back }: { titl
       {back && <div className="mb-3">{back}</div>}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          {eyebrow && <div className="mb-1.5 text-sm font-semibold text-fixy-700">{eyebrow}</div>}
+          {eyebrow && <div className="mb-1.5 text-sm font-semibold text-fixy-800">{eyebrow}</div>}
           <h1 className="text-[1.65rem] font-extrabold text-ink sm:text-3xl">{title}</h1>
           {description && <p className="mt-1.5 max-w-2xl text-muted">{description}</p>}
         </div>
@@ -34,7 +34,7 @@ export function PageHeader({ title, description, eyebrow, action, back }: { titl
 
 export function Stat({ label, value, hint, tone = "default" }: { label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "default" | "ok" | "warn" }) {
   return (
-    <div className={cn("rounded-2xl p-4 ring-1", tone === "ok" ? "bg-ok-bg/60 ring-ok/10" : tone === "warn" ? "bg-warn-bg/70 ring-warn/10" : "bg-white ring-line")}>
+    <div className={cn("rounded-2xl p-4 ring-1", tone === "ok" ? "bg-ok-bg/60 ring-ok/10" : tone === "warn" ? "bg-warn-bg/70 ring-warn/10" : "bg-surface ring-line")}>
       <div className="text-sm text-muted">{label}</div>
       <div className="tabular mt-1 font-display text-2xl font-extrabold text-ink">{value}</div>
       {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}

@@ -428,21 +428,21 @@ async function Ledger({ userId, canAdjust }: { userId: string; canAdjust: boolea
           >
             <div className="mt-4 space-y-1.5">
               <label htmlFor="adj-job" className="block text-[15px] font-semibold">Trabajo</label>
-              <select id="adj-job" name="jobId" required defaultValue="" className="block h-12 w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5">
+              <select id="adj-job" name="jobId" required defaultValue="" className="block h-12 w-full rounded-xl border border-control bg-surface px-3.5">
                 <option value="" disabled>Elegí un trabajo</option>
                 {jobs.map((j) => <option key={j.id} value={j.id}>{j.code} · {j.provider_name}</option>)}
               </select>
             </div>
             <div className="mt-4 space-y-1.5">
               <label htmlFor="adj-dir" className="block text-[15px] font-semibold">Sentido</label>
-              <select id="adj-dir" name="direction" required defaultValue="credit" className="block h-12 w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5">
+              <select id="adj-dir" name="direction" required defaultValue="credit" className="block h-12 w-full rounded-xl border border-control bg-surface px-3.5">
                 <option value="credit">A favor del proveedor (sale de ingresos de plataforma)</option>
                 <option value="debit">A cargo del proveedor (vuelve a ingresos de plataforma)</option>
               </select>
             </div>
             <div className="mt-4 space-y-1.5">
               <label htmlFor="adj-amount" className="block text-[15px] font-semibold">Importe (ARS)</label>
-              <input id="adj-amount" name="amount" inputMode="decimal" required placeholder="12.500,50" className="block h-12 w-full rounded-xl border border-[#d3dfdc] px-3.5" />
+              <input id="adj-amount" name="amount" inputMode="decimal" required placeholder="12.500,50" className="block h-12 w-full rounded-xl border border-control px-3.5" />
             </div>
           </ConfirmAction>
         </Section>

@@ -9,7 +9,7 @@ export function RequestRow({ r }: { r: RequestListItem }) {
   const href = r.job_id ? `/app/trabajos/${r.job_id}` : `/app/solicitudes/${r.id}`;
   return (
     <li>
-      <Link href={href} className="flex items-center gap-4 rounded-2xl bg-white p-4 ring-1 ring-line transition hover:ring-fixy-500">
+      <Link href={href} className="flex items-center gap-4 rounded-2xl bg-surface p-4 ring-1 ring-line transition hover:ring-fixy-500">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={r.status} labels={requestStatusLabel} />
@@ -34,7 +34,7 @@ export function JobRow({ j, base = "/app/trabajos" }: { j: JobListItem; base?: s
     j.status === "completed" && !j.has_review ? "Calificá el trabajo" : null;
   return (
     <li>
-      <Link href={`${base}/${j.id}`} className="flex items-center gap-4 rounded-2xl bg-white p-4 ring-1 ring-line transition hover:ring-fixy-500">
+      <Link href={`${base}/${j.id}`} className="flex items-center gap-4 rounded-2xl bg-surface p-4 ring-1 ring-line transition hover:ring-fixy-500">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={j.status} labels={jobStatusLabel} />

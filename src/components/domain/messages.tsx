@@ -30,7 +30,7 @@ export function MessageThread({ conversationId, messages, path, disabled, emptyT
           <input type="hidden" name="conversationId" value={conversationId} />
           <input type="hidden" name="path" value={path} />
           <label htmlFor={`msg-${conversationId}`} className="sr-only">Escribí un mensaje</label>
-          <textarea id={`msg-${conversationId}`} name="body" rows={2} maxLength={4000} placeholder="Escribí un mensaje…" className="block w-full rounded-2xl border border-[#d3dfdc] px-4 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+          <textarea id={`msg-${conversationId}`} name="body" rows={2} maxLength={4000} placeholder="Escribí un mensaje…" className="block w-full rounded-2xl border border-control px-4 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted hover:text-ink">
               <Paperclip className="h-4 w-4" aria-hidden /> Adjuntar

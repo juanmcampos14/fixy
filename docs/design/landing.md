@@ -387,3 +387,13 @@ Mercury's type system uses two custom faces — arcadia for UI/body and arcadiaD
   --radius-3xl-2: 40px;
 }
 ```
+
+## Alcance: todo el sitio (octubre 2026)
+El sistema dejó de ser solo de la landing. Los tokens de `src/app/globals.css` conservan su nombre y cambiaron de valor, así que paneles
+(cliente, profesional, operación), ingreso, registro, "Pedir un servicio", perfiles y legales usan el mismo lienzo ónix:
+- `cream` = lienzo, `surface` = tarjeta grafito, `cream-2` = relieve/hover, `line` y `control` = bordes.
+- `ink` / `ink-2` / `muted` = marfil y grises claros. `fixy-700` = cobalto (acción), `fixy-800` = acento como texto.
+- Estados (ok, aviso, error, info): fondo oscuro teñido + texto claro, siempre con ícono o texto.
+- Pesos: los títulos van en 480 y el resto nunca pasa de 500. Sin sombras salvo en lo que flota.
+- No usar `bg-white`, `text-white` sobre superficies ni colores fijos: siempre tokens. Texto oscuro sobre color vivo: `text-onyx`.
+El verde Fixy vive solo en el personaje y el logo.

@@ -100,7 +100,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 description="El cliente revisa y da su conformidad. Si hay un adicional pendiente, retiralo o esperá la respuesta antes." hidden={{ jobId: id, step: "finish" }}>
                 <div className="mt-4 space-y-1.5">
                   <label htmlFor="finish-note" className="block text-[15px] font-semibold">Nota para el cliente <span className="text-sm font-normal text-muted">(opcional)</span></label>
-                  <textarea id="finish-note" name="note" maxLength={1000} className="block min-h-24 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+                  <textarea id="finish-note" name="note" maxLength={1000} className="block min-h-24 w-full rounded-xl border border-control px-3.5 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
                 </div>
               </ConfirmAction>
             )}
@@ -145,7 +145,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                   <legend className="mb-1.5 text-[15px] font-semibold">¿De qué momento son?</legend>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(EVIDENCE_KIND_LABEL).map(([k, l]) => (
-                      <label key={k} className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-white px-4 text-sm font-semibold ring-1 ring-[#d3dfdc] has-[:checked]:bg-fixy-700 has-[:checked]:text-white has-[:checked]:ring-fixy-700 has-[:focus-visible]:ring-3">
+                      <label key={k} className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-surface px-4 text-sm font-semibold ring-1 ring-control has-[:checked]:bg-fixy-700 has-[:checked]:text-white has-[:checked]:ring-fixy-700 has-[:focus-visible]:ring-3">
                         <input type="radio" name="kind" value={k} defaultChecked={k === (d.job.status === "in_progress" || d.job.status === "pending_approval" ? "after" : "before")} className="sr-only" />{l}
                       </label>
                     ))}
@@ -286,7 +286,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             <CardHeader title="Dónde" />
             {d.property ? (
               <div className="space-y-2 text-[15px]">
-                <p className="flex gap-2 font-semibold"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />{d.property.address_line}{d.property.address_extra ? `, ${d.property.address_extra}` : ""}</p>
+                <p className="flex gap-2 font-semibold"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />{d.property.address_line}{d.property.address_extra ? `, ${d.property.address_extra}` : ""}</p>
                 <p className="text-muted">{d.property.zone_name} · {propertyKindLabel[d.property.kind] ?? d.property.kind}</p>
                 {(d.property.contact_name || d.property.contact_phone) && <p>Contacto: {[d.property.contact_name, d.property.contact_phone].filter(Boolean).join(" · ")}</p>}
                 {d.property.access_notes && <p>Acceso: {d.property.access_notes}</p>}
@@ -399,7 +399,7 @@ function StartForm({ jobId, variant = "primary" }: { jobId: string; variant?: "p
       <div>
         <label htmlFor={`code-${jobId}`} className="block text-sm font-semibold">Código de visita</label>
         <input id={`code-${jobId}`} name="visitCode" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required placeholder="0000"
-          className="mt-1 block h-11 w-28 rounded-xl border border-[#d3dfdc] px-3 text-center text-lg tracking-[0.3em] focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+          className="mt-1 block h-11 w-28 rounded-xl border border-control px-3 text-center text-lg tracking-[0.3em] focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
       </div>
       <SubmitButton variant={variant} pendingText="Verificando…">Llegué: empezar</SubmitButton>
       <p className="w-full text-xs text-muted">Pedíselo al cliente al llegar: lo ve en el detalle del trabajo en Fixy.</p>

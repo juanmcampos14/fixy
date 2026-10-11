@@ -23,7 +23,7 @@ export function AccessRequirementsView({ req, notes, className, audience }: { re
             const a = APPLIES[r.appliesTo];
             return (
               <li key={i} className="flex gap-3 px-4 py-3">
-                <a.Icon className="mt-0.5 h-5 w-5 shrink-0 text-fixy-700" aria-hidden />
+                <a.Icon className="mt-0.5 h-5 w-5 shrink-0 text-fixy-800" aria-hidden />
                 <div className="min-w-0">
                   <p className="font-semibold">{r.title}{!r.mandatory && <span className="ml-2 text-xs font-medium text-muted">(recomendado)</span>}</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted">{REQUIREMENT_KIND_LABEL[r.kind]} · {a.label}</p>
@@ -34,9 +34,9 @@ export function AccessRequirementsView({ req, notes, className, audience }: { re
           })}
         </ul>
       )}
-      {req?.allowedHours && <p className="flex items-start gap-2 text-sm"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-fixy-700" aria-hidden /><span><strong>Horarios:</strong> {req.allowedHours}</span></p>}
-      {req?.howToRegister && <p className="flex items-start gap-2 text-sm"><FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-fixy-700" aria-hidden /><span><strong>Cómo se gestiona el ingreso:</strong> {req.howToRegister}</span></p>}
-      {notes && <p className="flex items-start gap-2 text-sm"><Info className="mt-0.5 h-4 w-4 shrink-0 text-fixy-700" aria-hidden /><span><strong>Aclaraciones del cliente:</strong> {notes}</span></p>}
+      {req?.allowedHours && <p className="flex items-start gap-2 text-sm"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-fixy-800" aria-hidden /><span><strong>Horarios:</strong> {req.allowedHours}</span></p>}
+      {req?.howToRegister && <p className="flex items-start gap-2 text-sm"><FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-fixy-800" aria-hidden /><span><strong>Cómo se gestiona el ingreso:</strong> {req.howToRegister}</span></p>}
+      {notes && <p className="flex items-start gap-2 text-sm"><Info className="mt-0.5 h-4 w-4 shrink-0 text-fixy-800" aria-hidden /><span><strong>Aclaraciones del cliente:</strong> {notes}</span></p>}
       {req && req.missingInfo.length > 0 && (
         <div className="rounded-xl bg-warn-bg px-3 py-2 text-sm text-ink">
           <p className="flex items-center gap-1.5 font-semibold"><CircleAlert className="h-4 w-4" aria-hidden />Para confirmar</p>

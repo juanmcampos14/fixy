@@ -98,7 +98,7 @@ export default async function AdminReviewDispute({ params }: { params: Promise<{
                     <option value="other">Otra</option>
                   </Select>
                   <label htmlFor="ad-ps" className="block text-[15px] font-semibold">Mensaje para el profesional</label>
-                  <textarea id="ad-ps" name="providerSummary" required minLength={5} maxLength={500} placeholder="Neutral y sin datos que identifiquen al cliente." className="block min-h-20 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-2" />
+                  <textarea id="ad-ps" name="providerSummary" required minLength={5} maxLength={500} placeholder="Neutral y sin datos que identifiquen al cliente." className="block min-h-20 w-full rounded-xl border border-control px-3.5 py-2" />
                 </div>
               </ConfirmAction>
             </Card>

@@ -93,7 +93,7 @@ export default async function ReviewInquiry({ params }: { params: Promise<{ id: 
               <div className="mt-4 space-y-3">
                 <RatingInput legend="Calificación" />
                 <label htmlFor="rd-edit" className="block text-[15px] font-semibold">Comentario</label>
-                <textarea id="rd-edit" name="comment" defaultValue={review.comment} maxLength={2000} className="block min-h-24 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-3" />
+                <textarea id="rd-edit" name="comment" defaultValue={review.comment} maxLength={2000} className="block min-h-24 w-full rounded-xl border border-control px-3.5 py-3" />
               </div>
             </ConfirmAction>
             <ConfirmAction action={reviewDisputeDecideAction} variant="danger" label="Retirarla" title="Retirar tu reseña" confirmLabel="Retirar reseña" hidden={{ disputeId: id, choice: "withdraw" }}

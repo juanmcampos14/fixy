@@ -22,9 +22,9 @@ export default async function Properties() {
         <ul className="grid gap-4 sm:grid-cols-2">
           {props.map((p) => (
             <li key={p.id}>
-              <Link href={`/app/propiedades/${p.id}`} className="block h-full rounded-[var(--radius-card)] bg-white p-5 ring-1 ring-line transition hover:ring-fixy-500">
+              <Link href={`/app/propiedades/${p.id}`} className="block h-full rounded-[var(--radius-card)] bg-surface p-5 ring-1 ring-line transition hover:ring-fixy-500">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-fixy-50 text-fixy-700">{p.organization_id ? <Building2 className="h-5 w-5" aria-hidden /> : <House className="h-5 w-5" aria-hidden />}</span>
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-fixy-50 text-fixy-800">{p.organization_id ? <Building2 className="h-5 w-5" aria-hidden /> : <House className="h-5 w-5" aria-hidden />}</span>
                   <div className="min-w-0">
                     <p className="truncate font-bold">{p.label}</p>
                     <p className="truncate text-sm text-muted">{propertyKindLabel[p.kind]} · {p.zone_name}{p.org_name ? ` · ${p.org_name}` : ""}</p>

@@ -39,7 +39,7 @@ export function Timeline({ events, kind = "job", audience = "client" }: { events
         const title = e.action === "status" && e.to_state ? labels[e.to_state] ?? e.to_state : ACTION_LABEL[e.action] ?? e.action;
         return (
           <li key={e.id} className="relative">
-            <span className="absolute -left-[27px] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-fixy-500 ring-1 ring-fixy-200" aria-hidden />
+            <span className="absolute -left-[27px] top-1.5 h-3 w-3 rounded-full border-2 border-surface bg-fixy-500 ring-1 ring-fixy-200" aria-hidden />
             <p className="font-semibold leading-snug">{title}</p>
             <p className="text-xs text-muted">
               {formatDateTime(e.created_at)}

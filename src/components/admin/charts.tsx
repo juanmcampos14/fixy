@@ -13,7 +13,7 @@ export function WeeklyBars({ title, points, format = (n) => n.toLocaleString("es
   const total = points.reduce((s, p) => s + p.value, 0);
   const last = points[points.length - 1]?.value ?? 0;
   return (
-    <figure className={cn("rounded-[var(--radius-card)] bg-white p-5 ring-1 ring-line", className)}>
+    <figure className={cn("rounded-[var(--radius-card)] bg-surface p-5 ring-1 ring-line", className)}>
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="font-bold text-ink">{title}</span>
         <span className="text-sm text-muted">Última semana: <strong className="tabular text-ink">{format(last)}</strong> · 12 semanas: <span className="tabular">{format(total)}</span></span>

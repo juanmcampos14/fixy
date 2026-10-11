@@ -253,7 +253,7 @@ export default function FixyStage() {
           <p
             key={bubble.key}
             role="status"
-            className="fixy-bubble absolute w-max max-w-[15rem] rounded-2xl bg-white px-4 py-2.5 text-[15px] font-semibold leading-snug text-ink shadow-[var(--shadow-lift)] ring-1 ring-line"
+            className="fixy-bubble absolute w-max max-w-[15rem] rounded-2xl bg-ivory px-4 py-2.5 text-[15px] font-semibold leading-snug text-onyx shadow-[var(--shadow-lift)] ring-1 ring-line"
             style={{ left: "var(--bubble-shift)", bottom: "calc(var(--fixy-size) * 1.02)", transform: "translateX(-50%)" }}
           >
             {bubble.text}

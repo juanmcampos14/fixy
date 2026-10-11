@@ -98,7 +98,7 @@ export function PhotoPicker({ name, max = 6, allowPdf = false, label = "Fotos", 
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); void add(e.dataTransfer.files); }}
-        className={cn("rounded-2xl border border-dashed p-3 transition", drag ? "border-fixy-600 bg-fixy-50" : "border-[#c6d4d1] bg-white")}
+        className={cn("rounded-2xl border border-dashed p-3 transition", drag ? "border-fixy-600 bg-fixy-50" : "border-control bg-surface")}
       >
         {items.length > 0 && (
           <ul className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -110,7 +110,7 @@ export function PhotoPicker({ name, max = 6, allowPdf = false, label = "Fotos", 
                   <span className="flex aspect-square flex-col items-center justify-center gap-1 p-2 text-center text-xs text-muted"><FileText className="h-6 w-6" aria-hidden /><span className="line-clamp-2 break-all">{i.file.name}</span></span>
                 )}
                 <button type="button" onClick={() => remove(i.id)} aria-label={`Quitar ${i.file.name}`}
-                  className="absolute right-1 top-1 grid h-8 w-8 place-items-center rounded-full bg-ink/70 text-white hover:bg-ink">
+                  className="absolute right-1 top-1 grid h-8 w-8 place-items-center rounded-full bg-onyx/70 text-white hover:bg-onyx">
                   <X className="h-4 w-4" aria-hidden />
                 </button>
               </li>
@@ -122,7 +122,7 @@ export function PhotoPicker({ name, max = 6, allowPdf = false, label = "Fotos", 
             <ImagePlus className="h-4 w-4" aria-hidden />{items.length ? "Sumar más" : allowPdf ? "Elegir fotos o PDF" : "Elegir fotos"}
             <input type="file" accept={accept} multiple className="sr-only" disabled={items.length >= max} onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
           </label>
-          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-4 font-semibold text-fixy-800 ring-1 ring-[#d3dfdc] hover:ring-fixy-500 focus-within:ring-3 focus-within:ring-fixy-500/40 sm:hidden">
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-surface px-4 font-semibold text-fixy-800 ring-1 ring-control hover:ring-fixy-500 focus-within:ring-3 focus-within:ring-fixy-500/40 sm:hidden">
             <Camera className="h-4 w-4" aria-hidden />Sacar foto
             <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={items.length >= max} onChange={(e) => { void add(e.target.files); e.target.value = ""; }} />
           </label>

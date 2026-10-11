@@ -119,7 +119,7 @@ export default async function RequestAdminPage({ params }: { params: Promise<{ i
               >
                 <div className="mt-4 space-y-1.5">
                   <label htmlFor="cat-select" className="block text-[15px] font-semibold">Categoría</label>
-                  <select id="cat-select" name="categoryId" required defaultValue="" className="block h-12 w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5">
+                  <select id="cat-select" name="categoryId" required defaultValue="" className="block h-12 w-full rounded-xl border border-control bg-surface px-3.5">
                     <option value="" disabled>Elegí una categoría</option>
                     {cats.filter((c) => c.active && !c.requires_review).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
 const control =
-  "block w-full rounded-xl border border-[#d3dfdc] bg-white px-3.5 text-[16px] text-ink placeholder:text-[#8a9a9e] transition-colors focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25 disabled:bg-cream-2 aria-[invalid=true]:border-danger";
+  "block w-full rounded-xl border border-control bg-cream px-3.5 text-[16px] text-ink placeholder:text-muted/70 transition-colors focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25 disabled:opacity-60 aria-[invalid=true]:border-danger";
 
 export function Field({ label, htmlFor, hint, error, required, children, className }: { label: React.ReactNode; htmlFor: string; hint?: React.ReactNode; error?: string | string[]; required?: boolean; children: React.ReactNode; className?: string }) {
   const err = Array.isArray(error) ? error[0] : error;
@@ -32,7 +32,7 @@ export function Textarea({ className, invalid, ...props }: React.TextareaHTMLAtt
 
 export function Select({ className, invalid, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
   return (
-    <select aria-invalid={invalid || undefined} className={cn(control, "h-12 appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22%2315343b%22><path d=%22M5.5 7.5 10 12l4.5-4.5%22 stroke=%22%2315343b%22 stroke-width=%221.8%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>')] bg-[length:20px] bg-[right_12px_center] bg-no-repeat pr-10", className)} {...props}>
+    <select aria-invalid={invalid || undefined} className={cn(control, "h-12 appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22%23c3c3cc%22><path d=%22M5.5 7.5 10 12l4.5-4.5%22 stroke=%22%23c3c3cc%22 stroke-width=%221.8%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>')] bg-[length:20px] bg-[right_12px_center] bg-no-repeat pr-10", className)} {...props}>
       {children}
     </select>
   );
@@ -41,7 +41,7 @@ export function Select({ className, invalid, children, ...props }: React.SelectH
 export function Checkbox({ label, className, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: React.ReactNode }) {
   return (
     <label className={cn("flex cursor-pointer items-start gap-3 text-[15px]", className)}>
-      <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-[#c6d4d1] accent-fixy-700" {...props} />
+      <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-control accent-fixy-700" {...props} />
       <span>{label}</span>
     </label>
   );
@@ -51,7 +51,7 @@ export function ChoiceChip({ name, value, label, type = "radio", defaultChecked,
   return (
     <label className="cursor-pointer">
       <input type={type} name={name} value={value} defaultChecked={defaultChecked} required={required} className="peer sr-only" />
-      <span className="inline-flex min-h-11 items-center rounded-full border border-[#d3dfdc] bg-white px-4 text-[15px] font-medium text-ink transition-colors peer-checked:border-fixy-700 peer-checked:bg-fixy-50 peer-checked:text-fixy-800 peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40 hover:border-fixy-500">
+      <span className="inline-flex min-h-11 items-center rounded-full border border-control bg-surface px-4 text-[15px] font-medium text-ink transition-colors peer-checked:border-fixy-700 peer-checked:bg-fixy-50 peer-checked:text-fixy-800 peer-focus-visible:ring-3 peer-focus-visible:ring-fixy-500/40 hover:border-fixy-500">
         {label}
       </span>
     </label>

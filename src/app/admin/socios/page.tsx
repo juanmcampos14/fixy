@@ -45,10 +45,10 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
         title="Panel del negocio"
         description={`Últimos ${days} días comparados con los ${days} anteriores. Importes en pesos; los cobros de modo de prueba se informan aparte.`}
         action={
-          <nav aria-label="Período" className="flex rounded-full bg-white p-1 ring-1 ring-line">
+          <nav aria-label="Período" className="flex rounded-full bg-surface p-1 ring-1 ring-line">
             {PERIODS.map((p) => (
               <Link key={p} href={`/admin/socios?dias=${p}`} aria-current={p === days ? "page" : undefined}
-                className={cn("rounded-full px-3 py-1.5 text-sm font-semibold", p === days ? "bg-ink text-white" : "text-ink-2 hover:bg-ink/5")}>
+                className={cn("rounded-full px-3 py-1.5 text-sm font-semibold", p === days ? "bg-ivory text-onyx" : "text-ink-2 hover:bg-ink/10")}>
                 {p === 365 ? "12 meses" : `${p} días`}
               </Link>
             ))}

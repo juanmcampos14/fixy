@@ -31,7 +31,7 @@ export default async function Notifications() {
                 </span>
               </>
             );
-            return <li key={n.id}>{n.link ? <Link href={n.link} className="flex gap-3 rounded-2xl bg-white p-4 ring-1 ring-line hover:ring-fixy-500">{inner}</Link> : <div className="flex gap-3 rounded-2xl bg-white p-4 ring-1 ring-line">{inner}</div>}</li>;
+            return <li key={n.id}>{n.link ? <Link href={n.link} className="flex gap-3 rounded-2xl bg-surface p-4 ring-1 ring-line hover:ring-fixy-500">{inner}</Link> : <div className="flex gap-3 rounded-2xl bg-surface p-4 ring-1 ring-line">{inner}</div>}</li>;
           })}
         </ul>
       )}

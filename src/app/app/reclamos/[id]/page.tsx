@@ -50,7 +50,7 @@ export default async function ClientDispute({ params }: { params: Promise<{ id: 
             <ActionForm action={replyDisputeAction} className="mt-4 space-y-2" resetOnSuccess>
               <input type="hidden" name="disputeId" value={id} />
               <label htmlFor="body" className="sr-only">Respuesta</label>
-              <textarea id="body" name="body" required rows={3} maxLength={4000} placeholder="Sumá información o respondé al equipo…" className="block w-full rounded-2xl border border-[#d3dfdc] px-4 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
+              <textarea id="body" name="body" required rows={3} maxLength={4000} placeholder="Sumá información o respondé al equipo…" className="block w-full rounded-2xl border border-control px-4 py-3 focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25" />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <input type="file" name="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="text-sm" aria-label="Adjuntar evidencia" />
                 <SubmitButton size="sm">Responder</SubmitButton>

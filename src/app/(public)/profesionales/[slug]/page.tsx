@@ -43,7 +43,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
           Este es un perfil ficticio de demostración. Los datos, fotos y reseñas no corresponden a una persona o empresa real.
         </p>
       )}
-      <header className="grid gap-6 rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line sm:p-8 md:grid-cols-[1fr_auto] md:items-start">
+      <header className="grid gap-6 rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line sm:p-8 md:grid-cols-[1fr_auto] md:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="neutral" icon={false}>
@@ -67,7 +67,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
               {SOCIAL_NETWORKS.filter((n) => p.social_links?.[n.key]).map((n) => (
                 <li key={n.key}>
                   <a href={p.social_links[n.key]} target="_blank" rel="nofollow ugc noopener noreferrer"
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-semibold text-fixy-800 ring-1 ring-line hover:ring-fixy-500">
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-surface px-3.5 text-sm font-semibold text-fixy-800 ring-1 ring-line hover:ring-fixy-500">
                     <ExternalLink className="h-3.5 w-3.5" aria-hidden />{n.label}<span className="sr-only"> de {p.display_name} (se abre en otra pestaña)</span>
                   </a>
                 </li>
@@ -76,7 +76,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
           )}
         </div>
         <div className="md:w-56">
-          <div className="mb-3 rounded-2xl bg-white p-4 text-center ring-1 ring-line">
+          <div className="mb-3 rounded-2xl bg-surface p-4 text-center ring-1 ring-line">
             <p className="text-xs text-muted">Visita</p>
             <p className="tabular font-display text-2xl font-extrabold">{data.visit.visit_fee_minor > 0 ? formatMoney(data.visit.visit_fee_minor) : "Sin cargo"}</p>
             {data.visit.visit_fee_minor > 0 && data.visit.visit_fee_credited && <p className="text-xs text-ok">Se descuenta si contratás el arreglo</p>}
@@ -89,7 +89,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_300px]">
         <div className="min-w-0 space-y-6">
           {data.priceRefs.length > 0 && (
-            <section aria-labelledby="pr-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+            <section aria-labelledby="pr-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
               <h2 id="pr-t" className="text-lg font-bold">Precios de referencia</h2>
               <p className="mt-0.5 text-sm text-muted">Orientativos: el precio final se confirma después de ver el trabajo y lo aprobás en la app.</p>
               <ul className="mt-3 divide-y divide-line">
@@ -103,15 +103,15 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             </section>
           )}
           {portfolio.length > 0 && (
-            <section aria-labelledby="pf-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+            <section aria-labelledby="pf-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
               <h2 id="pf-t" className="text-lg font-bold">Trabajos realizados</h2>
               <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {portfolio.map((x) => (
                   <li key={x.id}>
                     <figure>
                       {x.isPdf ? (
-                        <a href={x.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white p-3 text-center text-sm text-ink-2 ring-1 ring-line hover:ring-fixy-500">
-                          <FileText className="h-8 w-8 text-fixy-700" aria-hidden /><span className="line-clamp-2 break-all">{x.caption || "Ver PDF"}</span>
+                        <a href={x.url} target="_blank" rel="noreferrer" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-surface p-3 text-center text-sm text-ink-2 ring-1 ring-line hover:ring-fixy-500">
+                          <FileText className="h-8 w-8 text-fixy-800" aria-hidden /><span className="line-clamp-2 break-all">{x.caption || "Ver PDF"}</span>
                         </a>
                       ) : (
                         <img src={x.url} alt={x.caption || `Trabajo de ${p.display_name}`} className="aspect-[4/3] w-full rounded-2xl object-cover ring-1 ring-line" loading="lazy" />
@@ -124,7 +124,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             </section>
           )}
 
-          <section aria-labelledby="rv-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+          <section aria-labelledby="rv-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
             <h2 id="rv-t" className="text-lg font-bold">Reseñas</h2>
             <p className="mt-0.5 text-sm text-muted">Solo de clientes con trabajos completados en Fixy.</p>
             {reviews.length === 0 ? (
@@ -152,7 +152,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
         </div>
 
         <aside className="space-y-6">
-          <section aria-labelledby="vf-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+          <section aria-labelledby="vf-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
             <h2 id="vf-t" className="text-lg font-bold">Verificaciones</h2>
             {verifications.length === 0 ? (
               <p className="mt-2 text-[15px] text-muted">Sin verificaciones específicas para mostrar.</p>
@@ -166,7 +166,7 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             <p className="mt-3 text-xs text-muted">Mostramos solo lo que el equipo de Fixy revisó. No incluye antecedentes ni seguros.</p>
           </section>
 
-          <section aria-labelledby="sp-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
+          <section aria-labelledby="sp-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
             <h2 id="sp-t" className="text-lg font-bold">Especialidades</h2>
             <ul className="mt-3 flex flex-wrap gap-2">
               {categories.map((c) => (
@@ -177,8 +177,8 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
             </ul>
           </section>
 
-          <section aria-labelledby="zn-t" className="rounded-[var(--radius-card)] bg-white p-6 ring-1 ring-line">
-            <h2 id="zn-t" className="flex items-center gap-2 text-lg font-bold"><MapPin className="h-5 w-5 text-fixy-700" aria-hidden /> Zonas de cobertura</h2>
+          <section aria-labelledby="zn-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
+            <h2 id="zn-t" className="flex items-center gap-2 text-lg font-bold"><MapPin className="h-5 w-5 text-fixy-800" aria-hidden /> Zonas de cobertura</h2>
             {zones.length === 0 ? <p className="mt-2 text-muted">Sin zonas informadas.</p> : (
               <dl className="mt-3 space-y-3 text-[15px]">
                 {groupZones(zones).map(([region, zs]) => (

@@ -17,7 +17,7 @@ export async function GoogleButton({ next, signup }: { next?: string; signup?: b
     <div className="mb-5">
       {/* Navegación completa (no prefetch): el flujo sale a Google y vuelve. */}
       <a href={`/auth/google${next ? `?next=${encodeURIComponent(next)}` : ""}`}
-        className="flex h-12 w-full items-center justify-center gap-3 rounded-full bg-white px-5 font-semibold text-ink ring-1 ring-[#d3dfdc] transition hover:bg-cream focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-fixy-500/40">
+        className="flex h-12 w-full items-center justify-center gap-3 rounded-full bg-surface px-5 font-semibold text-ink ring-1 ring-control transition hover:bg-cream focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-fixy-500/40">
         <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden>
           <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
           <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />

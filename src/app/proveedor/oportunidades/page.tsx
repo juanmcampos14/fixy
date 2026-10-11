@@ -54,7 +54,7 @@ function Section({ title, rows, empty }: { title: string; rows: Awaited<ReturnTy
           {rows.map((r) => (
             <Card as="li" key={r.id} className="p-0 sm:p-0">
               <Link href={`/proveedor/oportunidades/${r.id}`} className="flex items-start gap-3 rounded-[var(--radius-card)] p-4 hover:bg-cream/40 sm:p-5">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-fixy-50 text-fixy-700"><CategoryIcon icon={r.category_icon ?? "wrench"} className="h-5 w-5" /></span>
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-fixy-50 text-fixy-800"><CategoryIcon icon={r.category_icon ?? "wrench"} className="h-5 w-5" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{r.title}</span>

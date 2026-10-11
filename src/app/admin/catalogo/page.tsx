@@ -45,7 +45,7 @@ export default async function CatalogAdmin() {
               <li key={cat.id}>
                 <details className="group rounded-2xl ring-1 ring-line open:bg-cream/30">
                   <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fixy-50 text-fixy-700"><CategoryIcon icon={cat.icon} className="h-5 w-5" /></span>
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fixy-50 text-fixy-800"><CategoryIcon icon={cat.icon} className="h-5 w-5" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold">{cat.name} <span className="text-sm font-normal text-muted">· {cat.slug}</span></span>
                       <span className="mt-0.5 flex flex-wrap gap-1">
@@ -66,7 +66,7 @@ export default async function CatalogAdmin() {
                       <ul className="space-y-2">
                         {c.services.filter((s) => s.category_id === cat.id).map((s) => (
                           <li key={s.id}>
-                            <details className="rounded-xl bg-white ring-1 ring-line">
+                            <details className="rounded-xl bg-surface ring-1 ring-line">
                               <summary className="flex min-h-12 cursor-pointer flex-wrap items-center gap-2 px-3 py-2">
                                 <span className="font-semibold">{s.name}</span>
                                 <Badge tone="neutral" icon={false}>{modeLabel[s.pricing_mode]}</Badge>
@@ -80,7 +80,7 @@ export default async function CatalogAdmin() {
                         ))}
                       </ul>
                       {canEdit && (
-                        <details className="mt-2 rounded-xl bg-white border border-dashed border-[#d5e2df]">
+                        <details className="mt-2 rounded-xl bg-surface border border-dashed border-control">
                           <summary className="min-h-12 cursor-pointer px-3 py-3 font-semibold text-fixy-800">Agregar servicio</summary>
                           <div className="border-t border-line p-3"><ServiceForm categoryId={cat.id} canEdit /></div>
                         </details>
@@ -92,7 +92,7 @@ export default async function CatalogAdmin() {
                       <ul className="space-y-2">
                         {c.questions.filter((q) => q.category_id === cat.id).map((q) => (
                           <li key={q.id}>
-                            <details className="rounded-xl bg-white ring-1 ring-line">
+                            <details className="rounded-xl bg-surface ring-1 ring-line">
                               <summary className="flex min-h-12 cursor-pointer flex-wrap items-center gap-2 px-3 py-2">
                                 <span className="font-semibold">{q.label}</span>
                                 <code className="text-xs text-muted">{q.key}</code>
@@ -120,7 +120,7 @@ export default async function CatalogAdmin() {
                         ))}
                       </ul>
                       {canEdit && (
-                        <details className="mt-2 rounded-xl bg-white border border-dashed border-[#d5e2df]">
+                        <details className="mt-2 rounded-xl bg-surface border border-dashed border-control">
                           <summary className="min-h-12 cursor-pointer px-3 py-3 font-semibold text-fixy-800">Agregar pregunta</summary>
                           <div className="border-t border-line p-3"><QuestionForm categoryId={cat.id} canEdit /></div>
                         </details>
@@ -132,7 +132,7 @@ export default async function CatalogAdmin() {
             ))}
           </ul>
           {canEdit && (
-            <details className="mt-4 rounded-2xl border border-dashed border-[#d5e2df]">
+            <details className="mt-4 rounded-2xl border border-dashed border-control">
               <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-fixy-800">Nueva categoría</summary>
               <div className="border-t border-line p-4"><CategoryForm canEdit /></div>
             </details>
@@ -168,7 +168,7 @@ export default async function CatalogAdmin() {
             </tbody>
           </DataTable>
           {canEdit && (
-            <details className="mt-4 rounded-2xl border border-dashed border-[#d5e2df]">
+            <details className="mt-4 rounded-2xl border border-dashed border-control">
               <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-fixy-800">Agregar zona</summary>
               <ActionForm action={createZoneAction} className="grid gap-4 border-t border-line p-4 sm:grid-cols-2" resetOnSuccess>
                 <Field label="Nombre" htmlFor="z-name" required><Input id="z-name" name="name" required maxLength={80} placeholder="Ej.: Caballito" /></Field>

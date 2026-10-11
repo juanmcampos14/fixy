@@ -15,7 +15,7 @@ export function StrengthMeter({ score, level, items, max = 4, compact, links = t
           <p className="text-sm font-semibold text-muted">Fuerza de tu perfil</p>
           <p className="text-2xl font-extrabold tabular">{score}% <span className="text-base font-semibold text-ink-2">· {level}</span></p>
         </div>
-        <TrendingUp className="h-7 w-7 text-fixy-700" aria-hidden />
+        <TrendingUp className="h-7 w-7 text-fixy-800" aria-hidden />
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-fixy-50 ring-1 ring-line" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label="Fuerza del perfil">
         <div className={cn("h-full rounded-full transition-all duration-500", tone)} style={{ width: `${Math.max(score, 3)}%` }} />

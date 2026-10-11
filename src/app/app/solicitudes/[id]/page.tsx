@@ -232,7 +232,7 @@ export default async function RequestDetail({ params, searchParams }: { params: 
                     </ConfirmAction>
                     <ConfirmAction action={rejectQuoteAction} variant="secondary" label="No me interesa" title="Descartar este presupuesto" description="Le avisamos al profesional. Podés contarle por qué (opcional)." confirmLabel="Descartar" hidden={{ quoteId: q.id, requestId: id }}>
                       <label htmlFor={`rr-${q.id}`} className="mt-4 block text-[15px] font-semibold">Motivo (opcional)</label>
-                      <textarea id={`rr-${q.id}`} name="reason" className="mt-1 block min-h-20 w-full rounded-xl border border-[#d3dfdc] px-3.5 py-2" />
+                      <textarea id={`rr-${q.id}`} name="reason" className="mt-1 block min-h-20 w-full rounded-xl border border-control px-3.5 py-2" />
                     </ConfirmAction>
                   </div>
                   {thread && (

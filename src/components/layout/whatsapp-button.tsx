@@ -13,7 +13,7 @@ function WhatsAppIcon({ className }: { className?: string }) {
 }
 
 /** Botón flotante: el asistente de Fixy por WhatsApp, y la atención de una persona por mail. */
-export function WhatsAppButton({ tone = "brand" }: { tone?: "brand" | "dark" } = {}) {
+export function WhatsAppButton() {
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -32,10 +32,10 @@ export function WhatsAppButton({ tone = "brand" }: { tone?: "brand" | "dark" } =
   return (
     <div ref={panel} className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6 print:hidden">
       {open && (
-        <div id="contacto-fixy" role="dialog" aria-label="Contactar a Fixy" className="w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-white p-4 shadow-xl ring-1 ring-line">
+        <div id="contacto-fixy" role="dialog" aria-label="Contactar a Fixy" className="w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-obsidian p-4 shadow-[var(--shadow-lift)]">
           <div className="flex items-start justify-between gap-3">
             <p className="font-display text-lg font-extrabold">¿Te ayudamos?</p>
-            <button type="button" onClick={() => setOpen(false)} className="-m-1 rounded-full p-1 text-muted hover:bg-ink/5" aria-label="Cerrar">
+            <button type="button" onClick={() => setOpen(false)} className="-m-1 rounded-full p-1 text-muted hover:bg-ink/10" aria-label="Cerrar">
               <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
@@ -44,7 +44,7 @@ export function WhatsAppButton({ tone = "brand" }: { tone?: "brand" | "dark" } =
             href={whatsappUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-3 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 font-semibold text-ink hover:brightness-95"
+            className="mt-3 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 font-semibold text-onyx hover:brightness-95"
           >
             <WhatsAppIcon className="h-5 w-5" />
             Escribir por WhatsApp
@@ -64,9 +64,7 @@ export function WhatsAppButton({ tone = "brand" }: { tone?: "brand" | "dark" } =
         aria-expanded={open}
         aria-controls="contacto-fixy"
         aria-label={open ? "Cerrar contacto" : "Contactar a Fixy por WhatsApp"}
-        className={tone === "dark"
-          ? "flex h-14 w-14 items-center justify-center rounded-full bg-obsidian text-ivory ring-1 ring-slate-line/50 transition hover:bg-[#30303f] focus-visible:outline-2 focus-visible:outline-ivory"
-          : "flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg ring-4 ring-white transition hover:scale-105 focus-visible:outline-none focus-visible:ring-fixy-500/60"}
+        className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-obsidian text-ivory ring-1 ring-slate-line/50 transition-colors hover:bg-[#30303f] focus-visible:outline-2 focus-visible:outline-ivory"
       >
         {open ? <X className="h-6 w-6" aria-hidden /> : <WhatsAppIcon className="h-7 w-7" />}
       </button>

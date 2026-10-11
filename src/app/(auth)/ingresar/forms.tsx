@@ -32,7 +32,7 @@ export function DemoLogin({ next, users }: { next: string; users: { email: strin
       <ul className="grid gap-2">
         {users.map((u) => (
           <li key={u.email}>
-            <button name="email" value={u.email} className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-line transition hover:ring-fixy-500 focus-visible:ring-fixy-500">
+            <button name="email" value={u.email} className="w-full rounded-2xl bg-surface p-3 text-left ring-1 ring-line transition hover:ring-fixy-500 focus-visible:ring-fixy-500">
               <span className="block font-semibold">{u.name}</span>
               <span className="block text-sm text-muted">{u.desc}</span>
             </button>

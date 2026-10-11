@@ -31,7 +31,7 @@ function AccessFields({ sections, initialProfile, initial }: { sections: Section
         <legend className="mb-2 text-[15px] font-semibold">Perfil</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {PROFILES.map((p) => (
-            <label key={p.v} className={cn("cursor-pointer rounded-2xl p-3 ring-1", profile === p.v ? "bg-fixy-50 ring-2 ring-fixy-600" : "bg-white ring-line")}>
+            <label key={p.v} className={cn("cursor-pointer rounded-2xl p-3 ring-1", profile === p.v ? "bg-fixy-50 ring-2 ring-fixy-600" : "bg-surface ring-line")}>
               <input type="radio" name="profile" value={p.v} checked={profile === p.v} onChange={() => setProfile(p.v)} className="sr-only" />
               <span className="block font-semibold">{p.label}</span>
               <span className="mt-0.5 block text-sm text-muted">{p.hint}</span>
@@ -75,7 +75,7 @@ function CopyLink({ link }: { link: string }) {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-ok-bg p-3">
       <code className="min-w-0 flex-1 break-all text-sm">{link}</code>
-      <button type="button" onClick={() => { navigator.clipboard?.writeText(link).then(() => setCopied(true)); }} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-semibold ring-1 ring-line">
+      <button type="button" onClick={() => { navigator.clipboard?.writeText(link).then(() => setCopied(true)); }} className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-sm font-semibold ring-1 ring-line">
         {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}{copied ? "Copiado" : "Copiar link"}
       </button>
     </div>
