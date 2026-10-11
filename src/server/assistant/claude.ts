@@ -11,9 +11,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "@/server/env";
+import { CATEGORIES } from "@/server/seed/base";
 import type { TriageResult } from "./rules";
 
-const SLUGS = ["electricidad", "plomeria", "gas", "climatizacion", "electrodomesticos", "cerrajeria", "pintura", "albanileria", "carpinteria", "limpieza", "informatica", "mantenimiento", "otro"] as const;
+// Los rubros salen del catálogo base: al sumar uno ahí, el asistente ya lo puede elegir.
+const SLUGS = CATEGORIES.map((c) => c.slug) as [string, ...string[]];
 
 const OutputSchema = z.object({
   category: z.enum(SLUGS),
@@ -30,7 +32,9 @@ export function redactPersonalData(text: string): string {
 }
 
 const SYSTEM = `Clasificás pedidos de reparación, instalación o mantenimiento para hogares y oficinas en Argentina.
-Elegí la categoría de profesional más adecuada entre las permitidas. Si el pedido es ambiguo o no encaja, usá "otro" con confianza "low".
+Elegí la categoría de profesional más adecuada entre las permitidas:
+${CATEGORIES.filter((c) => c.slug !== "otro").map((c) => `- ${c.slug}: ${c.description}`).join("\n")}
+ Si el pedido es ambiguo o no encaja, usá "otro" con confianza "low".
 Proponé un título breve (máximo 80 caracteres) en español rioplatense y una urgencia según lo descripto.
 No hagas diagnósticos, no estimes precios y no prometas disponibilidad.`;
 

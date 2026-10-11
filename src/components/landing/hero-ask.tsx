@@ -16,6 +16,16 @@ const HINTS: { re: RegExp; name: string; safety?: string }[] = [
   { re: /\b(pint|humedad|mancha)\w*/i, name: "Pintura" },
   { re: /\b(pared|revoque|azulejo|cer[aá]mica|grieta|rajadura|obra|ampliaci[oó]n)\w*/i, name: "Albañilería" },
   { re: /\b(mueble|placard|madera|bisagra|puerta de madera)\b/i, name: "Carpintería" },
+  { re: /\b(cucaracha|rata|ratas|plaga|fumig|hormiga|mosquito)\w*/i, name: "Fumigación" },
+  { re: /\b(piscina|piletero|agua verde|cloro)\b/i, name: "Piletas" },
+  { re: /\b(jard[ií]n|pasto|c[eé]sped|poda|paisaj)\w*/i, name: "Jardinería" },
+  { re: /\b(volquete|escombro)\w*/i, name: "Volquetes" },
+  { re: /\b(mudanza|flete)\w*/i, name: "Mudanzas y fletes" },
+  { re: /\b(gotera|membrana|techo)\w*/i, name: "Techos" },
+  { re: /\b(arquitect|planos|reforma|remodel)\w*/i, name: "Obras y proyectos" },
+  { re: /\b(decorad|decoraci|interioris)\w*/i, name: "Decoración" },
+  { re: /\b(alarma|c[aá]maras? de seguridad|portero)\b/i, name: "Alarmas y cámaras" },
+  { re: /\b(vidrio|espejo|mampara|reja|port[oó]n)\w*/i, name: "Vidriería y herrería" },
   { re: /\b(wifi|internet|router|red|computadora|c[aá]maras?)\b/i, name: "Informática y redes" },
 ];
 

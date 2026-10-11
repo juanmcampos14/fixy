@@ -44,7 +44,7 @@ const KEYWORDS: Record<string, [string, number][]> = {
   ],
   gas: [
     ["gas", 4], ["calefon", 4], ["termotanque", 3], ["estufa", 3], ["hornalla", 3], ["cocina a gas", 4],
-    ["piloto", 2], ["caldera", 3], ["matafuego", 1], ["artefacto a gas", 4],
+    ["piloto", 2], ["caldera", 2], ["matafuego", 1], ["artefacto a gas", 4],
   ],
   climatizacion: [
     ["aire acondicionado", 5], ["split", 4], ["no enfria", 4], ["no calienta", 2], ["climatizacion", 4],
@@ -61,17 +61,84 @@ const KEYWORDS: Record<string, [string, number][]> = {
   pintura: [["pintar", 5], ["pintura", 5], ["pintor", 5], ["mano de pintura", 5], ["empapelar", 3], ["descascarado", 3]],
   albanileria: [
     ["albanil", 5], ["revoque", 4], ["grieta", 3], ["rajadura", 3], ["azulejo", 3], ["ceramica", 3], ["contrapiso", 4],
-    ["pared", 1], ["humedad en la pared", 4], ["mamposteria", 4], ["techo", 1], ["membrana", 3], ["goteras", 3],
+    ["pared", 1], ["humedad en la pared", 4], ["mamposteria", 4], ["levantar una pared", 4], ["medianera", 3],
   ],
   carpinteria: [
     ["carpintero", 5], ["mueble", 3], ["placard", 4], ["bisagra", 3], ["cajon", 3], ["puerta de madera", 4],
     ["madera", 2], ["armar mueble", 5], ["estante", 3], ["alacena", 3],
   ],
-  limpieza: [["limpieza", 5], ["limpiar", 4], ["final de obra", 4], ["vidrios", 2], ["desinfeccion", 3], ["alfombra", 2]],
+  limpieza: [["limpieza", 5], ["limpiar", 4], ["final de obra", 4], ["limpieza de vidrios", 4], ["alfombra", 2]],
   informatica: [
     ["wifi", 5], ["internet", 4], ["router", 5], ["red", 2], ["computadora", 4], ["notebook", 4], ["impresora", 4],
-    ["virus", 3], ["cableado de red", 5], ["servidor", 3], ["pc", 3], ["camaras de seguridad", 3],
+    ["virus", 3], ["cableado de red", 5], ["servidor", 3], ["pc", 3],
   ],
+  jardineria: [
+    ["jardin", 4], ["jardinero", 5], ["paisaj", 5], ["cesped", 5], ["pasto", 4], ["poda", 4], ["podar", 4], ["cerco vivo", 4], ["ligustr", 4],
+    ["plantas", 3], ["riego", 4], ["aspersor", 4], ["desmalez", 4], ["parquiz", 5], ["arbol", 3], ["cantero", 3], ["huerta", 3],
+  ],
+  piletas: [
+    ["piletero", 5], ["piscina", 5], ["pileta de natacion", 5], ["pileta", 2], ["agua verde", 5], ["cloro", 4], ["filtro de la pileta", 5],
+    ["bomba de la pileta", 5], ["pintar la pileta", 5], ["barrefondo", 5], ["climatizar la pileta", 4], ["jacuzzi", 4], ["hidromasaje", 3],
+  ],
+  fumigacion: [
+    ["fumig", 5], ["plaga", 5], ["cucaracha", 5], ["rata", 4], ["ratas", 5], ["raton", 5], ["roedor", 5], ["mosquito", 4], ["hormiga", 4], ["chinche", 5],
+    ["pulga", 4], ["termita", 5], ["alacran", 5], ["murcielago", 5], ["paloma", 3], ["desinfeccion", 4], ["desratiz", 5], ["desinsect", 5],
+    ["limpieza de tanque", 5], ["limpiar el tanque", 5], ["avispa", 4], ["panal", 4],
+  ],
+  volquetes: [
+    ["volquete", 5], ["escombro", 5], ["contenedor", 3], ["retiro de muebles", 4], ["retirar muebles", 4], ["sacar escombros", 5],
+    ["retiro de residuos", 4], ["cascote", 4], ["retiro de poda", 5], ["vaciar", 2], ["vaciado", 3],
+  ],
+  mudanzas: [["mudanza", 5], ["mudar", 4], ["flete", 5], ["fletero", 5], ["traslado de muebles", 5], ["embalaje", 4], ["guardamuebles", 5], ["mudarme", 5]],
+  reformas: [
+    ["reforma", 5], ["remodel", 5], ["refaccion", 5], ["ampliacion", 5], ["ampliar la casa", 5], ["construir", 4], ["construccion", 3], ["obra completa", 5],
+    ["hacer el bano", 4], ["bano nuevo", 4], ["cocina nueva", 4], ["reciclar", 3], ["llave en mano", 5], ["maestro mayor", 4], ["constructora", 5],
+  ],
+  arquitectura: [
+    ["arquitect", 5], ["ingenier", 4], ["planos", 4], ["plano", 3], ["direccion de obra", 5], ["habilitacion", 4], ["regulariz", 4], ["calculo estructural", 5],
+    ["agrimensor", 5], ["mensura", 5], ["subdivision", 4], ["informe tecnico", 4], ["proyecto de obra", 5], ["anteproyecto", 5],
+  ],
+  decoracion: [
+    ["decorador", 5], ["decoracion", 5], ["decorar", 4], ["interiorismo", 5], ["interiorista", 5], ["diseno de interiores", 5], ["ambientacion", 4],
+    ["home staging", 5], ["feng shui", 4], ["asesoramiento de colores", 4], ["elegir muebles", 3],
+  ],
+  techos: [
+    ["techo", 3], ["techista", 5], ["gotera", 5], ["membrana", 5], ["impermeabiliz", 5], ["zingueria", 5], ["canaleta", 4], ["tejas", 4], ["teja", 3],
+    ["terraza", 2], ["filtracion del techo", 5], ["se llueve", 5], ["chapa", 3], ["losa", 2],
+  ],
+  pisos: [
+    ["porcelanato", 5], ["colocar ceramic", 5], ["colocacion de ceramic", 5], ["piso flotante", 5], ["vinilico", 4], ["pulido", 4], ["plastificado", 5],
+    ["plastificar", 5], ["parquet", 5], ["microcemento", 5], ["colocador", 4], ["cambiar el piso", 5], ["baldosa", 4], ["zocalo", 3], ["pastina", 3],
+  ],
+  durlock: [["durlock", 5], ["cielorraso", 5], ["construccion en seco", 5], ["placa de yeso", 5], ["tabique", 4], ["yesero", 4], ["yeso", 3], ["steel frame", 5]],
+  herreria: [
+    ["herrero", 5], ["herreria", 5], ["reja", 5], ["porton", 5], ["soldar", 4], ["soldadura", 4], ["baranda", 4], ["motor del porton", 5],
+    ["porton automatico", 5], ["escalera de hierro", 5], ["estructura metalica", 5], ["hierro", 2],
+  ],
+  vidrieria: [
+    ["vidrio", 5], ["vidriero", 5], ["espejo", 4], ["mampara", 5], ["ventana", 3], ["ventanal", 4], ["abertura", 4], ["aluminio", 3], ["pvc", 3],
+    ["dvh", 5], ["mosquitero", 3], ["cerramiento", 4], ["blindex", 5], ["se rompio el vidrio", 5],
+  ],
+  marmoleria: [["marmol", 5], ["mesada", 5], ["granito", 5], ["cuarzo", 4], ["silestone", 5], ["marmolero", 5], ["marmoleria", 5]],
+  seguridad: [
+    ["alarma", 5], ["camaras de seguridad", 5], ["camara de seguridad", 5], ["camaras", 3], ["cctv", 5], ["portero electrico", 5], ["portero", 3],
+    ["visor", 3], ["cerco electrico", 5], ["control de acceso", 5], ["videoportero", 5], ["sensor de movimiento", 4],
+  ],
+  "energia-solar": [["panel solar", 5], ["paneles solares", 5], ["energia solar", 5], ["termotanque solar", 6], ["fotovoltaic", 5], ["inversor solar", 5], ["solar", 3]],
+  cortinas: [
+    ["cortina", 4], ["persiana", 5], ["roller", 5], ["blackout", 5], ["toldo", 5], ["cortina de enrollar", 5], ["cinta de la persiana", 5],
+    ["correa de la persiana", 5], ["motorizar", 3],
+  ],
+  tapiceria: [["tapicer", 5], ["tapizar", 5], ["retapizar", 5], ["sillon", 4], ["restaurar", 3], ["restauracion de muebles", 5], ["laquear", 5], ["lustrar", 4], ["esterillado", 5]],
+  "tv-audio": [
+    ["televisor", 5], ["tele", 3], ["colgar el tv", 5], ["colgar la tele", 5], ["soporte de tv", 5], ["smart tv", 5], ["parlante", 4], ["equipo de audio", 5],
+    ["proyector", 5], ["home theater", 5], ["antena", 4], ["barra de sonido", 5],
+  ],
+  domotica: [["domotica", 5], ["casa inteligente", 5], ["hogar inteligente", 5], ["smart home", 5], ["cerradura inteligente", 5], ["luces inteligentes", 5], ["alexa", 4], ["google home", 4]],
+  calefaccion: [
+    ["calefaccion", 4], ["caldera", 4], ["radiador", 5], ["losa radiante", 5], ["piso radiante", 5], ["calefaccion central", 5], ["purgar", 4], ["toallero", 3],
+  ],
+  ascensores: [["ascensor", 5], ["montacargas", 5], ["elevador", 4], ["salvaescaleras", 5]],
   mantenimiento: [
     ["mantenimiento", 4], ["colgar", 3], ["cuadro", 2], ["cortina", 3], ["barral", 3], ["arreglos varios", 4],
     ["changas", 3], ["mosquitero", 3], ["perforar", 2], ["instalar estante", 3],
@@ -148,6 +215,16 @@ export function triageByRules(text: string, explicitCategory?: string | null): T
       }
     }
   }
+  // Palabras compartidas: gana el rubro específico.
+  if (scores["energia-solar"] && scores.gas) scores.gas = Math.max(0, scores.gas - 4); // termotanque solar
+  if (scores.piletas && scores.plomeria && /piscina|natacion|piletero|agua verde|cloro|barrefondo/.test(t)) scores.plomeria = Math.max(0, scores.plomeria - 3);
+  if (scores.plomeria && scores.piletas && /pileta de (la )?(cocina|lavadero|bano)|bacha|se tapo/.test(t)) scores.piletas = 0;
+  if (scores.fumigacion && /limpi\w+ (el |de |del )?tanque/.test(t)) {
+    // La limpieza de tanques la hacen las empresas de control de plagas, no plomería ni limpieza general.
+    scores.plomeria = Math.max(0, (scores.plomeria ?? 0) - 6);
+    scores.limpieza = Math.max(0, (scores.limpieza ?? 0) - 5);
+  }
+  if (scores.calefaccion && scores.climatizacion) scores.climatizacion = Math.max(0, scores.climatizacion - 2);
   // "carga de gas del aire" no es gas domiciliario
   if (scores.climatizacion && scores.gas && /aire|split/.test(t)) scores.gas = Math.max(0, scores.gas - 4);
 

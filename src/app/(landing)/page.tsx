@@ -43,6 +43,10 @@ const eyebrow = "m-strong text-xs uppercase tracking-[0.14em] text-ash";
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ cuenta?: string }> }) {
   const [categories, sp] = await Promise.all([listCategories(sql()), searchParams]);
+  // Los rubros más pedidos van como tarjetas (con «Otro» al final); el resto, como etiquetas compactas.
+  const named = categories.filter((c) => c.slug !== "otro");
+  const featured = [...named.slice(0, 11), ...categories.filter((c) => c.slug === "otro")];
+  const more = named.slice(11);
   return (
     <>
       {sp.cuenta === "eliminada" && (
@@ -91,7 +95,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           <FixySpot action="idle" pose="listen" size={150} say="Pasá por un rubro y te cuento." className="hidden h-36 w-32 shrink-0 md:block" />
         </div>
         <ul className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {categories.map((c) => (
+          {featured.map((c) => (
             <li key={c.id}>
               <Link
                 href={`/solicitar?categoria=${c.slug}`}
@@ -110,6 +114,22 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             </li>
           ))}
         </ul>
+        {more.length > 0 && (
+          <>
+            <p className="mt-10 text-sm text-ash">Y también</p>
+            <ul className="mt-4 flex flex-wrap gap-2">
+              {more.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/solicitar?categoria=${c.slug}`} data-fixy-hover={`¿${c.name}? ¡Tengo gente!`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-[40px] bg-graphite px-4 text-[15px] text-ivory transition-colors duration-200 hover:bg-obsidian">
+                    <CategoryIcon icon={c.icon} className="h-4 w-4 text-ash" />
+                    {c.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
 
       {/* ── Cómo funciona: el camino que Fixy recorre ── */}

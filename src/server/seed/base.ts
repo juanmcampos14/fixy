@@ -112,6 +112,155 @@ export const CATEGORIES: { slug: string; name: string; description: string; icon
     description: "Wi-Fi, redes, computadoras e impresoras.",
     questions: [{ key: "equipos", label: "¿Cuántos equipos o puestos involucra?", kind: "text" }],
   },
+  // ── Exterior y espacios verdes ──
+  {
+    slug: "jardineria", name: "Jardinería y paisajismo", icon: "trees",
+    description: "Corte de césped, poda, mantenimiento, diseño de jardines y riego.",
+    questions: [
+      { key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Mantenimiento periódico", "Corte de césped", "Poda de árboles o cercos", "Diseño o armado de jardín", "Riego automático", "Otro"], required: true },
+      { key: "superficie", label: "Tamaño aproximado del jardín o cantidad de plantas", kind: "text" },
+    ],
+  },
+  {
+    slug: "piletas", name: "Piletas", icon: "waves",
+    description: "Mantenimiento, limpieza, puesta a punto, bombas, filtros y pintura de piletas.",
+    questions: [
+      { key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Mantenimiento periódico", "Puesta a punto de temporada", "Recuperar agua verde", "Bomba o filtro", "Pintura o reparación", "Construcción", "Otro"], required: true },
+      { key: "medidas", label: "Medidas o litros aproximados (si los sabés)", kind: "text" },
+    ],
+  },
+  {
+    slug: "fumigacion", name: "Fumigación y control de plagas", icon: "bug",
+    description: "Cucarachas, roedores, mosquitos, hormigas y desinfección. También limpieza de tanques de agua.",
+    safety: "Antes de una fumigación avisá si hay chicos, personas embarazadas, mascotas o peceras: el profesional te indica cuánto tiempo hay que ventilar.",
+    questions: [
+      { key: "plaga", label: "¿Qué necesitás tratar?", kind: "select", options: ["Cucarachas", "Roedores", "Mosquitos", "Hormigas", "Chinches o pulgas", "Murciélagos o palomas", "Limpieza de tanque de agua", "No sé"], required: true },
+      { key: "certificado", label: "¿Necesitás certificado (consorcio, comercio u oficina)?", kind: "boolean" },
+    ],
+  },
+  {
+    slug: "volquetes", name: "Volquetes y retiro de escombros", icon: "truck",
+    description: "Alquiler de volquetes, retiro de escombros, muebles viejos, poda y residuos de obra.",
+    questions: [
+      { key: "que_retirar", label: "¿Qué hay que retirar?", kind: "select", options: ["Escombros de obra", "Muebles o electrodomésticos", "Restos de poda", "Tierra", "Varios"], required: true },
+      { key: "espacio_volquete", label: "¿Hay lugar en la calle o en la vereda para dejar un volquete?", kind: "select", options: ["Sí", "No", "No sé"] },
+    ],
+  },
+  {
+    slug: "mudanzas", name: "Mudanzas y fletes", icon: "package",
+    description: "Mudanzas, fletes, traslado de muebles y embalaje.",
+    questions: [
+      { key: "tipo", label: "¿Qué necesitás?", kind: "select", options: ["Mudanza completa", "Flete de pocos muebles", "Solo embalaje", "Guardamuebles"], required: true },
+      { key: "destino", label: "¿A qué barrio o localidad va?", kind: "text", required: true },
+      { key: "ascensor", label: "¿Hay ascensor o hay que subir por escalera?", kind: "text" },
+    ],
+  },
+  // ── Obra y terminaciones ──
+  {
+    slug: "reformas", name: "Reformas y obras", icon: "hard-hat",
+    description: "Reformas de baño y cocina, ampliaciones, construcción y obras completas con un solo responsable.",
+    questions: [
+      { key: "tipo_obra", label: "¿Qué tipo de obra es?", kind: "select", options: ["Reforma de baño", "Reforma de cocina", "Reforma integral", "Ampliación", "Construcción desde cero", "Local u oficina", "Otro"], required: true },
+      { key: "tiene_planos", label: "¿Tenés planos o proyecto?", kind: "select", options: ["Sí", "No", "Necesito que me lo armen"] },
+    ],
+  },
+  {
+    slug: "arquitectura", name: "Arquitectura e ingeniería", icon: "drafting-compass",
+    description: "Proyectos, planos, dirección de obra, regularizaciones, habilitaciones e informes técnicos.",
+    questions: [
+      { key: "necesidad", label: "¿Qué necesitás?", kind: "select", options: ["Proyecto y planos", "Dirección de obra", "Regularizar o aprobar planos", "Habilitación comercial", "Informe técnico o cálculo estructural", "Asesoramiento"], required: true },
+      { key: "superficie", label: "Superficie aproximada (m²)", kind: "text" },
+    ],
+  },
+  {
+    slug: "decoracion", name: "Decoración e interiorismo", icon: "lamp",
+    description: "Diseño de interiores, asesoramiento, ambientación y elección de muebles y colores.",
+    questions: [
+      { key: "alcance", label: "¿Qué estás buscando?", kind: "select", options: ["Asesoramiento por única vez", "Proyecto de un ambiente", "Proyecto de toda la casa", "Local u oficina", "Ambientación para vender o alquilar"], required: true },
+      { key: "ambientes", label: "¿Qué ambientes?", kind: "text" },
+    ],
+  },
+  {
+    slug: "techos", name: "Techos e impermeabilización", icon: "umbrella",
+    description: "Goteras, filtraciones, membranas, zinguería, canaletas y tejas.",
+    questions: [
+      { key: "tipo_techo", label: "¿Qué tipo de techo es?", kind: "select", options: ["Losa o terraza", "Chapa", "Tejas", "No sé"], required: true },
+      { key: "hay_filtracion", label: "¿Hay goteras o filtraciones ahora?", kind: "select", options: ["Sí", "No, es preventivo"] },
+    ],
+  },
+  {
+    slug: "pisos", name: "Pisos y revestimientos", icon: "layout-grid",
+    description: "Colocación de cerámicos y porcelanato, pisos flotantes y vinílicos, pulido y plastificado.",
+    questions: [
+      { key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Colocar cerámicos o porcelanato", "Piso flotante o vinílico", "Pulido y plastificado de madera", "Microcemento", "Reparar piezas sueltas", "Otro"], required: true },
+      { key: "superficie", label: "Superficie aproximada (m²)", kind: "text" },
+    ],
+  },
+  {
+    slug: "durlock", name: "Durlock y construcción en seco", icon: "layers",
+    description: "Tabiques, cielorrasos, revestimientos, muebles y aislaciones en placa de yeso.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Dividir un ambiente", "Cielorraso", "Revestir una pared", "Mueble o nicho", "Reparación", "Otro"], required: true }],
+  },
+  {
+    slug: "herreria", name: "Herrería y portones", icon: "fence",
+    description: "Rejas, portones, escaleras, estructuras, soldaduras y automatización de portones.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Rejas", "Portón nuevo", "Automatizar o reparar un portón", "Escalera o baranda", "Estructura o techo", "Soldadura o reparación"], required: true }],
+  },
+  {
+    slug: "vidrieria", name: "Vidriería y aberturas", icon: "app-window",
+    description: "Vidrios, espejos, mamparas, ventanas y puertas de aluminio o PVC, y mosquiteros.",
+    questions: [
+      { key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Reponer un vidrio roto", "Espejo a medida", "Mampara de baño", "Ventana o puerta nueva", "Reparar una abertura", "Mosquiteros", "Cerramiento"], required: true },
+      { key: "medidas", label: "Medidas aproximadas (si las tenés)", kind: "text" },
+    ],
+  },
+  {
+    slug: "marmoleria", name: "Marmolería y mesadas", icon: "gem",
+    description: "Mesadas de cocina y baño, granito, mármol, cuarzo y pulido.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Mesada nueva", "Cambiar o agrandar una mesada", "Pulido o reparación", "Otro"], required: true }],
+  },
+  // ── Equipamiento ──
+  {
+    slug: "seguridad", name: "Alarmas, cámaras y porteros", icon: "cctv",
+    description: "Cámaras de seguridad, alarmas, porteros eléctricos, cercos eléctricos y control de acceso.",
+    questions: [{ key: "sistema", label: "¿Qué sistema es?", kind: "select", options: ["Cámaras", "Alarma", "Portero eléctrico o visor", "Cerco eléctrico", "Control de acceso", "Varios"], required: true }],
+  },
+  {
+    slug: "energia-solar", name: "Energía solar", icon: "sun",
+    description: "Paneles solares, termotanques solares y climatización solar de piletas.",
+    questions: [{ key: "sistema", label: "¿Qué te interesa?", kind: "select", options: ["Paneles para generar electricidad", "Termotanque solar", "Climatizar la pileta", "Reparar o mantener un equipo", "Asesoramiento"], required: true }],
+  },
+  {
+    slug: "cortinas", name: "Cortinas, persianas y toldos", icon: "blinds",
+    description: "Cortinas roller y de tela, persianas, cortinas de enrollar y toldos: colocación y reparación.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Cortinas nuevas a medida", "Reparar una persiana o cortina de enrollar", "Motorizar", "Toldo", "Solo colocación"], required: true }],
+  },
+  {
+    slug: "tapiceria", name: "Tapicería y restauración de muebles", icon: "armchair",
+    description: "Retapizado de sillones y sillas, restauración, laqueado y lustre de muebles.",
+    questions: [{ key: "mueble", label: "¿Qué mueble es y cuántos son?", kind: "text", required: true }],
+  },
+  {
+    slug: "tv-audio", name: "TV, audio y electrónica", icon: "tv",
+    description: "Instalación de televisores y soportes, sonido, proyectores y reparación de equipos electrónicos.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Colgar un televisor", "Instalar sonido o proyector", "Reparar un equipo", "Antena o cableado", "Otro"], required: true }],
+  },
+  {
+    slug: "domotica", name: "Casa inteligente", icon: "house-wifi",
+    description: "Luces, enchufes, cerraduras y climatización controlados desde el celular.",
+    questions: [{ key: "alcance", label: "¿Qué querés automatizar?", kind: "text", required: true }],
+  },
+  {
+    slug: "calefaccion", name: "Calefacción y calderas", icon: "heater",
+    description: "Calderas, radiadores, losa radiante y sistemas de calefacción central.",
+    safety: "Si sentís olor a gas o el artefacto tiene llama amarilla: no lo uses, ventilá y llamá a la emergencia de tu distribuidora o al 911.",
+    questions: [{ key: "sistema", label: "¿Qué sistema tenés?", kind: "select", options: ["Caldera con radiadores", "Losa radiante", "Calefacción central por aire", "Quiero instalar uno", "No sé"], required: true }],
+  },
+  {
+    slug: "ascensores", name: "Ascensores y montacargas", icon: "arrow-up-down",
+    description: "Mantenimiento, reparación y modernización para edificios, comercios y casas.",
+    questions: [{ key: "tipo_trabajo", label: "¿Qué necesitás?", kind: "select", options: ["Mantenimiento mensual", "Reparación", "Instalación o modernización", "Inspección o libro de conservación"], required: true }],
+  },
   {
     slug: "mantenimiento", name: "Mantenimiento general", icon: "wrench",
     description: "Arreglos varios: colgar, ajustar, instalar y reparar.",
@@ -127,6 +276,8 @@ export const CATEGORIES: { slug: string; name: string; description: string; icon
 export const CREDENTIAL_TYPES = [
   { code: "matricula_gasista", name: "Matrícula de gasista", description: "Matrícula vigente habilitante para trabajos en instalaciones de gas.", expires: true },
   { code: "matricula_electricista", name: "Matrícula de electricista", description: "Matrícula o habilitación vigente como instalador electricista.", expires: true },
+  { code: "matricula_profesional", name: "Matrícula profesional", description: "Matrícula vigente de arquitecto/a, ingeniero/a o maestro mayor de obras.", expires: false },
+  { code: "habilitacion_plagas", name: "Habilitación para control de plagas", description: "Inscripción vigente como empresa de control de plagas, con director técnico.", expires: true },
   { code: "seguro_ap", name: "Seguro de accidentes personales", description: "Póliza vigente de accidentes personales o ART.", expires: true },
 ];
 
