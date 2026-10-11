@@ -44,29 +44,28 @@ export function HeroAsk() {
   }
 
   return (
-    <div className="mt-7">
-      <form action="/solicitar" method="get" className="rounded-[28px] bg-white p-2 shadow-[var(--shadow-lift)] ring-1 ring-line focus-within:ring-2 focus-within:ring-fixy-600">
-        <label htmlFor="hero-q" className="sr-only">¿Qué necesitás resolver hoy?</label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            id="hero-q" name="q" value={q} autoComplete="off" maxLength={300}
-            onChange={(e) => { setQ(e.target.value); react(e.target.value); }}
-            onFocus={() => fixy({ type: "say", text: "Te escucho. Contámelo como te salga.", ms: 2600 })}
-            placeholder="¿Qué se rompió? Ej.: pierde agua la canilla"
-            className="h-14 min-w-0 flex-1 rounded-[22px] px-4 text-[17px] placeholder:text-[#7d8f93] focus:outline-none"
-          />
-          <button className="inline-flex h-14 items-center justify-center gap-2 rounded-[22px] bg-fixy-700 px-6 font-semibold text-white transition hover:bg-fixy-800 active:scale-[0.98]">
-            Resolverlo <ArrowRight className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
+    <div className="mt-10">
+      {/* Entrada en píldora con la acción principal pegada (única acción en cobalto de la página) */}
+      <form action="/solicitar" method="get" className="mx-auto flex max-w-[560px] flex-col gap-3 sm:flex-row sm:gap-0">
+        <label htmlFor="hero-q" className="sr-only">¿Qué necesitás resolver?</label>
+        <input
+          id="hero-q" name="q" value={q} autoComplete="off" maxLength={300}
+          onChange={(e) => { setQ(e.target.value); react(e.target.value); }}
+          onFocus={() => fixy({ type: "say", text: "Te escucho. Contámelo como te salga.", ms: 2600 })}
+          placeholder="¿Qué se rompió? Ej.: pierde agua la canilla"
+          className="h-[52px] w-full min-w-0 shrink-0 rounded-[32px] border border-ivory bg-transparent px-5 text-base text-ivory placeholder:text-ash/80 sm:w-auto sm:flex-1 sm:shrink sm:rounded-r-none sm:border-r-0"
+        />
+        <button className="m-btn m-btn-primary h-[52px] shrink-0 sm:rounded-l-none">
+          Resolverlo <ArrowRight className="h-4 w-4" aria-hidden />
+        </button>
       </form>
-      <ul className="mt-4 flex flex-wrap gap-2" aria-label="Ejemplos">
+      <ul className="mx-auto mt-5 flex max-w-[640px] flex-wrap justify-center gap-2" aria-label="Ejemplos">
         {QUICK.map((t) => (
           <li key={t}>
             <button
               type="button"
               onClick={() => { setQ(t); react(t); document.getElementById("hero-q")?.focus(); }}
-              className="rounded-full bg-white/80 px-3.5 py-1.5 text-sm font-medium text-ink-2 ring-1 ring-line transition hover:-translate-y-0.5 hover:bg-white hover:ring-fixy-300"
+              className="min-h-9 cursor-pointer rounded-[40px] bg-obsidian px-4 text-sm text-ash transition-colors hover:text-ivory"
             >
               {t}
             </button>

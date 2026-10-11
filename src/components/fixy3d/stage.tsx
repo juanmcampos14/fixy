@@ -75,7 +75,7 @@ function Driver({ shared, rig, follower }: { shared: React.RefObject<Shared>; ri
     let ty = rect.bottom;
     // Si su lugar no está a la vista (o en el celular), acompaña desde la esquina inferior izquierda, más chico.
     // Visible = sus pies entran en pantalla (si quedan muy abajo, no flota encima del contenido: se asoma desde el borde).
-    const visible = rect.bottom >= size + 70 && rect.bottom <= H + size * 0.2;
+    const visible = rect.bottom >= size + 70 && rect.bottom <= H + size * 0.3;
     let peek = false;
     if ((mobile && !inline) || !visible) {
       size = mobile ? 96 : 120;
@@ -233,10 +233,10 @@ export default function FixyStage() {
         aria-hidden
         className="print:hidden"
       >
-        <ambientLight intensity={0.5} />
-        <hemisphereLight args={["#ffffff", "#9fd8cd", 0.55]} />
-        <directionalLight position={[-400, 700, 900]} intensity={1.35} />
-        <directionalLight position={[600, 100, 400]} intensity={0.35} color="#ffe2c4" />
+        <ambientLight intensity={0.95} />
+        <hemisphereLight args={["#ffffff", "#8fd6ca", 0.7]} />
+        <directionalLight position={[-400, 700, 900]} intensity={1.55} />
+        <directionalLight position={[600, 100, 400]} intensity={0.5} color="#ffe2c4" />
         <Driver shared={shared} rig={rig} follower={follower} />
       </Canvas>
 

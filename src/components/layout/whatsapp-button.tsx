@@ -13,7 +13,7 @@ function WhatsAppIcon({ className }: { className?: string }) {
 }
 
 /** Botón flotante: el asistente de Fixy por WhatsApp, y la atención de una persona por mail. */
-export function WhatsAppButton() {
+export function WhatsAppButton({ tone = "brand" }: { tone?: "brand" | "dark" } = {}) {
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -64,7 +64,9 @@ export function WhatsAppButton() {
         aria-expanded={open}
         aria-controls="contacto-fixy"
         aria-label={open ? "Cerrar contacto" : "Contactar a Fixy por WhatsApp"}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg ring-4 ring-white transition hover:scale-105 focus-visible:outline-none focus-visible:ring-fixy-500/60"
+        className={tone === "dark"
+          ? "flex h-14 w-14 items-center justify-center rounded-full bg-obsidian text-ivory ring-1 ring-slate-line/50 transition hover:bg-[#30303f] focus-visible:outline-2 focus-visible:outline-ivory"
+          : "flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg ring-4 ring-white transition hover:scale-105 focus-visible:outline-none focus-visible:ring-fixy-500/60"}
       >
         {open ? <X className="h-6 w-6" aria-hidden /> : <WhatsAppIcon className="h-7 w-7" />}
       </button>

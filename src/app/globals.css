@@ -27,6 +27,17 @@
   --color-info-bg: #e8f0f4;
   --color-info: #1f4f63;
 
+  /* Landing · estilo "Mercury" (docs/design/landing.md): lienzo ónix, tarjetas grafito, una sola acción en cobalto */
+  --color-onyx: #171721;
+  --color-graphite: #1e1e2a;
+  --color-obsidian: #272735;
+  --color-slate-line: #70707d;
+  --color-mist: #e2e3ed;
+  --color-ash: #c3c3cc;
+  --color-ivory: #ededf3;
+  --color-cobalt: #5266eb;
+  --color-cobalt-hover: #6274f0;
+
   --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
@@ -109,3 +120,39 @@ html[data-fixy3d="on"] .fixy-fallback { visibility: hidden; }
   50% { border-radius: 56% 44% 52% 48% / 45% 55% 45% 55%; }
 }
 @keyframes marquee { from { translate: 0 0; } to { translate: -50% 0; } }
+
+/* ── Landing oscura (estilo Mercury) ── */
+body:has(.mercury) { background: var(--color-onyx); }
+.mercury { background: var(--color-onyx); color: var(--color-ivory); font-family: var(--font-sans); font-weight: 400; }
+.mercury ::selection { background: var(--color-cobalt); color: #fff; }
+/* Títulos: tipografía ancha, peso intermedio (480), nunca negrita; interlineado ajustado y un poco de aire entre letras */
+.mercury .m-display, .mercury h1, .mercury h2, .mercury h3 {
+  font-family: var(--font-archivo), var(--font-inter), ui-sans-serif, system-ui, sans-serif; font-weight: 480; font-stretch: 112%; letter-spacing: 0.012em; line-height: 1.12; color: var(--color-ivory);
+  text-wrap: balance;
+}
+.mercury .m-strong { font-weight: 480; }
+.mercury .m-card { background: var(--color-graphite); border-radius: 12px; padding: 32px; }
+@media (max-width: 640px) { .mercury .m-card { padding: 24px; } }
+.mercury .m-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; min-height: 48px; padding: 0 24px; border-radius: 32px;
+  font-size: 16px; font-weight: 400; transition: background-color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease; cursor: pointer;
+}
+.mercury .m-btn:focus-visible, .mercury a:focus-visible, .mercury button:focus-visible, .mercury summary:focus-visible, .mercury input:focus-visible {
+  outline: 2px solid var(--color-ivory); outline-offset: 3px;
+}
+.mercury .m-btn-primary { background: var(--color-cobalt); color: #fff; }
+.mercury .m-btn-primary:hover { background: var(--color-cobalt-hover); }
+.mercury .m-btn-ghost { border: 1px solid var(--color-ivory); color: var(--color-ivory); }
+.mercury .m-btn-ghost:hover { background: var(--color-obsidian); }
+.mercury .m-btn-quiet { background: var(--color-obsidian); color: var(--color-ivory); }
+.mercury .m-btn-quiet:hover { background: #30303f; }
+.mercury .m-nav-link { display: inline-flex; align-items: center; white-space: nowrap; min-height: 40px; padding: 0 14px; border-radius: 40px; color: var(--color-ivory); transition: background-color 0.18s ease; }
+.mercury .m-nav-link:hover { background: color-mix(in srgb, var(--color-ivory) 10%, transparent); }
+@keyframes m-rise { from { opacity: 0; translate: 0 14px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .mercury .m-rise { animation: m-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .mercury .m-ticker { animation: marquee 60s linear infinite; }
+  .mercury .m-ticker-wrap:hover .m-ticker { animation-play-state: paused; }
+}
+/* La ilustración de respaldo trae una sombra clara (pensada para fondo claro): se desvanece abajo sobre el lienzo oscuro. */
+.mercury .fixy-fallback { -webkit-mask-image: linear-gradient(#000 80%, transparent 95%); mask-image: linear-gradient(#000 80%, transparent 95%); }
