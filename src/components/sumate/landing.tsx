@@ -1,3 +1,4 @@
+import { REGION_LABEL } from "@/lib/regions";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck, Banknote, CalendarCheck, CircleCheck, EyeOff, FileCheck2, MapPin, MessageCircle, Search, Send, ShieldCheck, Star, Users } from "lucide-react";
 import { sql } from "@/server/db/client";
@@ -9,7 +10,7 @@ import { CopyLink } from "./copy-link";
 import { OFICIOS, type Oficio } from "@/lib/oficios";
 import { formatMoney } from "@/lib/format";
 
-const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur" };
+const REGION = REGION_LABEL;
 
 export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | null; refParam?: string }) {
   const db = sql();

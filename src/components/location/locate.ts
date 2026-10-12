@@ -5,7 +5,7 @@ import type { AddressComponent } from "@/lib/zone-match";
 import { componentsToAddress as coreToAddress, type AddressValue } from "@/lib/address";
 import { loadGoogleMaps, MAPS_KEY } from "./google-maps";
 
-export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[] };
+export type ZoneOption = { id: string; code: string; name: string; region: string; match_names: string[]; province?: string | null; catch_all?: boolean };
 export type { AddressValue };
 export type Located = { value: AddressValue; zone: ZoneOption | null; outside: boolean };
 export type LocateError = "denied" | "unavailable" | "unsupported" | "geocode";

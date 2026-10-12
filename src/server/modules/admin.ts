@@ -2,6 +2,7 @@
  * Administración de plataforma: catálogo (categorías, servicios, preguntas, zonas, credenciales requeridas),
  * reglas de comisión y parámetros. Solo administradores de plataforma. Todo cambio queda auditado con motivo.
  */
+import { REGION_CODES } from "@/lib/regions";
 import { z } from "zod";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
@@ -201,7 +202,7 @@ export const zoneSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z0-9_-]{2,40}$/, "El código usa mayúsculas, números, guion o guion bajo."),
   name: z.string().trim().min(2, "Ingresá el nombre de la zona.").max(80),
-  region: z.enum(["CABA", "GBA_NORTE", "GBA_OESTE", "GBA_SUR"]),
+  region: z.enum(REGION_CODES),
   sort: z.coerce.number().int().min(0).max(10000).default(0),
 });
 

@@ -1,3 +1,4 @@
+import { REGION_LABEL } from "@/lib/regions";
 import { ChevronDown } from "lucide-react";
 import { requireSection } from "@/server/auth/session";
 import { can } from "@/server/auth/permissions";
@@ -17,7 +18,7 @@ import {
 export const metadata = { title: "Catálogo" };
 
 const ICONS = ["zap", "droplets", "flame", "snowflake", "washing-machine", "key-round", "paint-roller", "brick-wall", "hammer", "sparkles", "wifi", "wrench", "circle-help"];
-const REGIONS: Record<string, string> = { CABA: "CABA", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur" };
+const REGIONS = REGION_LABEL;
 const KIND_LABEL: Record<string, string> = { text: "Texto libre", select: "Opciones", boolean: "Sí / No" };
 
 type Catalog = Awaited<ReturnType<typeof getCatalogAdmin>>;

@@ -4,7 +4,7 @@
  * Función pura: se usa en el navegador y en el servidor.
  */
 export type AddressComponent = { long_name?: string; longText?: string; short_name?: string; shortText?: string; types: string[] };
-export type MatchZone = { id: string; code: string; region: string; match_names: string[] };
+export type MatchZone = { id: string; code: string; region: string; match_names: string[]; province?: string | null; catch_all?: boolean };
 
 export const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -16,9 +16,23 @@ export function isCaba(components: AddressComponent[]) {
   return components.some((c) => c.types.includes("administrative_area_level_1") && /ciudad autonoma|capital federal|caba/.test(norm(text(c)) + " " + text(c).toLowerCase()));
 }
 
+const AMBA = (z: MatchZone) => z.region === "CABA" || z.region.startsWith("GBA");
+const adm1 = (components: AddressComponent[]) => norm(components.filter((c) => c.types.includes("administrative_area_level_1")).map(text).join(" "));
+
+/**
+ * Zona de una dirección. CABA: por barrio. Resto del país: dentro de la provincia, por partido/departamento o localidad;
+ * si no coincide con ninguna ciudad listada, la zona "Resto de …" de esa provincia. Sin provincia reconocida, null.
+ */
 export function matchZone(components: AddressComponent[], zones: MatchZone[]): MatchZone | null {
   const caba = isCaba(components);
-  const pool = zones.filter((z) => (caba ? z.region === "CABA" : z.region !== "CABA"));
+  const province = adm1(components);
+  // Con provincias cargadas, la búsqueda se acota a la provincia de la dirección: hay localidades homónimas en todo el país.
+  const inProvince = !caba && province ? zones.filter((z) => z.province && province.includes(norm(z.province))) : [];
+  const pool = caba
+    ? zones.filter((z) => z.region === "CABA")
+    : inProvince.length
+      ? inProvince.filter((z) => !z.catch_all)
+      : zones.filter((z) => z.region !== "CABA" && !z.catch_all && (!z.province || !province));
   const byTypes = (types: string[]) => components.filter((c) => types.some((t) => c.types.includes(t))).map((c) => norm(text(c)));
   const order = caba
     ? [byTypes(["neighborhood", "sublocality_level_1", "sublocality"]), byTypes(["locality"])]
@@ -29,7 +43,33 @@ export function matchZone(components: AddressComponent[], zones: MatchZone[]): M
       if (z) return z;
     }
   }
-  return null;
+  return inProvince.find((z) => z.catch_all) ?? null;
+}
+
+/** Nombres demasiado comunes para reconocer una zona en un texto suelto si no viene la provincia. */
+const GENERIC = new Set(["capital", "la capital", "centro", "colon", "merlo", "junin", "rawson", "rivadavia", "san martin", "san lorenzo", "san jose", "san justo", "san fernando", "santa maria", "santa lucia", "banda", "libertad", "union", "florida", "victoria"]);
+
+/**
+ * Zona a partir de un texto escrito por la persona ("Morón", "Córdoba capital", "Godoy Cruz, Mendoza").
+ * Primero las zonas de CABA y GBA (comportamiento histórico); después, si nombra una provincia, sus ciudades o su "Resto de …";
+ * por último, una ciudad del país con nombre inequívoco.
+ */
+export function guessZoneFromText<Z extends MatchZone>(raw: string, zones: Z[]): Z | null {
+  const t = ` ${norm(raw)} `;
+  const has = (name: string) => t.includes(` ${norm(name)} `);
+  const amba = zones.find((z) => AMBA(z) && z.match_names.some((n) => !GENERIC.has(norm(n)) && t.includes(norm(n))));
+  if (amba) return amba;
+  const provinces = [...new Set(zones.map((z) => z.province).filter((p): p is string => !!p))].sort((a, b) => b.length - a.length);
+  // "Córdoba" o "Santa Fe" son provincia y ciudad a la vez: se busca la ciudad dentro de la provincia nombrada.
+  const province = provinces.find((p) => has(p));
+  if (province) {
+    const mine = zones.filter((z) => z.province === province);
+    return mine.find((z) => !z.catch_all && z.match_names.some((n) => norm(n) !== norm(province) && has(n)))
+      ?? mine.find((z) => !z.catch_all && /\b(capital|ciudad|centro)\b/.test(t) && z.match_names.some((n) => norm(n) === "capital" || norm(n) === norm(province)))
+      ?? mine.find((z) => !z.catch_all && !AMBA(z) && z.match_names.some((n) => norm(n) === norm(province)))
+      ?? mine.find((z) => z.catch_all) ?? null;
+  }
+  return zones.find((z) => !z.catch_all && !AMBA(z) && z.match_names.some((n) => !GENERIC.has(norm(n)) && norm(n).length >= 5 && has(n))) ?? null;
 }
 
 /** Nombres (normalizados) por zona. Fuente única para el seed; la migración 0013 los replica para bases existentes. */

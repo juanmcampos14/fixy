@@ -17,6 +17,7 @@ import { componentsToAddress, type AddressValue } from "@/lib/address";
 import { formatMoney } from "@/lib/format";
 import { geocodeAddress, reverseGeocode } from "@/server/geo";
 import { nearestZoneCode } from "@/lib/zone-centroids";
+import { guessZoneFromText } from "@/lib/zone-match";
 import { downloadMedia, markRead, sendWhatsApp, type OutMessage } from "./client";
 import { classifyIntent, type OpenRequest } from "./intent";
 import { looksLikeAddress, looksLikeQuestion, parseBudget, understand, type Expecting, type Understood } from "./understand";
@@ -65,7 +66,7 @@ type State = {
   evKind?: "before" | "progress" | "after";
 };
 
-type Zone = { id: string; code: string; name: string; region: string; match_names: string[] };
+type Zone = { id: string; code: string; name: string; region: string; match_names: string[]; province: string | null; catch_all: boolean };
 type Ctx = { phone: string; name: string; userId: string | null; out: OutMessage[] };
 
 const PRIVACY = "Tu dirección la ve y la protege solo Fixy: el profesional la recibe recién cuando se confirma la visita.";
@@ -290,7 +291,16 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
         const z = zones.find((x) => x.id === reply.slice(5));
         if (z) return goPros({ ...s, address: { ...s.address, zoneId: z.id } }, ctx);
       }
+      if (reply === "region:OTRA") {
+        ctx.out.push({ kind: "text", text: "Escribime la localidad y la provincia. Por ejemplo: *Morón, Buenos Aires*, *Córdoba capital* o *Godoy Cruz, Mendoza*." });
+        return { ...s, step: "zone" };
+      }
       if (reply.startsWith("region:")) return askZoneList(s, reply.slice(7), zones, ctx);
+      // Texto libre: la zona sale de lo que escribió; si no la reconocemos, el pedido igual sigue y lo ubica el equipo.
+      if (s.step === "zone" && text.trim().length >= 3) {
+        const z = guessZoneFromText(text, zones) ?? zones.find((x) => x.code === "otra-zona");
+        if (z) return goPros({ ...s, address: { ...s.address, zoneId: z.id } }, ctx);
+      }
       return askZone(s, ctx);
     }
 
@@ -412,7 +422,7 @@ async function onLocation(s: State, loc: NonNullable<Inbound["location"]>, ctx: 
 /** Zona desde lo que trae la ubicación de WhatsApp: primero el texto (barrio, localidad), si no, la cercanía. */
 function zoneFromLocation(zones: Zone[], loc: NonNullable<Inbound["location"]>): string | null {
   const text = norm(`${loc.name ?? ""} ${loc.address ?? ""}`);
-  const byText = zones.find((z) => z.match_names.some((n) => text.includes(n)));
+  const byText = guessZoneFromText(text, zones);
   if (byText) return byText.id;
   const code = nearestZoneCode(loc.lat, loc.lng);
   return (code ? zones.find((z) => z.code === code)?.id : zones.find((z) => z.code === "otra-zona")?.id) ?? null;
@@ -433,7 +443,7 @@ async function onAddressText(s: State, text: string, ctx: Ctx, keepZone = false)
     return goPros({ ...s, propertyId: null, address: { ...r.value, ...(keepZone && s.address?.zoneId ? { zoneId: s.address.zoneId } : {}) } }, ctx);
   }
   // Sin geocodificación: probamos reconocer la zona por los nombres de barrios/partidos del texto.
-  const guess = zones.find((z) => z.match_names.some((n) => norm(text).includes(n)));
+  const guess = guessZoneFromText(text, zones);
   const next: State = { ...s, propertyId: null, address: { ...s.address, addressLine: text.split(",")[0].slice(0, 200), formattedAddress: text.slice(0, 300), zoneId: keepZone && s.address?.zoneId ? s.address.zoneId : guess?.id ?? "" } };
   return next.address!.zoneId ? goPros(next, ctx) : askZone(next, ctx);
 }
@@ -447,10 +457,10 @@ function askZone(s: State, ctx: Ctx): State {
 }
 
 function askZoneList(s: State, region: string, zones: Zone[], ctx: Ctx): State {
-  const list = region === "OTRA" ? zones.filter((z) => ["GBA_OESTE", "GBA_SUR", "OTRA"].includes(z.region)) : zones.filter((z) => z.region === region);
+  const list = zones.filter((z) => z.region === region);
   ctx.out.push({
     kind: "list", text: "Elegí la zona:", button: "Ver zonas",
-    sections: [{ title: region === "CABA" ? "CABA" : region === "GBA_NORTE" ? "GBA Norte" : "Otras zonas", rows: list.slice(0, 10).map((z) => ({ id: `zone:${z.id}`, title: z.code === "otra-zona" ? "Resto del país" : z.name })) }],
+    sections: [{ title: region === "CABA" ? "CABA" : region === "GBA_NORTE" ? "GBA Norte" : "Otras zonas", rows: list.slice(0, 10).map((z) => ({ id: `zone:${z.id}`, title: z.name.slice(0, 24) })) }],
   });
   return { ...s, step: "zone" };
 }
@@ -776,7 +786,7 @@ function askBudget(s: State, ctx: Ctx): State {
 }
 
 async function allZones(): Promise<Zone[]> {
-  return sql()<Zone[]>`select id, code, name, region, match_names from zones where active order by sort, name`;
+  return sql()<Zone[]>`select id, code, name, region, match_names, province, catch_all from zones where active order by sort, name`;
 }
 
 /** Pide hablar con una persona: la atención humana es por mail. */

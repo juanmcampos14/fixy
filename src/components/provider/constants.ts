@@ -1,11 +1,6 @@
 /** Constantes de interfaz del panel de proveedor (seguras para cliente y servidor). */
-export const REGION_LABEL: Record<string, string> = {
-  CABA: "Ciudad de Buenos Aires",
-  GBA_NORTE: "GBA Norte",
-  GBA_OESTE: "GBA Oeste",
-  GBA_SUR: "GBA Sur",
-};
-export const REGION_ORDER = ["CABA", "GBA_NORTE", "GBA_OESTE", "GBA_SUR"];
+export { REGION_LABEL, REGION_ORDER } from "@/lib/regions";
+import { REGION_ORDER } from "@/lib/regions";
 
 export const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 /** Orden de visualización: lunes primero. */

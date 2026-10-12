@@ -2,12 +2,15 @@
  * Centro aproximado de cada zona de cobertura. Sirve para asignar la zona desde coordenadas cuando no hay
  * geocodificación en el servidor (por ejemplo, la ubicación compartida por WhatsApp).
  */
+import { NATIONAL_ZONES } from "./zones-national";
+
 const CENTROIDS: Record<string, [number, number]> = {
   "caba-palermo": [-34.5875, -58.43], "caba-belgrano": [-34.556, -58.46], "caba-recoleta": [-34.588, -58.393], "caba-centro": [-34.607, -58.38],
   "caba-caballito": [-34.618, -58.44], "caba-urquiza": [-34.573, -58.49], "caba-flores": [-34.635, -58.48], "caba-sur": [-34.638, -58.378],
   "gba-vicente-lopez": [-34.527, -58.48], "gba-san-isidro": [-34.49, -58.53], "gba-san-fernando": [-34.445, -58.56], "gba-tigre": [-34.43, -58.62],
   "gba-escobar": [-34.348, -58.79], "gba-pilar": [-34.46, -58.91], "gba-moron": [-34.653, -58.62], "gba-la-matanza": [-34.7, -58.58],
   "gba-avellaneda": [-34.663, -58.365], "gba-lanus": [-34.7, -58.395], "gba-lomas": [-34.76, -58.4], "gba-quilmes": [-34.725, -58.26],
+  ...Object.fromEntries(NATIONAL_ZONES.filter((z) => z.at).map((z) => [z.code, z.at!])),
 };
 
 function km(a: [number, number], b: [number, number]) {

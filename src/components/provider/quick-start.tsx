@@ -1,5 +1,6 @@
 "use client";
 
+import { REGION_LABEL } from "@/lib/regions";
 import { useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Building2, LoaderCircle, Plus, Sparkles, Trash2, User } from "lucide-react";
 import { CategoryIcon } from "@/components/category-icon";
@@ -13,7 +14,7 @@ import { draftProfileWithAi, quickStartAction, type QuickDraft } from "@/app/pro
 
 type Cat = { id: string; name: string; icon: string };
 type Zone = { id: string; name: string; region: string };
-const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur" };
+const REGION = REGION_LABEL;
 const PRESETS: { key: QuickDraft["availability"]; label: string; slots: number }[] = [
   { key: "weekdays", label: "Lunes a viernes, 8 a 18 h", slots: 5 },
   { key: "weekdays_sat", label: "Lunes a sábado, 8 a 18 h", slots: 6 },
