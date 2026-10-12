@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Vuelta del ingreso con Google hecho en el navegador del sistema (fixy://auth?code=…) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>solutions.fixy.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fixy</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Fixy usa la cámara para que saques fotos del problema o del trabajo terminado.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

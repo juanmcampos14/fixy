@@ -153,14 +153,14 @@ export default async function RequestDetail({ params, searchParams }: { params: 
               const items = quoteItems.filter((i) => i.quote_id === q.id);
               const thread = threads.find((t) => t.provider_id === q.provider_id);
               return (
-                <Card key={q.id} as="article" className="flex flex-col">
+                <Card key={q.id} as="article" className="flex min-w-0 flex-col">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Link href={`/profesionales/${q.provider_slug}`} className="text-lg font-bold hover:underline">{q.provider_name}</Link>
                       {budget && (
                         <div className="mt-1">
                           {q.subtotal_minor < budget
-                            ? <Badge tone="ok" icon={false}>{formatMoney(budget - q.subtotal_minor)} menos que tu presupuesto</Badge>
+                            ? <Badge tone="ok" icon={false} className="whitespace-normal text-left">{formatMoney(budget - q.subtotal_minor)} menos que tu presupuesto</Badge>
                             : <Badge tone="info" icon={false}>Por tu presupuesto</Badge>}
                         </div>
                       )}
@@ -171,7 +171,7 @@ export default async function RequestDetail({ params, searchParams }: { params: 
                         {q.provider_is_demo && <DemoBadge />}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="shrink-0 text-right">
                       <p className="text-xs text-muted">Total</p>
                       <p className="tabular font-display text-2xl font-extrabold">{formatMoney(q.total_minor)}</p>
                     </div>

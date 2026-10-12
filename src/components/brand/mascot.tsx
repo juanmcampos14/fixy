@@ -8,11 +8,11 @@ import { cn } from "@/lib/cn";
  * Nunca en desgloses de pago, controles principales ni como sello de verificación.
  */
 const POSES = {
-  wave: { src: "/brand/fixy-wave.webp", w: 422, h: 480 },
-  listen: { src: "/brand/fixy-listen.webp", w: 345, h: 385 },
-  think: { src: "/brand/fixy-think.webp", w: 289, h: 386 },
-  celebrate: { src: "/brand/fixy-celebrate.webp", w: 375, h: 381 },
-  empathy: { src: "/brand/fixy-empathy.webp", w: 285, h: 384 },
+  wave: { src: "/brand/v2/fixy-wave.webp", w: 422, h: 480 },
+  listen: { src: "/brand/v2/fixy-listen.webp", w: 345, h: 385 },
+  think: { src: "/brand/v2/fixy-think.webp", w: 289, h: 386 },
+  celebrate: { src: "/brand/v2/fixy-celebrate.webp", w: 375, h: 381 },
+  empathy: { src: "/brand/v2/fixy-empathy.webp", w: 285, h: 384 },
 } as const;
 
 export type MascotPose = keyof typeof POSES;

@@ -451,8 +451,8 @@ export function ChatRequest(props: {
 function Bot({ children, tone, wide }: { children: React.ReactNode; tone?: "warn" | "danger"; wide?: boolean }) {
   return (
     <li className="flex list-none items-start gap-2.5 motion-safe:animate-pop-in">
-      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-fixy-50 ring-1 ring-fixy-500/20">
-        <Mascot pose="listen" animate={false} className="h-9 w-auto translate-y-1" />
+      <span className="grid h-10 w-10 shrink-0 place-items-center">
+        <Mascot pose="listen" animate={false} className="h-10 w-auto" />
       </span>
       <div className={cn("min-w-0 rounded-3xl rounded-tl-md px-4 py-3 text-[16px] leading-relaxed shadow-[var(--shadow-card)] ring-1",
         wide ? "flex-1" : "max-w-[85%]",
@@ -475,8 +475,8 @@ function Me({ children, onEdit }: { children: React.ReactNode; onEdit?: () => vo
 function Typing({ label }: { label: string }) {
   return (
     <li className="flex list-none items-center gap-2.5" role="status">
-      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-fixy-50 ring-1 ring-fixy-500/20">
-        <Mascot pose="think" animate={false} className="h-9 w-auto translate-y-1" />
+      <span className="grid h-10 w-10 shrink-0 place-items-center">
+        <Mascot pose="think" animate={false} className="h-10 w-auto" />
       </span>
       <span className="inline-flex items-center gap-2 rounded-3xl bg-surface px-4 py-3 text-muted ring-1 ring-line">
         <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />{label}

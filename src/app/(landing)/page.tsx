@@ -1,3 +1,8 @@
+import { redirect } from "next/navigation";
+import { getActor } from "@/server/auth/session";
+import { canAccessAdmin } from "@/server/auth/actor";
+import { inFixyApp } from "@/components/auth/google-button";
+import { AppHome } from "@/components/landing/app-home";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Check, Mail, MessageCircle } from "lucide-react";
 import { sql } from "@/server/db/client";
@@ -42,7 +47,14 @@ const section = "mx-auto max-w-[1200px] px-5 sm:px-8";
 const eyebrow = "m-strong text-xs uppercase tracking-[0.14em] text-ash";
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ cuenta?: string }> }) {
-  const [categories, sp] = await Promise.all([listCategories(sql()), searchParams]);
+  const sp = await searchParams;
+  // Dentro de la app: quien ya ingresó va directo a su panel; el resto ve una pantalla con una sola tarea.
+  if (await inFixyApp()) {
+    const actor = await getActor();
+    if (actor) redirect(canAccessAdmin(actor) ? "/admin" : actor.providers.length && !actor.organizations.length ? "/proveedor" : "/app");
+    return <AppHome notice={sp.cuenta === "eliminada" ? "Tu cuenta fue eliminada. Gracias por haber usado Fixy." : undefined} />;
+  }
+  const categories = await listCategories(sql());
   // Los rubros más pedidos van como tarjetas (con «Otro» al final); el resto, como etiquetas compactas.
   const named = categories.filter((c) => c.slug !== "otro");
   const featured = [...named.slice(0, 11), ...categories.filter((c) => c.slug === "otro")];

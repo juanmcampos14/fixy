@@ -20,12 +20,13 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
           <Link href={areas.find((a) => a.key === area)?.href ?? "/"} aria-label="Fixy, inicio del panel" className="shrink-0">
-            <Logo size="sm" />
+            {/* Con el selector de panel, en celular va solo el símbolo: si no, los íconos de la derecha se salen de la pantalla. */}
+            <Logo size="sm" className={areas.length > 1 ? "[&>span:first-of-type]:hidden sm:[&>span:first-of-type]:inline" : undefined} />
           </Link>
           {areas.length > 1 && (
-            <nav aria-label="Cambiar de panel" className="ml-1 flex rounded-full bg-surface p-1 ring-1 ring-line">
+            <nav aria-label="Cambiar de panel" className="flex min-w-0 rounded-full bg-surface p-1 ring-1 ring-line sm:ml-1">
               {areas.map((a) => (
                 <Link key={a.key} href={a.href} aria-current={a.key === area ? "page" : undefined}
                   className={cn("rounded-full px-3 py-1.5 text-[13px] font-semibold", a.key === area ? "bg-ivory text-onyx" : "text-ink-2 hover:bg-ink/10")}>

@@ -86,7 +86,6 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
             </ul>
           </div>
           <div className="relative mx-auto w-full max-w-xs">
-            <div className="absolute inset-x-6 bottom-4 top-12 -z-0 rounded-full bg-[radial-gradient(closest-side,rgba(82,102,235,0.28),transparent)]" aria-hidden />
             <Mascot pose="wave" priority className="relative mx-auto h-72 w-auto sm:h-80" />
           </div>
         </div>

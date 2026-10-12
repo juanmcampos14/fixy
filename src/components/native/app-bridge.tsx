@@ -15,7 +15,7 @@ type PushPlugin = {
   register: () => Promise<void>;
   addListener: Listen<"registration", { value: string }> & Listen<"pushNotificationActionPerformed", { notification: { data?: { link?: string } } }>;
 };
-type CapacitorGlobal = { isNativePlatform?: () => boolean; getPlatform?: () => string; Plugins?: { App?: AppPlugin; PushNotifications?: PushPlugin } };
+type CapacitorGlobal = { isNativePlatform?: () => boolean; getPlatform?: () => string; Plugins?: { App?: AppPlugin; PushNotifications?: PushPlugin; Browser?: { close: () => Promise<void> } } };
 
 const TOKEN_KEY = "fixy-push-token";
 const store = {
@@ -72,6 +72,15 @@ export function NativeAppBridge() {
         if (!raw) return;
         try {
           const u = new URL(raw);
+          // Vuelta del ingreso con Google hecho en el navegador del sistema: se canjea el código por la sesión.
+          if (u.protocol === "fixy:" && (u.hostname === "auth" || u.pathname.replace(/\//g, "") === "auth")) {
+            const code = u.searchParams.get("code");
+            const verifier = localStorage.getItem("fixy-google-verifier");
+            localStorage.removeItem("fixy-google-verifier");
+            cap.Plugins?.Browser?.close().catch(() => null);
+            if (code && verifier) location.assign(`/auth/app/finish?code=${encodeURIComponent(code)}&verifier=${encodeURIComponent(verifier)}`);
+            return;
+          }
           if (!/(^|\.)fixy\.solutions$/.test(u.hostname)) return;
           goPath(u.pathname + u.search + u.hash);
         } catch {

@@ -6,6 +6,7 @@ import { signInWithGoogle } from "@/server/modules/users";
 import { createSession } from "@/server/auth/session";
 import { isDomainError } from "@/server/domain/errors";
 import { rateLimit } from "@/server/rate-limit";
+import { APP_CHALLENGE_COOKIE, createHandoff, validChallenge } from "@/server/auth/app-handoff";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export async function GET(req: Request) {
   const jar = await cookies();
   const raw = jar.get(GOOGLE_COOKIE)?.value;
   jar.delete({ name: GOOGLE_COOKIE, path: "/auth/google" });
+  const appChallenge = jar.get(APP_CHALLENGE_COOKIE)?.value;
+  jar.delete({ name: APP_CHALLENGE_COOKIE, path: "/auth/google" });
   if (url.searchParams.get("error")) return fail(url.origin, "Cancelaste el ingreso con Google.");
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -28,6 +31,11 @@ export async function GET(req: Request) {
     await rateLimit(`google:${(h.get("x-forwarded-for") ?? "local").split(",")[0].trim()}`, 30, 600);
     const identity = await finishGoogleLogin(code, saved);
     const { userId } = await signInWithGoogle(identity);
+    if (validChallenge(appChallenge)) {
+      // No se abre sesión en este navegador: la sesión se crea dentro de la app al canjear el código.
+      const handoff = await createHandoff(userId, appChallenge, saved.next || "/app");
+      return NextResponse.redirect(new URL(`/auth/app/volver?code=${handoff}`, url.origin), 303);
+    }
     await createSession(userId);
     return NextResponse.redirect(new URL(saved.next || "/app", url.origin), 303);
   } catch (e) {
