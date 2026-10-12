@@ -16,7 +16,7 @@ export function PublicFooter() {
       <div className="mx-auto grid max-w-[1200px] gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Logo variant="white" size="sm" />
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-ash">Tu centro de soluciones para el hogar, la oficina y la obra. Ciudad de Buenos Aires y GBA.</p>
+          <p className="mt-4 max-w-xs text-sm leading-relaxed text-ash">Tu centro de soluciones para el hogar, la oficina y la obra, en toda la Argentina.</p>
         </div>
         {COLUMNS.map((col) => (
           <div key={col.title}>

@@ -27,7 +27,7 @@ const EXPECTING_TEXT: Record<Expecting, string> = {
 };
 
 const FACTS = `Datos de Fixy (usá solo esto, no inventes):
-- Fixy conecta personas, oficinas y empresas con profesionales de oficios (plomería, electricidad, gas, pintura, aire acondicionado, cerrajería y más) en CABA y GBA. También trabajos grandes y obras: se coordinan escribiendo a ${SUPPORT_EMAIL}.
+- Fixy conecta personas, oficinas y empresas con profesionales de oficios (plomería, electricidad, gas, pintura, aire acondicionado, cerrajería y más) en toda la Argentina. También trabajos grandes y obras: se coordinan escribiendo a ${SUPPORT_EMAIL}.
 - Por este WhatsApp se puede: hacer un pedido nuevo, ver cómo van los pedidos y sumar fotos o detalles a un pedido abierto (si el número está vinculado a la cuenta de Fixy).
 - Al pedir se puede elegir un profesional, pedir presupuestos a varios, o decir cuánto se quiere pagar para que los profesionales se anoten u ofrezcan menos.
 - La dirección la ve solo Fixy: el profesional la recibe cuando se confirma la visita.
@@ -122,7 +122,7 @@ function cannedAnswer(t: string): string {
   if (/(obra|grande|edificio|consorcio|empresa|remodel|refacc)/.test(t)) {
     return `Sí, también hacemos trabajos grandes y obras: escribinos a ${SUPPORT_EMAIL} con tu proyecto y te acercamos a los mejores profesionales.`;
   }
-  if (/(zona|cubren|llegan|donde trabajan)/.test(t)) return "Trabajamos en CABA y GBA. Contame dónde es y te muestro quiénes pueden ir.";
+  if (/(zona|cubren|llegan|donde trabajan)/.test(t)) return "Trabajamos en toda la Argentina. Contame dónde es y te muestro quiénes pueden ir.";
   return `Te ayudo por acá a hacer un pedido, ver cómo van tus pedidos o sumarles fotos y detalles. Para hablar con una persona del equipo, escribinos a ${SUPPORT_EMAIL}.`;
 }
 

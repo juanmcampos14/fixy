@@ -35,7 +35,7 @@ Textos listos para copiar. Las imágenes están en [`capturas/`](capturas/). Los
 
 **Descripción**:
 ```
-Fixy es tu centro de soluciones para el hogar, la oficina y la obra en Buenos Aires.
+Fixy es tu centro de soluciones para el hogar, la oficina y la obra en Argentina.
 
 Contá qué pasa con tus palabras —"pierde la canilla", "saltó la térmica", "el aire no enfría"— y Fixy te muestra profesionales de tu zona para ese trabajo.
 
@@ -58,7 +58,6 @@ Plomería, electricidad, gas, aire acondicionado, cerrajería, pintura, albañil
 ¿SOS PROFESIONAL?
 Sumate gratis, recibí pedidos de tu zona, presupuestá desde el celular y cobrá por la plataforma.
 
-Cobertura actual: Ciudad de Buenos Aires y Gran Buenos Aires.
 Fixy no reemplaza a los servicios de emergencia.
 ```
 
@@ -71,7 +70,7 @@ Fixy no reemplaza a los servicios de emergencia.
 - Contacto: nombre y teléfono del responsable, mail hola@fixy.solutions.
 - Notas (pegar en inglés):
 ```
-Fixy is a marketplace that connects customers with independent home-service professionals (plumbers, electricians, etc.) in Buenos Aires, Argentina.
+Fixy is a marketplace that connects customers with independent home-service professionals (plumbers, electricians, etc.) in Argentina.
 
 TEST ACCOUNTS (same password for both)
 - Customer: revision.cliente@fixy.solutions

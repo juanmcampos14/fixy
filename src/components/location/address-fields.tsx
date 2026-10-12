@@ -11,7 +11,7 @@ import { AddressPrivacyNote } from "./privacy-note";
 import { componentsToAddress, FEW_PROS_MESSAGE, LOCATE_ERROR, locateMe, type AddressValue, type ZoneOption } from "./locate";
 export type { AddressValue, ZoneOption } from "./locate";
 
-const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur", OTRA: "Fuera de CABA y GBA" };
+const REGION: Record<string, string> = { CABA: "Ciudad de Buenos Aires", GBA_NORTE: "GBA Norte", GBA_OESTE: "GBA Oeste", GBA_SUR: "GBA Sur", OTRA: "Resto del país" };
 const BA_CENTER = { lat: -34.6037, lng: -58.3816 };
 const control = "block w-full rounded-xl border border-control bg-surface px-3.5 text-[16px] text-ink focus:border-fixy-600 focus:outline-none focus:ring-3 focus:ring-fixy-500/25";
 

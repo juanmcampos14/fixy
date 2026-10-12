@@ -450,7 +450,7 @@ function askZoneList(s: State, region: string, zones: Zone[], ctx: Ctx): State {
   const list = region === "OTRA" ? zones.filter((z) => ["GBA_OESTE", "GBA_SUR", "OTRA"].includes(z.region)) : zones.filter((z) => z.region === region);
   ctx.out.push({
     kind: "list", text: "Elegí la zona:", button: "Ver zonas",
-    sections: [{ title: region === "CABA" ? "CABA" : region === "GBA_NORTE" ? "GBA Norte" : "Otras zonas", rows: list.slice(0, 10).map((z) => ({ id: `zone:${z.id}`, title: z.code === "otra-zona" ? "Fuera de CABA y GBA" : z.name })) }],
+    sections: [{ title: region === "CABA" ? "CABA" : region === "GBA_NORTE" ? "GBA Norte" : "Otras zonas", rows: list.slice(0, 10).map((z) => ({ id: `zone:${z.id}`, title: z.code === "otra-zona" ? "Resto del país" : z.name })) }],
   });
   return { ...s, step: "zone" };
 }

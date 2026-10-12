@@ -57,7 +57,7 @@ export async function draftProviderProfile(
     tips: z.array(z.string()).describe("Hasta 3 sugerencias concretas para completar el perfil (qué fotos subir, qué aclarar)."),
   });
 
-  const system = `Ayudás a profesionales de oficios de Argentina (AMBA) a crear su perfil en Fixy, un marketplace de servicios para hogares y oficinas.
+  const system = `Ayudás a profesionales de oficios de Argentina a crear su perfil en Fixy, un marketplace de servicios para hogares y oficinas.
 Te cuentan con sus palabras qué hacen. Armá un borrador de perfil fiel a lo que dijeron:
 - Rubros: elegí solo los del catálogo que correspondan a lo que hacen.
 - Zonas: mapeá barrios y partidos mencionados a los códigos del catálogo. Si dicen "zona norte", "zona oeste", "zona sur" o "capital", incluí las zonas de esa región. Si no mencionan zonas, dejá la lista vacía.

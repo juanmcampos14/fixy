@@ -72,7 +72,7 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
               {oficio ? <>¿Sos {oficio.singular}?<br />Sumate a Fixy.</> : <>Tu oficio,<br />más oportunidades.</>}
             </h1>
             <p className="mt-5 max-w-xl text-lg text-white/80">
-              Recibí pedidos de {oficio ? oficio.ejemplos : "hogares, oficinas y comercios"} en tu zona de CABA y GBA. Los clientes te eligen por tu perfil, presupuestás en el lugar con tu precio y Fixy se ocupa de la coordinación y el cobro.
+              Recibí pedidos de {oficio ? oficio.ejemplos : "hogares, oficinas y comercios"} en tu zona, en toda la Argentina. Los clientes te eligen por tu perfil, presupuestás en el lugar con tu precio y Fixy se ocupa de la coordinación y el cobro.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <ButtonLink href={signupHref} size="lg" variant="secondary">Quiero sumarme <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>

@@ -7,7 +7,7 @@ export async function generateMetadata({ params }: { params: Promise<{ oficio: s
   const o = findOficio((await params).oficio);
   if (!o) return {};
   const title = `¿Sos ${o.singular}? Sumate a Fixy`;
-  const description = `Recibí pedidos de ${o.ejemplos} en tu zona de CABA y GBA. Cotizá con tu precio y cobrá dentro de Fixy. Alta sin costo.`;
+  const description = `Recibí pedidos de ${o.ejemplos} en tu zona, en toda la Argentina. Cotizá con tu precio y cobrá dentro de Fixy. Alta sin costo.`;
   return { title, description, openGraph: { title, description, type: "website", locale: "es_AR" } };
 }
 
