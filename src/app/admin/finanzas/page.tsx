@@ -4,6 +4,8 @@ import { requireSection } from "@/server/auth/session";
 import { isPlatformAdmin } from "@/server/auth/actor";
 import { sql } from "@/server/db/client";
 import { reconcile } from "@/server/modules/payments";
+import { env } from "@/server/env";
+import { mpAccountStatus } from "@/server/payments/mercadopago";
 import { getLedger, jobsForAdjustment, listCharges, listPayouts, listRefunds } from "@/server/queries/admin";
 import { chargeKindLabel, chargeStatusLabel, jobStatusLabelProvider, payoutStatusLabel, payoutsStatusLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
@@ -49,6 +51,8 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const actor = (await requireSection("finanzas")).actor;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? "retiros") as TabKey;
+  // Con qué cuenta y en qué modo se está cobrando (solo lo ve el dueño).
+  const gateway = isPlatformAdmin(actor) && env().PAYMENTS_GATEWAY === "mercadopago" ? await mpAccountStatus() : null;
 
   return (
     <>
@@ -57,6 +61,18 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
         title="Finanzas"
         description="Cobros, liquidaciones, reembolsos y registro financiero. Los movimientos no se editan ni se borran: las correcciones se hacen con ajustes o reversos."
       />
+      {gateway && (gateway.ok ? (
+        <Alert tone={gateway.mode === "live" && !gateway.testUser && gateway.webhookSecret ? "ok" : "warn"} className="mb-5"
+          title={gateway.mode === "live" ? "Mercado Pago: cobros reales" : "Mercado Pago: modo de prueba (no se mueve dinero real)"}>
+          Cuenta <strong>{gateway.nickname}</strong> ({gateway.country}) · credencial de {gateway.credential}
+          {gateway.testUser ? " · es un usuario de prueba" : ""}{gateway.webhookSecret ? "" : " · falta la clave secreta de los avisos de pago"}.
+          {gateway.mode === "live" && gateway.testUser ? " Atención: el modo es real pero la credencial es de un usuario de prueba." : ""}
+        </Alert>
+      ) : (
+        <Alert tone="danger" className="mb-5" title="Mercado Pago no responde con la credencial activa">
+          Modo {gateway.mode === "live" ? "real" : "de prueba"}. {gateway.error} Mientras esto no se corrija, los clientes no pueden pagar.
+        </Alert>
+      ))}
       <Alert tone="info" className="mb-5" title="Comprobante de pago no es factura">
         Fixy emite comprobantes de pago internos (registro del cobro). Esta versión del MVP no emite facturas fiscales: la facturación electrónica queda pendiente.
       </Alert>

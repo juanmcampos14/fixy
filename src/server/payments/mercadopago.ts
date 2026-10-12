@@ -144,3 +144,23 @@ export const mercadoPagoGateway: PaymentGateway = {
     return expected.length === given.length && timingSafeEqual(expected, given);
   },
 };
+
+/**
+ * Diagnóstico para Operación: con qué cuenta de Mercado Pago está cobrando la plataforma y en qué modo.
+ * No expone el token: solo lo que Mercado Pago informa de la cuenta dueña de la credencial activa.
+ */
+export async function mpAccountStatus(): Promise<
+  { ok: true; mode: "test" | "live"; nickname: string; country: string; testUser: boolean; credential: "prueba" | "producción"; webhookSecret: boolean } | { ok: false; mode: "test" | "live"; error: string }
+> {
+  const mode = mpIsTest() ? "test" : "live";
+  try {
+    const t = token();
+    const me = await mp<{ nickname?: string; site_id?: string; tags?: string[] }>("/users/me");
+    return {
+      ok: true, mode, nickname: me.nickname ?? "(sin nombre)", country: me.site_id ?? "?", testUser: (me.tags ?? []).includes("test_user"),
+      credential: t.startsWith("TEST-") ? "prueba" : "producción", webhookSecret: !!env().MERCADOPAGO_WEBHOOK_SECRET,
+    };
+  } catch (e) {
+    return { ok: false, mode, error: e instanceof Error ? e.message.slice(0, 160) : "error" };
+  }
+}
