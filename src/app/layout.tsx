@@ -14,6 +14,8 @@ export const metadata: Metadata = {
   applicationName: "Fixy",
   openGraph: { type: "website", locale: "es_AR", siteName: "Fixy" },
   twitter: { card: "summary_large_image" },
+  // Verificación de propiedad del sitio en Google (Search Console / Play Console).
+  verification: { google: "C8pbva1RezyRgzqU1PGIl9MVw5PIY6liqTNuBzQODs8" },
 };
 
 export const viewport: Viewport = { themeColor: "#171721", width: "device-width", initialScale: 1 };
