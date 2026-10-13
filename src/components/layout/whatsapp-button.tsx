@@ -30,7 +30,7 @@ export function WhatsAppButton() {
   }, [open]);
 
   return (
-    <div ref={panel} className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6 print:hidden">
+    <div ref={panel} className="wa-fab fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6 print:hidden">
       {open && (
         <div id="contacto-fixy" role="dialog" aria-label="Contactar a Fixy" className="w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-obsidian p-4 shadow-[var(--shadow-lift)]">
           <div className="flex items-start justify-between gap-3">

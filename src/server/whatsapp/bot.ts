@@ -145,6 +145,12 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
   const t = norm(text);
   const reply = msg.replyId ?? "";
 
+  // Audios, stickers, videos y documentos: todavía no los interpretamos; lo decimos en vez de quedarnos callados.
+  if (msg.type === "other") {
+    ctx.out.push({ kind: "text", text: "Por ahora no puedo escuchar audios ni abrir ese tipo de mensaje 🙈 Escribímelo con palabras, por favor." });
+    return s;
+  }
+
   // Avisos para profesionales: código de vinculación enviado desde el panel, baja y alta.
   const code = text.match(/c[oó]digo\D{0,12}(\d{6})\b/i)?.[1] ?? (/^\d{6}$/.test(t) && ["idle", "done"].includes(s.step) ? t : null);
   if (code) {

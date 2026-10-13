@@ -171,3 +171,6 @@ h1, h2, h3, h4, .m-display { font-weight: 480; }
 }
 /* La ilustración de respaldo trae una sombra clara (pensada para fondo claro): se desvanece abajo sobre el lienzo oscuro. */
 .fixy-fallback { -webkit-mask-image: linear-gradient(#000 80%, transparent 95%); mask-image: linear-gradient(#000 80%, transparent 95%); }
+
+/* En el alta guiada el botón principal va abajo: el acceso flotante a WhatsApp no tiene que taparlo. */
+body:has([data-guided]) .wa-fab { display: none; }

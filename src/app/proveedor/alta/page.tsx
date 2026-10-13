@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getActor } from "@/server/auth/session";
 import { activeMembership, getOnboardingState, getProviderSetup } from "@/server/queries/provider";
@@ -67,6 +68,15 @@ export default async function AltaPage({ searchParams }: { searchParams: Promise
     [checklist.termsAccepted, "Términos", "#terminos"],
   ];
   const missingRequired = steps.filter(([ok, label]) => !ok && !label.startsWith("Portfolio"));
+  // Una sola cosa por vez: de todo lo que falta, lo que más conviene hacer ahora.
+  const todo: { done: boolean; title: string; why: string; href: string }[] = [
+    { done: checklist.identityDocument, title: "Subí una foto de tu DNI", why: "Con tu identidad verificada podés responder pedidos.", href: "#documentacion" },
+    { done: !!provider.avatar_file_id, title: "Subí una foto tuya", why: "Los clientes eligen mucho más a quien muestra su cara.", href: "#foto" },
+    { done: checklist.payouts, title: "Decinos a qué cuenta transferirte", why: "Ahí te mandamos lo que ganes.", href: "#cobros" },
+    { done: checklist.portfolio, title: "Sumá fotos de trabajos que hiciste", why: "Es lo que más mira un cliente antes de elegir.", href: "#portfolio" },
+  ];
+  const nextStep = provider.status === "approved" || provider.status === "suspended" ? todo.slice(1).find((t) => !t.done) : todo.find((t) => !t.done);
+  const doneCount = todo.filter((t) => t.done).length;
 
   return (
     <>
@@ -79,6 +89,17 @@ export default async function AltaPage({ searchParams }: { searchParams: Promise
         <Alert tone="ok" className="mb-5" title="¡Tu perfil está creado!">
           Ahora sumá fotos de trabajos, tu DNI y los datos de cobro. Cada paso sube la fuerza de tu perfil y te muestra más arriba.
         </Alert>
+      )}
+      {nextStep && (
+        <a href={nextStep.href} className="mb-5 flex items-center gap-4 rounded-[var(--radius-card)] bg-fixy-50 p-5 ring-2 ring-fixy-700">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-fixy-700 text-xl text-white">{doneCount + 1}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-ink-2">Tu próximo paso</span>
+            <span className="block text-xl text-ink">{nextStep.title}</span>
+            <span className="mt-0.5 block text-[15px] text-ink-2">{nextStep.why}</span>
+          </span>
+          <ArrowRight className="h-6 w-6 shrink-0" aria-hidden />
+        </a>
       )}
       <div className="space-y-5">
         {strength && (
