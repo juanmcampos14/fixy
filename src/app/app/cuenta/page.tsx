@@ -6,6 +6,7 @@ import { DELETE_CONFIRMATION, deletionBlockers } from "@/server/modules/account"
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { DeleteAccountForm } from "./delete-form";
+import { EmailAccessForm } from "./email-access-form";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 
 export const metadata: Metadata = { title: "Mi cuenta" };
@@ -16,6 +17,8 @@ export default async function AccountPage() {
   const [u] = await sql()<{ phone: string | null; whatsapp_phone: string | null; google: boolean; has_password: boolean; created_at: Date }[]>`
     select phone, whatsapp_phone, google_sub is not null as google, password_hash is not null as has_password, created_at from users where id = ${actor.id}`;
   const blockers = await deletionBlockers(sql(), actor);
+  // Cuenta nacida en WhatsApp: sin email, o con un email agregado después (sin verificar).
+  const fromWhatsApp = actor.hasEmail === false || actor.emailVerified === false;
   return (
     <>
       <PageHeader title="Mi cuenta" description="Tus datos de acceso y contacto." />
@@ -27,10 +30,21 @@ export default async function AccountPage() {
             ["Email", actor.hasEmail === false ? "Sin email (entrás por WhatsApp)" : actor.email],
             ["Teléfono", u.phone ?? "—"],
             ["WhatsApp vinculado", u.whatsapp_phone ? `Terminado en ${u.whatsapp_phone.slice(-4)}` : "No"],
-            ["Ingreso", [u.has_password && "Email y contraseña", u.google && "Google"].filter(Boolean).join(" · ") || "—"],
+            ["Ingreso", [fromWhatsApp && "Link por WhatsApp", u.has_password && "Email y contraseña", u.google && "Google"].filter(Boolean).join(" · ") || "—"],
           ]} />
           <p className="mt-3 text-sm text-muted">¿Necesitás cambiar algún dato? Escribinos a <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
         </Card>
+
+        {fromWhatsApp && (
+          <Card as="section" aria-labelledby="ea-t">
+            <CardHeader title={<span id="ea-t">{actor.hasEmail === false ? "Entrar también con email y clave" : "Tu email y tu clave"}</span>}
+              description={actor.hasEmail === false
+                ? "Es opcional. Hoy entrás escribiendo «entrar» al WhatsApp de Fixy; si querés, sumá un email y una clave para entrar también desde la pantalla de ingreso."
+                : "Podés cambiarlos cuando quieras."} />
+            <EmailAccessForm currentEmail={actor.hasEmail === false ? null : actor.email} />
+            <p className="mt-3 text-sm text-muted">Los avisos te siguen llegando por WhatsApp. Si te olvidás la clave, escribí <strong>entrar</strong> al WhatsApp de Fixy y la cambiás acá.</p>
+          </Card>
+        )}
 
         <Card as="section" aria-labelledby="del-t" className="ring-1 ring-danger/20">
           <CardHeader title={<span id="del-t">Eliminar mi cuenta</span>} description="Es definitivo: no se puede deshacer." />

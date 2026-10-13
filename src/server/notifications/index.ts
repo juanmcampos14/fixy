@@ -48,7 +48,7 @@ export async function notify(
       const notice: WaNotice = { template: "notice", params: [n.title.slice(0, 120)], requestId: "whatsapp", text: `${n.title}${n.body ? `\n${n.body}` : ""}`, audience: "account" };
       await db`insert into outbox (channel, recipient_user_id, payload)
         select 'whatsapp', id, ${db.json(notice as never)} from users
-        where id = ${userId} and email_placeholder and whatsapp_phone is not null and disabled_at is null`;
+        where id = ${userId} and (email_placeholder or not email_verified) and whatsapp_phone is not null and disabled_at is null`;
     }
     if (n.whatsapp) {
       const providerOnly = n.whatsapp.audience === "provider";
@@ -136,7 +136,7 @@ export async function processOutbox(limit = 20, adapter: EmailAdapter = emailAda
   await sql().begin(async (tx) => {
     const rows = await tx<{ id: string; payload: { subject: string; text: string; link: string | null }; attempts: number; email: string }[]>`
       select o.id, o.payload, o.attempts, u.email from outbox o join users u on u.id = o.recipient_user_id
-      where o.channel = 'email' and not u.sandbox and not u.email_placeholder and o.status in ('pending','failed') and o.next_attempt_at <= now()
+      where o.channel = 'email' and not u.sandbox and not u.email_placeholder and u.email_verified and o.status in ('pending','failed') and o.next_attempt_at <= now()
       order by o.created_at limit ${limit} for update of o skip locked`;
     for (const r of rows) {
       try {

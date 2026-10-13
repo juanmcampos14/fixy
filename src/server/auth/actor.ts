@@ -13,6 +13,8 @@ export type Actor = {
   sandbox?: boolean;
   /** false: cuenta creada por WhatsApp, sin email propio (el guardado es interno y no se muestra ni se le escribe). */
   hasEmail?: boolean;
+  /** false: email agregado después de un alta por WhatsApp, sin verificar (no se le escribe). */
+  emailVerified?: boolean;
   organizations: { id: string; name: string; role: "admin" | "member" }[];
   providers: { id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[];
   /** Permisos por sección del panel (solo rol "team"). */
@@ -30,8 +32,8 @@ export const isStaff = (a: Actor | null) =>
 export const isPlatformAdmin = (a: Actor | null) => a?.platformRole === "admin";
 
 export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
-  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean; sandbox: boolean; email_placeholder: boolean }[]>`
-    select id, email, full_name, platform_role, is_demo, sandbox, email_placeholder from users where id = ${userId} and disabled_at is null`;
+  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean; sandbox: boolean; email_placeholder: boolean; email_verified: boolean }[]>`
+    select id, email, full_name, platform_role, is_demo, sandbox, email_placeholder, email_verified from users where id = ${userId} and disabled_at is null`;
   if (!u) return null;
   const orgs = await db<{ id: string; name: string; role: "admin" | "member" }[]>`
     select o.id, o.name, m.role from organization_members m join organizations o on o.id = m.organization_id
@@ -50,6 +52,7 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
     isDemo: u.is_demo,
     sandbox: u.sandbox,
     hasEmail: !u.email_placeholder,
+    emailVerified: u.email_verified,
     organizations: [...orgs],
     providers: [...providers],
     permissions: Object.fromEntries(perms.map((p) => [p.section, p.level])) as Permissions,

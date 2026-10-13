@@ -124,3 +124,53 @@ describe("alta de profesionales por WhatsApp", () => {
     expect(last).toContain("quiero trabajar con Fixy");
   });
 });
+
+describe("cuenta de WhatsApp que suma email y clave", () => {
+  it("puede entrar con email y clave; no recibe correos ni enlaces de recuperación; puede cambiarlos", async () => {
+    const { authenticate, requestPasswordReset, setEmailAccess, registerUser } = await import("@/server/modules/users");
+    const { loadActor } = await import("@/server/auth/actor");
+    const { systemTx } = await import("@/server/db/client");
+    const { notify } = await import("@/server/notifications");
+    const phone = phoneFor(9);
+    await say(phone, "Hola, quiero trabajar con Fixy");
+    await say(phone, "Clara Benítez");
+    await say(phone, "pintora");
+    await say(phone, "Tandil, Buenos Aires");
+    await tap(phone, "pro_accept");
+    const [u] = await sql()<{ id: string; email: string }[]>`select id, email from users where whatsapp_phone = ${phone}`;
+    const me = async () => (await systemTx((tx) => loadActor(tx, u.id)))!;
+    expect((await me()).hasEmail).toBe(false);
+
+    const email = `clara.${Date.now()}@test.local`;
+    await expect(setEmailAccess(await me(), { email, password: "corta" })).rejects.toThrow();
+    // No puede quedarse con el email de otra cuenta.
+    const otherEmail = `otra.${Date.now()}@test.local`;
+    await registerUser({ fullName: "Otra Persona", email: otherEmail, password: "password-123", acceptTerms: true, phone: "1155550000" });
+    await expect(setEmailAccess(await me(), { email: otherEmail, password: "clave-segura-1" })).rejects.toThrow(/Ya hay una cuenta/);
+
+    await setEmailAccess(await me(), { email: email.toUpperCase(), password: "clave-segura-1" });
+    expect(await authenticate(email, "clave-segura-1")).toBe(u.id);
+    const actor = await me();
+    expect(actor).toMatchObject({ email, hasEmail: true, emailVerified: false });
+    expect((await sql()<{ contact_email: string }[]>`select p.contact_email from providers p join provider_members m on m.provider_id = p.id where m.user_id = ${u.id}`)[0].contact_email).toBe(email);
+
+    // El email no está verificado: no hay enlace de recuperación ni correos; las novedades siguen por WhatsApp.
+    await requestPasswordReset(email);
+    expect(await sql()`select 1 from password_resets where user_id = ${u.id}`).toHaveLength(0);
+    await systemTx((tx) => notify(tx, [u.id], { type: "message", title: "Mensaje nuevo" }));
+    expect(await sql()`select 1 from outbox where recipient_user_id = ${u.id} and channel = 'whatsapp' and payload->>'audience' = 'account'`).toHaveLength(1);
+    await processOutbox(500);
+    expect((await sql()<{ status: string }[]>`select status from outbox where recipient_user_id = ${u.id} and channel = 'email'`).every((r) => r.status === "pending")).toBe(true);
+
+    // Puede cambiar la clave las veces que quiera (entrando con el link de WhatsApp).
+    await setEmailAccess(actor, { email, password: "otra-clave-22" });
+    await expect(authenticate(email, "clave-segura-1")).rejects.toThrow();
+    expect(await authenticate(email, "otra-clave-22")).toBe(u.id);
+  });
+
+  it("una cuenta con email verificado no puede usar este camino para cambiarlo", async () => {
+    const { setEmailAccess } = await import("@/server/modules/users");
+    const { actor } = await import("./helpers");
+    await expect(setEmailAccess(await actor("ana"), { email: `x.${Date.now()}@test.local`, password: "clave-segura-1" })).rejects.toThrow(/ya tiene un email/);
+  });
+});

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { audit } from "@/server/audit";
 import { sql, systemTx } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
-import { DomainError, conflict } from "@/server/domain/errors";
+import { DomainError, conflict, notFound } from "@/server/domain/errors";
+import type { Actor } from "@/server/auth/actor";
 
 export const registerSchema = z.object({
   fullName: z.string().trim().min(2, "Ingresá tu nombre.").max(120),
@@ -53,7 +54,8 @@ const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
 export async function requestPasswordReset(email: string) {
   const normalized = email.trim().toLowerCase();
   await systemTx(async (tx) => {
-    const [u] = await tx<{ id: string }[]>`select id from users where lower(email) = ${normalized} and disabled_at is null`;
+    // Los emails sin verificar (cuentas nacidas en WhatsApp) no reciben el enlace: la clave se cambia entrando por WhatsApp.
+    const [u] = await tx<{ id: string }[]>`select id from users where lower(email) = ${normalized} and disabled_at is null and email_verified and not email_placeholder`;
     if (!u) return;
     // Hasta 3 enlaces por hora por cuenta: evita llenarle la casilla a alguien.
     const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from password_resets where user_id = ${u.id} and created_at > now() - interval '1 hour'`;
@@ -118,5 +120,32 @@ export async function signInWithGoogle(g: { sub: string; email: string; emailVer
     for (const p of policies) await tx`insert into policy_acceptances (user_id, policy_id) values (${u.id}, ${p.id}) on conflict do nothing`;
     await audit(tx, null, "user.google_signup", "user", u.id, null);
     return { userId: u.id, created: true };
+  });
+}
+
+export const emailAccessSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Ese email no parece válido.").max(200),
+  password: z.string().min(8, "La clave tiene que tener al menos 8 letras o números.").max(200),
+});
+
+/**
+ * Cuenta creada por WhatsApp: suma (o cambia) un email y una clave para entrar también desde /ingresar.
+ * El email queda sin verificar: no recibe correos ni enlaces de recuperación (ver migración 0040).
+ */
+export async function setEmailAccess(actor: Actor, input: z.input<typeof emailAccessSchema>) {
+  const d = emailAccessSchema.parse(input);
+  const hash = await hashPassword(d.password);
+  await systemTx(async (tx) => {
+    const [u] = await tx<{ email: string; email_placeholder: boolean; email_verified: boolean }[]>`
+      select email, email_placeholder, email_verified from users where id = ${actor.id} and disabled_at is null for update`;
+    if (!u) throw notFound();
+    if (!u.email_placeholder && u.email_verified) throw conflict("Tu cuenta ya tiene un email. Para cambiarlo escribinos a hola@fixy.solutions.");
+    const [taken] = await tx`select 1 from users where lower(email) = ${d.email} and id <> ${actor.id}`;
+    if (taken) throw conflict("Ya hay una cuenta con ese email. Probá con otro.");
+    await tx`update users set email = ${d.email}, password_hash = ${hash}, email_placeholder = false, email_verified = false where id = ${actor.id}`;
+    // El perfil profesional guardaba el email interno como contacto: pasa a ser el real.
+    await tx`update providers set contact_email = ${d.email} where contact_email = ${u.email}
+      and id in (select provider_id from provider_members where user_id = ${actor.id} and role = 'admin')`;
+    await audit(tx, actor, "user.email_access_set", "user", actor.id, null, { replaced: !u.email_placeholder });
   });
 }
