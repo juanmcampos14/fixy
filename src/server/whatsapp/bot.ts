@@ -27,6 +27,7 @@ import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 import { consumeAlertsCode, setAlertsByPhone } from "@/server/modules/whatsapp-alerts";
+import { proSignupStep, sendLoginLink, startProSignup, wantsProSignup, type ProDraft, type ProStep } from "./pro-signup";
 
 export type Inbound = {
   id: string;
@@ -41,9 +42,11 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = "idle" | "evidence_job" | "evidence_kind" | "evidence" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = ProStep | "idle" | "evidence_job" | "evidence_kind" | "evidence" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
+  /** Alta de profesional por WhatsApp en curso. */
+  pro?: ProDraft;
   description?: string;
   title?: string;
   categorySlug?: string;
@@ -159,6 +162,19 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     return s;
   }
 
+  // Alta de profesionales por WhatsApp (camino simple, aparte del alta web) e ingreso al panel sin contraseña.
+  const inSignup = s.step.startsWith("pro_");
+  if (inSignup && (reply === "cancel" || /^(cancelar|salir)$/.test(t))) {
+    ctx.out.push({ kind: "text", text: "Listo, lo dejamos acá. Cuando quieras sumarte, escribime *quiero trabajar con Fixy*." });
+    return { step: "idle" };
+  }
+  if (inSignup) return proSignupStep(s.step as ProStep, s.pro ?? {}, { text, reply, location: msg.location, isImage: msg.type === "image" }, ctx);
+  if (reply === "pro_signup" || wantsProSignup(t)) return startProSignup(ctx, text);
+  if (/^(entrar|ingresar|mi panel|mi perfil|ver mi perfil|panel)$/.test(t)) {
+    await sendLoginLink(ctx);
+    return s;
+  }
+
   // Comandos globales
   if (reply === "cancel" || /^(cancelar|salir|empezar de nuevo|reiniciar|nuevo pedido|nuevo)$/.test(t)) {
     ctx.out.push({ kind: "text", text: "Listo, empezamos de nuevo. Contame qué problema tenés y te muestro profesionales que pueden ir." });
@@ -206,6 +222,9 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
   }
 
   switch (s.step) {
+    // Los pasos del alta de profesionales (pro_*) ya se atendieron arriba.
+    default:
+      return s;
     case "idle":
     case "done":
     case "evidence_job":

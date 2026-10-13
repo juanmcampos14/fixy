@@ -1,3 +1,4 @@
+import { whatsappUrl } from "@/lib/contact";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { demoLoginEnabled } from "@/server/env";
@@ -22,6 +23,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <GoogleButton next={next} signup />
         <LoginForm next={next} />
         <p className="mt-4 text-center text-sm"><Link href="/recuperar" className="font-semibold text-fixy-800 underline">Olvidé mi contraseña</Link></p>
+        <p className="mt-3 text-center text-sm text-muted">¿Te anotaste por WhatsApp? <a href={whatsappUrl("entrar")} className="font-semibold text-fixy-800 underline">Pedí tu link para entrar</a></p>
         <p className="mt-5 text-center text-[15px] text-muted">
           ¿No tenés cuenta? <Link href={`/registro${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="font-semibold text-fixy-800 underline">Crear cuenta</Link>
         </p>

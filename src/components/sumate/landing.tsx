@@ -4,7 +4,7 @@ import { ArrowRight, BadgeCheck, Banknote, CalendarCheck, CircleCheck, EyeOff, F
 import { sql } from "@/server/db/client";
 import { getActor } from "@/server/auth/session";
 import { Mascot } from "@/components/brand/mascot";
-import { ButtonLink } from "@/components/ui/button";
+import { ButtonLink, buttonClass } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/category-icon";
 import { CopyLink } from "./copy-link";
 import { OFICIOS, type Oficio } from "@/lib/oficios";
@@ -32,6 +32,8 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
 
   const origen = `sumate-${oficio?.slug ?? "general"}`;
   const signupHref = `/sumate/registrarme?origen=${origen}${ref ? `&ref=${ref}` : ""}`;
+  // Camino simple: el alta se hace charlando por WhatsApp (sin email ni contraseña). El alta web sigue disponible.
+  const waHref = `/alta${ref ? `?ref=${ref}` : ""}`;
   const appUrl = (process.env.APP_URL ?? "https://www.fixy.solutions").replace(/\/$/, "");
   const shareUrl = `${appUrl}/sumate${oficio ? `/${oficio.slug}` : ""}${ref ? `?ref=${ref}` : ""}`;
   const shareText = oficio
@@ -76,9 +78,11 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
               Recibí pedidos de {oficio ? oficio.ejemplos : "hogares, oficinas y comercios"} en tu zona, en toda la Argentina. Los clientes te eligen por tu perfil, presupuestás en el lugar con tu precio y Fixy se ocupa de la coordinación y el cobro.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <ButtonLink href={signupHref} size="lg" variant="secondary">Quiero sumarme <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>
-              <ButtonLink href="#como-funciona" size="lg" variant="ghost" className="text-white ring-1 ring-inset ring-white/30 hover:bg-white/10">Cómo funciona</ButtonLink>
+              {/* Enlace común (no de la app): la ruta redirige a WhatsApp. */}
+              <a href={waHref} className={buttonClass("primary", "lg")}><MessageCircle className="h-5 w-5" aria-hidden />Anotarme por WhatsApp</a>
+              <ButtonLink href={signupHref} size="lg" variant="secondary">Registrarme en la web <ArrowRight className="h-5 w-5" aria-hidden /></ButtonLink>
             </div>
+            <p className="mt-3 text-sm text-white/75">Por WhatsApp son 3 preguntas y listo: sin email ni contraseña.</p>
             <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[15px] text-white/85">
               {["Alta sin costo", "0 % de comisión de Fixy", "Retirás tu saldo una vez por mes"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><CircleCheck className="h-4 w-4 text-fixy-800" aria-hidden />{t}</li>
@@ -211,7 +215,10 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
       <section className="mx-auto mt-16 max-w-3xl px-4 text-center sm:px-6">
         <h2 className="text-3xl font-extrabold sm:text-4xl">¿Arrancamos?</h2>
         <p className="mt-2 text-ink-2">Creá tu cuenta y completá tu perfil. Te avisamos cuando estés habilitado para recibir pedidos.</p>
-        <ButtonLink href={signupHref} size="lg" className="mt-6"><Send className="h-5 w-5" aria-hidden />Quiero sumarme</ButtonLink>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <a href={waHref} className={buttonClass("primary", "lg")}><MessageCircle className="h-5 w-5" aria-hidden />Anotarme por WhatsApp</a>
+          <ButtonLink href={signupHref} size="lg" variant="secondary"><Send className="h-5 w-5" aria-hidden />Registrarme en la web</ButtonLink>
+        </div>
       </section>
 
       {/* Otros oficios */}

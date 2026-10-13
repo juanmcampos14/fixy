@@ -11,6 +11,8 @@ export type Actor = {
   isDemo: boolean;
   /** Cuenta de revisión de tiendas: solo se cruza con el profesional de prueba. */
   sandbox?: boolean;
+  /** false: cuenta creada por WhatsApp, sin email propio (el guardado es interno y no se muestra ni se le escribe). */
+  hasEmail?: boolean;
   organizations: { id: string; name: string; role: "admin" | "member" }[];
   providers: { id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[];
   /** Permisos por sección del panel (solo rol "team"). */
@@ -28,8 +30,8 @@ export const isStaff = (a: Actor | null) =>
 export const isPlatformAdmin = (a: Actor | null) => a?.platformRole === "admin";
 
 export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
-  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean; sandbox: boolean }[]>`
-    select id, email, full_name, platform_role, is_demo, sandbox from users where id = ${userId} and disabled_at is null`;
+  const [u] = await db<{ id: string; email: string; full_name: string; platform_role: PlatformRole; is_demo: boolean; sandbox: boolean; email_placeholder: boolean }[]>`
+    select id, email, full_name, platform_role, is_demo, sandbox, email_placeholder from users where id = ${userId} and disabled_at is null`;
   if (!u) return null;
   const orgs = await db<{ id: string; name: string; role: "admin" | "member" }[]>`
     select o.id, o.name, m.role from organization_members m join organizations o on o.id = m.organization_id
@@ -47,6 +49,7 @@ export async function loadActor(db: Db, userId: string): Promise<Actor | null> {
     platformRole: u.platform_role,
     isDemo: u.is_demo,
     sandbox: u.sandbox,
+    hasEmail: !u.email_placeholder,
     organizations: [...orgs],
     providers: [...providers],
     permissions: Object.fromEntries(perms.map((p) => [p.section, p.level])) as Permissions,

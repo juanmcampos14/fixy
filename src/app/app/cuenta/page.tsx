@@ -24,7 +24,7 @@ export default async function AccountPage() {
           <CardHeader title="Tus datos" />
           <DefinitionList items={[
             ["Nombre", actor.fullName],
-            ["Email", actor.email],
+            ["Email", actor.hasEmail === false ? "Sin email (entrás por WhatsApp)" : actor.email],
             ["Teléfono", u.phone ?? "—"],
             ["WhatsApp vinculado", u.whatsapp_phone ? `Terminado en ${u.whatsapp_phone.slice(-4)}` : "No"],
             ["Ingreso", [u.has_password && "Email y contraseña", u.google && "Google"].filter(Boolean).join(" · ") || "—"],
