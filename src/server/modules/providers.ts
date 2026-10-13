@@ -363,10 +363,12 @@ export async function providerEligibility(db: Db | Tx, providerId: string, categ
     select ct.name, d.expires_on from provider_documents d join credential_types ct on ct.id = d.credential_type_id
     where d.provider_id = ${providerId} and d.status = 'approved' and d.expires_on < current_date`;
   const reasons: string[] = [];
-  if (p.status === "pending") reasons.push("Completá tu alta y enviá tu perfil a revisión.");
-  else if (p.status === "in_review") reasons.push("Tu perfil está en revisión: el equipo de Fixy lo aprueba en breve.");
-  else if (p.status !== "approved") reasons.push("El perfil todavía no está aprobado.");
-  if (p.identity_status !== "verified") reasons.push("Falta verificar tu identidad (cargá tu DNI en el alta).");
+  // Para responder pedidos alcanza con haber enviado el DNI: no se espera a que el equipo lo apruebe (así no pierde su
+  // primer trabajo). La aprobación sí hace falta para retirar dinero (ver requestWithdrawal). Rechazados y suspendidos, no.
+  if (p.status === "rejected") reasons.push("Tu perfil fue observado: revisá lo que te pedimos y volvé a enviarlo.");
+  else if (!["pending", "in_review", "approved"].includes(p.status)) reasons.push("El perfil no está habilitado.");
+  if (p.identity_status === "unverified") reasons.push("Falta enviar tu DNI para verificar tu identidad.");
+  else if (p.identity_status === "rejected") reasons.push("No pudimos validar tu DNI: mandá una foto nueva, que se lea bien.");
   if (!p.accepting_jobs) reasons.push("Pausaste la recepción de trabajos.");
   for (const e of expired) reasons.push(`Credencial vencida: ${e.name}.`);
   if (categoryId) {

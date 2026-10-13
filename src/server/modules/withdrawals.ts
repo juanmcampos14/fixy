@@ -116,7 +116,11 @@ export async function requestWithdrawal(actor: Actor, providerId: string, bankIn
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
     // Serializa pedidos concurrentes del mismo profesional.
-    await tx`select id from providers where id = ${providerId} for update`;
+    const [prov] = await tx<{ status: string; identity_status: string }[]>`select status, identity_status from providers where id = ${providerId} for update`;
+    // Se puede trabajar con el DNI enviado, pero para retirar dinero el equipo tiene que haber verificado la identidad.
+    if (prov.identity_status !== "verified" || prov.status !== "approved") {
+      throw invalid("Para retirar tu saldo falta que el equipo de Fixy verifique tu identidad. Te avisamos apenas esté: no perdés nada de lo que ganaste.");
+    }
     if (bankInput) await saveBankAccountTx(tx, actor, providerId, bankInput);
     const [bank] = await tx<{ holder_name: string; holder_tax_id: string; cbu: string | null; alias: string | null; bank_name: string | null }[]>`
       select holder_name, holder_tax_id, cbu, alias, bank_name from provider_bank_accounts where provider_id = ${providerId}`;

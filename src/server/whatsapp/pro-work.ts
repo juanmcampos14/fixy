@@ -125,8 +125,8 @@ async function showOpportunity(me: Me, invId: string, ctx: Ctx): Promise<Result>
   if (!elig.eligible) {
     const [st] = await sql()<{ identity_status: string }[]>`select identity_status from providers where id = ${me.providerId}`;
     if (["unverified", "rejected"].includes(st.identity_status)) {
-      say(ctx, `${head}\n\n👉 Para tomar pedidos primero tengo que *verificar tu identidad*. Es un minuto:`);
-      return startDni(ctx);
+      say(ctx, `${head}\n\n👉 Para responder pedidos necesito una foto de tu DNI. Es un minuto y después seguimos con este pedido:`);
+      return startDni(ctx, invId);
     }
     say(ctx, `${head}\n\n👉 Todavía no podés responderlo: ${elig.reasons.join(" ")}\n\nApenas quede listo te aviso por acá.`);
     return done;
@@ -162,9 +162,9 @@ const failed = (e: unknown, ctx: Ctx): Result => {
 
 // ───────────────────────── DNI ─────────────────────────
 
-export function startDni(ctx: Ctx): Result {
+export function startDni(ctx: Ctx, backToInvId?: string): Result {
   say(ctx, "Para verificar tu perfil necesito una foto de tu DNI 🪪\n\nSacale una foto al *frente* (que se lean bien los datos) y mandámela por acá.\n\nSolo la ve el equipo de Fixy; no se publica.");
-  return { step: "pw_dni", pw: { dniSide: "front" } };
+  return { step: "pw_dni", pw: { dniSide: "front", invId: backToInvId } };
 }
 
 /** La foto ya quedó guardada como archivo privado: pasa a ser un documento del profesional. */
@@ -292,12 +292,16 @@ export async function workStep(step: WorkStep, pw: WorkDraft, input: In, me: Me,
       await attachIdentityPhoto(me, input.fileId);
       if (pw.dniSide !== "back") {
         say(ctx, "¡Bien! Ahora dala vuelta y mandame una foto del *dorso* 🔄");
-        return { step, pw: { dniSide: "back" } };
+        return { step, pw: { dniSide: "back", invId: pw.invId } };
       }
       // Con el documento cargado, el perfil pasa a revisión del equipo (si falta algo más, queda igual avisado).
       await submitForReview(me.actor, me.providerId).catch(() => null);
       await systemTx(async (tx) => notify(tx, await staffRecipients(tx), { type: "provider_review", title: `DNI recibido por WhatsApp · ${me.providerName}`, body: "Revisar identidad.", link: `/admin/proveedores/${me.providerId}`, email: false })).catch(() => null);
-      say(ctx, "¡Gracias! Ya tengo las dos fotos 🙌 El equipo de Fixy las revisa y te aviso por acá cuando tu perfil quede *verificado*.");
+      if (pw.invId) {
+        say(ctx, "¡Gracias! Ya tengo las dos fotos 🙌 Ya podés responder pedidos. Volvamos al que estabas viendo:");
+        return showOpportunity(me, pw.invId, ctx);
+      }
+      say(ctx, "¡Gracias! Ya tengo las dos fotos 🙌 Ya podés responder pedidos. El equipo de Fixy las revisa y te aviso cuando tu perfil quede *verificado*.");
       return done;
     }
 

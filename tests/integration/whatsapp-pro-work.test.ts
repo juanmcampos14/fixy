@@ -134,7 +134,7 @@ describe("el profesional trabaja desde WhatsApp", () => {
     // Sin verificar ve el pedido, pero para responderlo primero le pedimos el DNI (misma regla que en el panel).
     const reqId = await requestFor("pba-lujan", "domotica");
     await tap(phone, `pw:inv:${(await invitationOf(reqId, p.id)).id}`);
-    expect((await outs(phone, 2)).join(" ")).toContain("verificar tu identidad");
+    expect((await outs(phone, 2)).join(" ")).toContain("necesito una foto de tu DNI");
     expect(await step(phone)).toBe("pw_dni");
     await say(phone, "después");
     const photo = async () => {
@@ -170,6 +170,35 @@ describe("el profesional trabaja desde WhatsApp", () => {
     const [b] = await sql()<{ alias: string; holder_name: string; holder_tax_id: string }[]>`select alias, holder_name, holder_tax_id from provider_bank_accounts where provider_id = ${p.id}`;
     expect(b).toEqual({ alias: "elsa.domo.mp", holder_name: "Elsa Domótica", holder_tax_id: "27123456789" });
     expect((await sql()<{ s: string }[]>`select payouts_status as s from providers where id = ${p.id}`)[0].s).toBe("enabled");
+  });
+
+  it("recién anotado: manda el DNI desde el pedido y lo responde sin esperar la aprobación; retirar sí espera", async () => {
+    const { requestWithdrawal } = await import("@/server/modules/withdrawals");
+    const { loadActor } = await import("@/server/auth/actor");
+    const phone = phoneFor(7);
+    const p = await signUp(phone, "Iván Cortinas", "cortinas y persianas", "Zárate, Buenos Aires", false);
+    const reqId = await requestFor("pba-zarate-campana", "cortinas");
+    const inv = await invitationOf(reqId, p.id);
+    const photo = async () => {
+      const fileId = await storeFile(sql(), { data: jpeg(), originalName: "wa.jpg", uploadedBy: p.user_id, purpose: "request_photo", ownerType: null, ownerId: null, allowPdf: false });
+      await sql()`insert into whatsapp_media (phone, file_id) values (${phone}, ${fileId})`;
+      return fileId;
+    };
+    await tap(phone, `pw:inv:${inv.id}`);
+    expect(await step(phone)).toBe("pw_dni");
+    await handleInbound(msg(phone, { type: "image", fileId: await photo() }));
+    await handleInbound(msg(phone, { type: "image", fileId: await photo() }));
+    // Vuelve solo al pedido que quería responder, con el perfil todavía sin aprobar.
+    expect(await step(phone)).toBe("pw_op");
+    expect((await sql()<{ status: string; identity_status: string }[]>`select status, identity_status from providers where id = ${p.id}`)[0]).toEqual({ status: "in_review", identity_status: "pending" });
+    await tap(phone, "pw_price");
+    await say(phone, "38000");
+    await tap(phone, "pw_send");
+    expect((await sql()<{ status: string }[]>`select status from quotes where invitation_id = ${inv.id}`)[0].status).toBe("sent");
+
+    // El dinero no sale hasta que el equipo verifica la identidad.
+    const me = (await systemTx((tx) => loadActor(tx, p.user_id)))!;
+    await expect(requestWithdrawal(me, p.id, { holderName: "Iván Cortinas", holderTaxId: "20123456789", cbu: "", alias: "ivan.cortinas" })).rejects.toThrow(/verifique tu identidad/);
   });
 
   it("sin email, cualquier novedad le llega por WhatsApp", async () => {
