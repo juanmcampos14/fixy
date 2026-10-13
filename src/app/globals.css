@@ -105,6 +105,10 @@
     background: var(--color-cobalt);
     color: #fff;
   }
+  /* Los hijos de una grilla pueden achicarse: sin esto, un texto largo (o cortado con "…") ensancha la página en celular. */
+  :where(.grid) > * {
+    min-width: 0;
+  }
   .tabular {
     font-variant-numeric: tabular-nums;
   }

@@ -18,7 +18,8 @@ export const metadata: Metadata = {
   verification: { google: "C8pbva1RezyRgzqU1PGIl9MVw5PIY6liqTNuBzQODs8" },
 };
 
-export const viewport: Viewport = { themeColor: "#171721", width: "device-width", initialScale: 1 };
+// viewportFit "cover": permite respetar el área segura del teléfono (barra de gestos) en la navegación fija de abajo.
+export const viewport: Viewport = { themeColor: "#171721", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

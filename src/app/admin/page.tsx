@@ -102,10 +102,10 @@ export default async function AdminHome({ searchParams }: { searchParams: Promis
 
 function AttentionList({ title, items, empty, href }: { title: string; empty: string; href: string; items: { key: string; href: string; title: string; meta: string; badge?: React.ReactNode }[] }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h3 className="font-bold">{title} <span className="text-muted">({items.length})</span></h3>
-        <Link href={href} className="text-sm font-semibold text-fixy-800 hover:underline">Ver todo</Link>
+        <Link href={href} className="shrink-0 whitespace-nowrap text-sm font-semibold text-fixy-800 hover:underline">Ver todo</Link>
       </div>
       {items.length === 0 ? (
         <p className="rounded-xl bg-cream/60 px-3 py-2.5 text-sm text-muted">{empty}</p>

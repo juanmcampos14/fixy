@@ -59,7 +59,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <PanelNav items={nav} />
         </aside>
-        <main id="contenido" className="min-w-0 pb-24 pt-5 lg:pt-0">{children}</main>
+        <main id="contenido" className="min-w-0 pb-28 pt-2 lg:pb-24 lg:pt-0">{children}</main>
       </div>
     </div>
   );
