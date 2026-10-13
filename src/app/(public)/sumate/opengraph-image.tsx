@@ -1,7 +1,7 @@
 import { ogSize, sumateOgImage } from "@/components/sumate/og";
 
 export const size = ogSize;
-export const contentType = "image/png";
+export const contentType = "image/png"; // v2: lienzo oscuro, Fixy sin fondo
 export const alt = "Sumate a Fixy";
 
 export default function Image() {
