@@ -27,6 +27,7 @@ import { jobStatusLabel, requestStatusLabel } from "@/server/domain/labels";
 import { storeFile } from "@/server/storage";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 import { consumeAlertsCode, setAlertsByPhone } from "@/server/modules/whatsapp-alerts";
+import { providerFor, showWorkList, startBank, startDni, wantsBank, wantsDni, wantsWorkList, workStep, type WorkDraft, type WorkStep } from "./pro-work";
 import { proSignupStep, sendLoginLink, startProSignup, wantsProSignup, type ProDraft, type ProStep } from "./pro-signup";
 
 export type Inbound = {
@@ -42,11 +43,13 @@ export type Inbound = {
   fileId?: string;
 };
 
-type Step = ProStep | "idle" | "evidence_job" | "evidence_kind" | "evidence" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
+type Step = ProStep | WorkStep | "idle" | "evidence_job" | "evidence_kind" | "evidence" | "problem" | "location" | "address" | "street" | "pick_request" | "add_to" | "zone_region" | "zone" | "pros" | "budget" | "confirm" | "details" | "awaiting_account" | "done";
 type State = {
   step: Step;
   /** Alta de profesional por WhatsApp en curso. */
   pro?: ProDraft;
+  /** Profesional respondiendo un pedido, mandando el DNI o cargando su cuenta, desde WhatsApp. */
+  pw?: WorkDraft;
   description?: string;
   title?: string;
   categorySlug?: string;
@@ -174,11 +177,36 @@ async function step(s: State, msg: Inbound, ctx: Ctx): Promise<State> {
     await sendLoginLink(ctx);
     return s;
   }
+  // Profesionales: pedidos, DNI y datos de cobro sin salir de WhatsApp.
+  const inWork = s.step.startsWith("pw_");
+  if (inWork && (reply === "cancel" || /^(cancelar|salir)$/.test(t))) {
+    ctx.out.push({ kind: "text", text: "Listo, lo dejamos acá. Escribí *pedidos* cuando quieras ver lo que hay." });
+    return { step: "done" };
+  }
+  const proIntent = inWork || reply.startsWith("pw") || wantsWorkList(t) || wantsDni(t) || wantsBank(t);
+  const me = proIntent ? await providerFor(ctx.userId) : null;
+  if (me) {
+    if (reply === "pw_list" || wantsWorkList(t)) return showWorkList(me, ctx);
+    if (reply === "pw_dni" || wantsDni(t)) return startDni(ctx);
+    if (reply === "pw_bank" || wantsBank(t)) return startBank(me, ctx);
+    if (inWork || reply.startsWith("pw:inv:")) return workStep((inWork ? s.step : "pw_list") as WorkStep, s.pw ?? {}, { text, reply, isImage: msg.type === "image", fileId: msg.fileId }, me, ctx);
+    if (reply === "pw_later") {
+      ctx.out.push({ kind: "text", text: "Dale, cuando quieras escribime *dni* y lo hacemos." });
+      return { step: "done" };
+    }
+  } else if (wantsDni(t) || wantsBank(t)) {
+    ctx.out.push({ kind: "text", text: "Eso es para profesionales registrados en Fixy. Si querés sumarte, escribí *quiero trabajar con Fixy*." });
+    return s;
+  } else if (inWork) return { step: "idle" };
 
   // Comandos globales
   if (reply === "cancel" || /^(cancelar|salir|empezar de nuevo|reiniciar|nuevo pedido|nuevo)$/.test(t)) {
     ctx.out.push({ kind: "text", text: "Listo, empezamos de nuevo. Contame qué problema tenés y te muestro profesionales que pueden ir." });
     return { step: "problem" };
+  }
+  if (/^(ayuda|menu|menú)$/.test(t) && (await providerFor(ctx.userId))) {
+    ctx.out.push({ kind: "text", text: `Esto podés hacer por acá:\n\n• *pedidos* → ver los trabajos que te llegaron y responder\n• *dni* → verificar tu perfil\n• *cobro* → decirnos a qué cuenta transferirte\n• *entrar* → abrir tu panel\n• *baja* → dejar de recibir avisos\n\nPara hablar con una persona del equipo, escribinos a ${SUPPORT_EMAIL}.` });
+    return s;
   }
   if (/^(ayuda|menu|menú)$/.test(t)) {
     ctx.out.push({ kind: "text", text: `Te ayudo a conseguir un profesional para tu casa u oficina. Contame el problema en una oración. Escribí *cambiar* si el oficio no es el correcto, o *cancelar* para empezar de nuevo.\n\nSi preferís hablar con una persona del equipo, escribinos a ${SUPPORT_EMAIL}.` });

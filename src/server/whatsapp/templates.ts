@@ -55,6 +55,17 @@ export const WA_TEMPLATES = {
     button: "Ver trabajo",
     path: "/proveedor/trabajos/",
   },
+  /**
+   * Aviso general para quien se anotó por WhatsApp y no tiene email: es su único canal.
+   * Params: nombre, novedad (el título del aviso). Botón: abre el ingreso.
+   */
+  notice: {
+    name: "fixy_novedad",
+    body: "Hola {{1}}, tenés una novedad en Fixy: {{2}}. Respondé este mensaje con la palabra ENTRAR para verla en tu panel.",
+    example: ["Juan", "Tu perfil quedó verificado"],
+    button: "Abrir Fixy",
+    path: "/ingresar?desde=",
+  },
 } as const;
 
 export type WaTemplateKey = keyof typeof WA_TEMPLATES;
@@ -80,8 +91,8 @@ export type WaNotice = {
   /** Id que completa el link del botón (pedido, invitación o trabajo según la plantilla). */
   requestId: string;
   text: string;
-  /** "provider": solo a quienes activaron los avisos de profesionales. */
-  audience?: "client" | "provider";
+  /** "provider": solo a quienes activaron los avisos de profesionales. "account": aviso general a una cuenta sin email. */
+  audience?: "client" | "provider" | "account";
 };
 
 /** Meta no admite saltos de línea, tabulaciones ni muchos espacios seguidos en los parámetros. */

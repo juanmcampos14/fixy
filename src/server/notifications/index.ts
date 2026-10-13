@@ -43,6 +43,13 @@ export async function notify(
       where exists (select 1 from push_devices where user_id = ${userId} and disabled_at is null)`;
     // WhatsApp solo a quienes vincularon su número (lo hicieron escribiéndonos: hay consentimiento).
     // Los avisos de profesionales, además, solo si los activaron (y no se dieron de baja).
+    // Quien se anotó por WhatsApp no tiene email: todo aviso que no tenga su propio mensaje de WhatsApp le llega igual por ahí.
+    if (!n.whatsapp) {
+      const notice: WaNotice = { template: "notice", params: [n.title.slice(0, 120)], requestId: "whatsapp", text: `${n.title}${n.body ? `\n${n.body}` : ""}`, audience: "account" };
+      await db`insert into outbox (channel, recipient_user_id, payload)
+        select 'whatsapp', id, ${db.json(notice as never)} from users
+        where id = ${userId} and email_placeholder and whatsapp_phone is not null and disabled_at is null`;
+    }
     if (n.whatsapp) {
       const providerOnly = n.whatsapp.audience === "provider";
       await db`insert into outbox (channel, recipient_user_id, payload)

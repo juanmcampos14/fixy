@@ -58,7 +58,9 @@ describe("alta de profesionales por WhatsApp", () => {
     // Aceptó términos generales, privacidad y condiciones para profesionales.
     const kinds = await sql()<{ kind: string }[]>`select d.kind from policy_acceptances a join policy_documents d on d.id = a.policy_id where a.user_id = ${u.id} order by d.kind`;
     expect(kinds.map((k) => k.kind)).toEqual(["privacy", "provider_terms", "terms"]);
-    expect((await outs(phone, 1))[0]).toContain("Ya estás en Fixy");
+    const closing = (await outs(phone, 2)).join(" ");
+    expect(closing).toContain("Ya estás en Fixy");
+    expect(closing).toContain("pw_dni"); // ofrece verificar el perfil en el momento
     expect((await state(phone)).step).toBe("done");
 
     // No se le escribe a un email que no existe.

@@ -217,7 +217,8 @@ async function finish(pro: ProDraft, ctx: Ctx): Promise<Result> {
     type: "provider_review", title: `Nuevo profesional por WhatsApp · ${pro.name}`, body: `${list(names)} en ${pro.zoneName}. Falta verificar identidad.`, link: `/admin/proveedores/${providerId}`, email: false,
   })).catch(() => null);
   await rematchOpenRequests({ providerId }).catch(() => 0);
-  ctx.out.push({ kind: "text", text: `¡Listo, ${pro.name.split(" ")[0]}! Ya estás en Fixy 🎉\n\nCuando haya un trabajo de ${list(names).toLowerCase()} en tu zona, te aviso por acá.\n\nMás adelante te voy a pedir una foto de tu DNI para marcar tu perfil como *verificado* (los clientes eligen más a los verificados).\n\nPara ver tu perfil, escribí *entrar*.` });
+  ctx.out.push({ kind: "text", text: `¡Listo, ${pro.name.split(" ")[0]}! Ya estás en Fixy 🎉\n\nCuando haya un trabajo de ${list(names).toLowerCase()} en tu zona, te aviso por acá y lo respondés desde este mismo chat.` });
+  ctx.out.push({ kind: "buttons", text: "Un paso más, si querés: mandame una foto de tu DNI y tu perfil queda *verificado*. Los clientes eligen mucho más a los verificados.", buttons: [{ id: "pw_dni", title: "Mandar mi DNI" }, { id: "pw_later", title: "Después" }] });
   return { step: "done" };
 }
 

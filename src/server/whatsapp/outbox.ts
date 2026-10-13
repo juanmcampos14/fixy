@@ -30,8 +30,11 @@ export async function processWhatsAppOutbox(limit = 50) {
       const first = r.full_name.split(" ")[0] || "¡hola!";
       const t = WA_TEMPLATES[r.payload.template];
       const path = t?.path ?? "/app/solicitudes/";
+      const body = r.payload.audience === "account"
+        ? `${r.payload.text}\n\nPara verlo en tu panel, escribí *entrar*.`
+        : `${r.payload.text}\n\n${r.payload.audience === "provider" ? "Para verlo y responder por acá, escribí *pedidos*.\n\nO abrilo en la web: " : ""}${base}${path}${r.payload.requestId}`;
       const result = r.in_window || !t
-        ? await sendWhatsApp(r.phone, { kind: "text", text: `${r.payload.text}\n\n${base}${path}${r.payload.requestId}` })
+        ? await sendWhatsApp(r.phone, { kind: "text", text: body })
         : await sendWhatsApp(r.phone, { kind: "template", name: t.name, language: WA_LANGUAGE, params: [waParam(first), ...r.payload.params.map((p) => waParam(p))], buttonParam: r.payload.requestId });
       if (result !== "failed") {
         await tx`update outbox set status = 'sent', sent_at = now(), attempts = attempts + 1 where id = ${r.id}`;
