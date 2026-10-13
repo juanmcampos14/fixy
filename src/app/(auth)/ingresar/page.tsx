@@ -1,3 +1,5 @@
+import { MessageCircle } from "lucide-react";
+import { buttonClass } from "@/components/ui/button";
 import { whatsappUrl } from "@/lib/contact";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -23,7 +25,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <GoogleButton next={next} signup />
         <LoginForm next={next} />
         <p className="mt-4 text-center text-sm"><Link href="/recuperar" className="font-semibold text-fixy-800 underline">Olvidé mi contraseña</Link></p>
-        <p className="mt-3 text-center text-sm text-muted">¿Te anotaste por WhatsApp? <a href={whatsappUrl("entrar")} className="font-semibold text-fixy-800 underline">Pedí tu link para entrar</a></p>
+        {/* Tercera forma de entrar, igual de visible que las otras: para quien se anotó por WhatsApp y no tiene clave. */}
+        <div className="mt-5 flex items-center gap-3 text-sm text-muted" aria-hidden>
+          <span className="h-px flex-1 bg-line" />o sin clave<span className="h-px flex-1 bg-line" />
+        </div>
+        <a href={whatsappUrl("entrar")} className={buttonClass("secondary", "lg", "mt-4 w-full")}>
+          <MessageCircle className="h-5 w-5" aria-hidden />Entrar con WhatsApp
+        </a>
+        <p className="mt-2 text-center text-sm text-muted">Si te anotaste por WhatsApp: mandá el mensaje que aparece y te llega un link para entrar.</p>
         <p className="mt-5 text-center text-[15px] text-muted">
           ¿No tenés cuenta? <Link href={`/registro${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="font-semibold text-fixy-800 underline">Crear cuenta</Link>
         </p>

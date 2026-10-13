@@ -31,6 +31,8 @@ export function AppHome({ notice }: { notice?: string }) {
       <div className="space-y-3">
         <Link href="/ingresar" className="m-btn m-btn-ghost h-[52px] w-full">Ingresar</Link>
         <p className="text-center text-sm text-ash">¿No tenés cuenta? <Link href="/registro" className="text-ivory underline">Crear cuenta</Link></p>
+        {/* La app es para quien contrata; quien ofrece servicios tiene su entrada aparte, sin competir con lo principal. */}
+        <p className="pt-2 text-center text-xs text-ash/80">¿Sos profesional? <Link href="/sumate" className="underline">Trabajá con Fixy</Link></p>
       </div>
     </main>
   );

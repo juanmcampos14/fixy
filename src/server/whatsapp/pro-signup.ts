@@ -225,7 +225,7 @@ async function finish(pro: ProDraft, ctx: Ctx): Promise<Result> {
 /** "entrar": link de un solo uso para abrir el panel sin contraseña (dura 15 minutos). */
 export async function sendLoginLink(ctx: Ctx): Promise<void> {
   if (!ctx.userId) {
-    ctx.out.push({ kind: "text", text: "Este WhatsApp todavía no tiene una cuenta en Fixy. Si sos profesional y querés sumarte, escribí *quiero trabajar con Fixy*." });
+    ctx.out.push({ kind: "text", text: "Este WhatsApp todavía no tiene una cuenta en Fixy.\n\n• Si necesitás un profesional, contame qué problema tenés y te ayudo por acá.\n• Si sos profesional y querés sumarte, escribí *quiero trabajar con Fixy*." });
     return;
   }
   const token = randomBytes(24).toString("base64url");
