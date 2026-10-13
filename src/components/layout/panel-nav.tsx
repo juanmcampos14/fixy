@@ -15,7 +15,8 @@ const ICONS = {
   coins: HandCoins, file: FileText, user: UserRound, search: Search, wrench: Wrench, chart: ChartColumnIncreasing, message: MessageCircle,
 } as const;
 export type NavIcon = keyof typeof ICONS;
-export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number; exact?: boolean };
+/** `short`: nombre para la barra de abajo en celular, donde entran unas diez letras. */
+export type NavItem = { href: string; label: string; short?: string; icon: NavIcon; badge?: number; exact?: boolean };
 
 /** En celular entran cinco destinos: los cuatro principales y "Más" con el resto. */
 const BAR_SLOTS = 5;
@@ -76,7 +77,7 @@ export function PanelNav({ items }: { items: NavItem[] }) {
               <li key={i.href} className="flex min-w-0 flex-1">
                 <Link href={i.href} aria-current={active(i) ? "page" : undefined} className={tab(on)}>
                   <I className="h-[22px] w-[22px]" strokeWidth={on ? 2.2 : 1.8} aria-hidden />
-                  <span className="max-w-full truncate">{i.label}</span>
+                  <span className="max-w-full truncate">{i.short ?? i.label}</span>
                   {!!i.badge && dot(i.badge)}
                 </Link>
               </li>

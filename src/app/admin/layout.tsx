@@ -13,12 +13,15 @@ const ICON: Record<AdminSection, NavIcon> = {
   finanzas: "wallet", catalogo: "clipboard", comisiones: "coins", arrepentimientos: "flag", whatsapp: "message", auditoria: "scroll",
 };
 
+/** Nombres para la barra de abajo en celular. */
+const SHORT: Partial<Record<AdminSection, string>> = { resumen: "Resumen", socios: "Socios", proveedores: "Profes.", solicitudes: "Pedidos" };
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireStaff();
   const counts = await navCounts(actor.id);
   const badge: Partial<Record<AdminSection, number>> = { proveedores: counts.providers, solicitudes: counts.requests, reclamos: counts.disputes, resenas: counts.reviewDisputes };
   const nav: NavItem[] = ADMIN_SECTIONS.filter((s) => levelFor(actor, s.key) !== "none").map((s) => ({
-    href: s.href, label: s.label, icon: ICON[s.key], badge: badge[s.key], exact: s.key === "resumen",
+    href: s.href, label: s.label, short: SHORT[s.key], icon: ICON[s.key], badge: badge[s.key], exact: s.key === "resumen",
   }));
   if (isPlatformAdmin(actor)) nav.push({ href: "/admin/equipo", label: "Equipo y permisos", icon: "users" });
   return (

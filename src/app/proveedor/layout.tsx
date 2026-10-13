@@ -29,7 +29,7 @@ export default async function ProviderLayout({ children }: { children: React.Rea
   const nav: NavItem[] = admin
     ? [
         { href: "/proveedor", label: "Inicio", icon: "dashboard", exact: true },
-        { href: "/proveedor/oportunidades", label: "Oportunidades", icon: "inbox" },
+        { href: "/proveedor/oportunidades", label: "Oportunidades", short: "Pedidos", icon: "inbox" },
         { href: "/proveedor/trabajos", label: "Trabajos", icon: "briefcase" },
         { href: "/proveedor/agenda", label: "Agenda", icon: "clipboard" },
         { href: "/proveedor/perfil", label: "Perfil", icon: "store" },
