@@ -60,9 +60,11 @@ export const WA_TEMPLATES = {
    * Params: nombre, novedad (el título del aviso). Botón: abre el ingreso.
    */
   notice: {
-    name: "fixy_novedad",
-    body: "Hola {{1}}, tenés una novedad en Fixy: {{2}}. Respondé este mensaje con la palabra ENTRAR para verla en tu panel.",
-    example: ["Juan", "Tu perfil quedó verificado"],
+    // Meta pasó la versión anterior ("fixy_novedad") a la categoría Marketing: "novedad" suena a promoción.
+    // Esta habla de una actualización de la cuenta, que es lo que es (categoría Utilidad).
+    name: "fixy_actualizacion_cuenta",
+    body: "Hola {{1}}, hay una actualización sobre tu cuenta de Fixy: {{2}}. Para ver el detalle en tu panel, respondé este mensaje con la palabra ENTRAR.",
+    example: ["Juan", "tu identidad fue verificada"],
     button: "Abrir Fixy",
     path: "/ingresar?desde=",
   },

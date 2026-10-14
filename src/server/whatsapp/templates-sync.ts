@@ -22,7 +22,7 @@ export async function createMissingTemplates(): Promise<{ ok: boolean; results: 
   for (const key of Object.keys(WA_TEMPLATES) as WaTemplateKey[]) {
     const t = WA_TEMPLATES[key];
     const found = existing.find((r) => r.name === t.name && r.language === WA_LANGUAGE);
-    if (found) { results.push(`${t.name}: ${found.status}`); continue; }
+    if (found) { results.push(`${t.name}: ${found.status} · ${found.category ?? "sin categoría"}`); continue; }
     const r = await createTemplate(templateDefinition(key));
     if (!r.ok) ok = false;
     results.push(r.ok ? `${t.name}: enviada a revisión` : `${t.name}: ${r.error}`);
