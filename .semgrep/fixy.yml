@@ -1,0 +1,243 @@
+# ============================================================
+# Reglas de arquitectura propias de Fixy (Semgrep)
+# ============================================================
+# Hacen cumplir las invariantes de ESTE repo: la app (src/app, src/components) es una capa delgada que
+# delega en src/server/modules; toda acción del servidor identifica a quien la llama; la base se toca
+# sólo desde el servidor; el dominio no conoce a la pasarela concreta.
+# Origen: auditoría de calidad y seguridad del 13/10/2026 (los WARNING son deuda conocida de esa auditoría).
+# Correr: npm run semgrep:arch     Validar tras editar: bash scripts/semgrep.sh --validate --config .semgrep/fixy.yml
+# Precisión > recall: ERROR = invariante que hoy se cumple y no se puede romper. WARNING = deuda a revisar.
+
+rules:
+  # ── 1. Código de servidor en el bundle del navegador ─────────────────────────
+  - id: fixy-cliente-importa-servidor
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      Un componente cliente ("use client") importa de src/server. Eso mete código de servidor (acceso a la
+      base, secretos, pasarela) en el bundle del navegador. Lo único compartible es src/server/domain (lógica
+      pura, sin I/O) y los `import type`. Pasá el dato por props o por una server action.
+    metadata:
+      category: security
+      cwe: "CWE-200: Exposure of Sensitive Information"
+      confidence: HIGH
+    patterns:
+      - pattern-regex: '(?s)\A\s*["'']use client["''].*?^import\s+(?!type\b)[^;]*?from\s+["'']@/server/(?!domain/)[^"'']+["'']'
+
+  # ── 2. Variables de entorno de servidor en el navegador ──────────────────────
+  - id: fixy-env-no-publico-en-cliente
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      Componente cliente ("use client") leyendo process.env que no es NEXT_PUBLIC_*. En el navegador queda
+      vacío, y si alguien lo "arregla" exponiéndolo, filtra un secreto. Leelo en el servidor.
+    metadata:
+      category: security
+      confidence: HIGH
+    patterns:
+      - pattern-inside: |
+          "use client";
+          ...
+      - pattern: process.env.$VAR
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: '^(?!NEXT_PUBLIC_)[A-Z].*'
+
+  # ── 3. Server action que no identifica a quien la llama ──────────────────────
+  # Las 126 acciones de hoy llaman a un helper de sesión o son públicas por diseño (registro, login,
+  # pedido anónimo, entrada por WhatsApp). Una acción nueva sin helper es un endpoint abierto.
+  - id: fixy-accion-sin-autenticacion
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      Server action exportada que no llama a ningún helper de sesión (requireActor, requireStaff,
+      requireSection, requirePlatformAdmin, requireProviderMembership, assertProviderAdmin). Toda función
+      exportada de un archivo "use server" es un endpoint público: cualquiera la puede invocar. Si es
+      pública a propósito, va en uno de los archivos excluidos de esta regla.
+    metadata:
+      category: security
+      cwe: "CWE-862: Missing Authorization"
+      confidence: HIGH
+    paths:
+      include:
+        - "src/app/**/actions.ts"
+        - "src/app/shared-actions.ts"
+      exclude:
+        # Públicas a propósito (sin sesión): las cubre fixy-accion-publica-sin-limite.
+        - "src/app/(auth)/actions.ts"
+        - "src/app/(public)/**"
+        - "src/app/solicitar/actions.ts"
+        - "src/app/wa/entrar/**"
+    patterns:
+      - pattern: |
+          export async function $F(...) { $...CUERPO }
+      - metavariable-regex:
+          metavariable: $...CUERPO
+          regex: '^(?![\s\S]*\b(requireActor|requireStaff|requireSection|requirePlatformAdmin|requireProviderMembership|assertProviderAdmin)\s*\()'
+
+  # ── 3b. Acción pública sin límite de uso ─────────────────────────────────────
+  # Las acciones que se pueden llamar sin sesión (registro, login, alta guiada, arrepentimiento, pedido
+  # anónimo) crean cuentas, mandan mails o llaman a la IA: sin límite por IP son spam o gasto sin tope.
+  - id: fixy-accion-publica-sin-limite
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      Server action pública (se llama sin sesión) que no llama a rateLimit(...). Crea cuentas, manda correos
+      o usa la IA: sin un límite por IP o por email, es spam o gasto sin tope. Si no hace nada de eso
+      (por ejemplo, cerrar sesión), ignorá este aviso.
+    metadata:
+      category: security
+      cwe: "CWE-770: Allocation of Resources Without Limits"
+      confidence: MEDIUM
+    paths:
+      include:
+        - "src/app/(auth)/actions.ts"
+        - "src/app/(public)/**/actions.ts"
+        - "src/app/solicitar/actions.ts"
+        - "src/app/wa/entrar/**/actions.ts"
+    patterns:
+      - pattern: |
+          export async function $F(...) { $...CUERPO }
+      - metavariable-regex:
+          metavariable: $...CUERPO
+          # Pasa si limita, si en realidad exige sesión, o si sólo cierra sesión / es el acceso demo
+          # (apagado en producción por demoLoginEnabled).
+          regex: '^(?![\s\S]*\b(rateLimit|requireActor|requireStaff|requireSection|requirePlatformAdmin|destroySession|demoLoginEnabled)\s*\()'
+
+  # ── 4. Escrituras SQL fuera de src/server ────────────────────────────────────
+  # La app lee con asUser/sql() en algunas páginas, pero hoy NO escribe: toda escritura pasa por
+  # src/server/modules, que autoriza y deja eventos. Una escritura en una página o componente se saltea eso.
+  - id: fixy-escritura-sql-fuera-del-servidor
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      Escritura SQL (insert/update/delete) en src/app o src/components. Las escrituras viven en
+      src/server/modules: ahí se autoriza, se valida la transición de estado y se registra el evento.
+    metadata:
+      category: architecture
+      confidence: HIGH
+    paths:
+      include:
+        - "src/app/**"
+        - "src/components/**"
+    patterns:
+      - pattern-regex: '`\s*(insert\s+into|update\s+\w+\s+set|delete\s+from)\b'
+
+  # ── 5. HTML crudo ────────────────────────────────────────────────────────────
+  - id: fixy-html-crudo
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      dangerouslySetInnerHTML: hoy no hay ninguno en el repo. Con texto que escribe un cliente o un
+      profesional (descripciones, mensajes, reseñas) es XSS. Renderizá texto, o sanitizá en el servidor.
+    metadata:
+      category: security
+      cwe: "CWE-79: Cross-site Scripting"
+      confidence: HIGH
+    pattern-regex: 'dangerouslySetInnerHTML'
+
+  # ── 6. SQL sin parametrizar ──────────────────────────────────────────────────
+  - id: fixy-sql-unsafe
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      `.unsafe(...)` arma SQL con texto: el driver no escapa nada. Usá el template parametrizado
+      (tx`... ${valor}`) y, para identificadores, tx(nombre) con una lista cerrada.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: HIGH
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "scripts/**"
+    pattern: $DB.unsafe(...)
+
+  # ── 7. Contraseña demo compartida fuera del seed ─────────────────────────────
+  # Auditoría A1: la contraseña de las cuentas demo está publicada en el README. Si se usa en otro lugar
+  # (un login, un alta, un test que corre contra una base real) termina siendo una puerta trasera.
+  - id: fixy-contrasena-demo-fuera-del-seed
+    languages: [typescript]
+    severity: ERROR
+    message: >
+      La contraseña demo compartida aparece fuera de src/server/seed. Está publicada en el README: usarla
+      en cualquier otro camino es una puerta trasera. Leé DEMO_PASSWORD desde el seed o pedila por entorno.
+    metadata:
+      category: security
+      confidence: HIGH
+    paths:
+      exclude:
+        - "src/server/seed/**"
+        - "**/*.test.ts"
+        - "tests/**"
+    pattern-regex: 'fixy-demo-2026'
+
+  # ── 8. (deuda) Transición de trabajos por fuera de moveJob ───────────────────
+  # Auditoría, hallazgo 1: las transiciones de estado tienen tres fuentes y ya divergieron. moveJob hace
+  # assert + update + timestamp + evento; un `update jobs set status` suelto se saltea parte de eso.
+  - id: fixy-estado-de-trabajo-fuera-de-movejob
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      `update jobs set status` fuera de moveJob. La transición no pasa por el assert de la máquina de
+      estados, el timestamp ni el evento, y el efecto "completado → liquidación" depende de acordarse.
+      Usá moveJob (o extendelo si el caso no entra).
+    metadata:
+      category: correctness
+      confidence: HIGH
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "tests/**"
+    patterns:
+      - pattern-regex: '`\s*update\s+jobs\s+set\s+status\b'
+      - pattern-not-inside: |
+          async function moveJob(...) { ... }
+
+  # ── 9. (deuda) Llamada a la pasarela con la transacción abierta ─────────────
+  # Auditoría, hallazgo 3: con el mock es atómico; con Mercado Pago real es HTTP. Si algo falla después,
+  # el rollback borra el registro de un reembolso o cobro que ya salió.
+  - id: fixy-pasarela-dentro-de-transaccion
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      Llamada a la pasarela de pagos con la transacción de base abierta. Con Mercado Pago real esto es HTTP:
+      si la transacción revierte después, el dinero ya se movió y el registro se pierde. Registrá la
+      operación como pendiente, confirmá la transacción y ejecutá contra la pasarela desde un procesador.
+    metadata:
+      category: correctness
+      confidence: MEDIUM
+    paths:
+      exclude:
+        - "src/server/payments/**"
+        - "**/*.test.ts"
+        - "tests/**"
+    patterns:
+      - pattern-either:
+          - pattern: $GW.refund($TX, ...)
+          - pattern: $GW.createCheckout($TX, ...)
+          - pattern: $GW.transfer($TX, ...)
+          - pattern: $GW.createPayoutAccount($TX, ...)
+      - metavariable-regex:
+          metavariable: $TX
+          regex: '^(tx|db|t)$'
+
+  # ── 10. (deuda) El dominio leyendo la tabla del mock de la pasarela ──────────
+  # Auditoría, hallazgo 4: reconcile, resyncCharge y cancelJob consultan mock_gateway_payments; con
+  # Mercado Pago real responden "no hay pago" aunque lo haya.
+  - id: fixy-tabla-del-mock-fuera-del-mock
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      mock_gateway_payments usado fuera del adaptador mock. El dominio no puede depender de la pasarela
+      concreta: con Mercado Pago real esta consulta no encuentra nada. Agregá la operación a PaymentGateway.
+    metadata:
+      category: architecture
+      confidence: HIGH
+    paths:
+      exclude:
+        - "src/server/payments/mock.ts"
+        - "**/*.test.ts"
+        - "tests/**"
+        - "db/**"
+    pattern-regex: '\bmock_gateway_payments\b'

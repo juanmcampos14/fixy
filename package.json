@@ -15,7 +15,10 @@
     "db:reset": "tsx scripts/migrate.ts --reset && rm -rf .data/storage && tsx scripts/seed.ts --demo",
     "outbox": "tsx scripts/process-outbox.ts",
     "setup": "npm run db:up && npm run db:reset",
-    "admin:create": "tsx scripts/create-admin.ts"
+    "admin:create": "tsx scripts/create-admin.ts",
+    "semgrep": "bash scripts/semgrep.sh scan --config .semgrep/fixy.yml --config p/secrets --config p/typescript --config p/react --config p/nextjs --config p/owasp-top-ten src/ scripts/",
+    "semgrep:arch": "bash scripts/semgrep.sh scan --metrics=off --config .semgrep/fixy.yml src/ scripts/",
+    "semgrep:sec": "bash scripts/semgrep.sh scan --config p/secrets --config p/typescript --config p/react --config p/nextjs --config p/owasp-top-ten src/ scripts/"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
