@@ -41,10 +41,11 @@ export const WA_TEMPLATES = {
   },
   /** Pedido con presupuesto del cliente. Params: nombre, monto, rubro, zona, título. Botón: id de la invitación. */
   budgetOffer: {
-    name: "fixy_cliente_ofrece",
-    body: "Hola {{1}}, un cliente ofrece {{2}} por un trabajo de {{3}} en {{4}}: «{{5}}». Anotate por ese precio u ofrecé menos desde Fixy.",
+    // Meta pasó la versión anterior ("fixy_cliente_ofrece") a Marketing: "ofrece / ofrecé menos" suena a promoción.
+    name: "fixy_pedido_con_presupuesto",
+    body: "Hola {{1}}, recibiste un pedido de trabajo con presupuesto de {{2}}. Rubro: {{3}}. Zona: {{4}}. Detalle: «{{5}}». Respondé el pedido desde Fixy.",
     example: ["Juan", "$ 60.000", "pintura", "Belgrano", "Pintar un ambiente"],
-    button: "Ofertar",
+    button: "Ver pedido",
     path: "/proveedor/oportunidades/",
   },
   /** El cliente aceptó su presupuesto. Params: nombre, código del trabajo. Botón: id del trabajo. */
