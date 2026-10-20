@@ -13,10 +13,21 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Fondo oscuro mientras carga la web: si no, entre la pantalla de inicio y la página se veía un destello blanco. -->
+        <item name="android:windowBackground">@color/fixy_onyx</item>
+        <item name="android:statusBarColor">@color/fixy_onyx</item>
+        <item name="android:navigationBarColor">@color/fixy_onyx</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 
+    <!-- Pantalla de inicio. En Android 12+ el sistema muestra el ícono sobre un fondo propio: sin estas líneas
+         usaba el ícono del lanzador (con fondo blanco) y Fixy aparecía dentro de un recuadro blanco. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/fixy_onyx</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/fixy_onyx</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>
