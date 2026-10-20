@@ -23,3 +23,27 @@ export const APP_PATHS = [
   "/", "/app", "/proveedor", "/solicitar", "/wa", "/pagos", "/notificaciones", "/profesionales", "/invitacion",
   "/recuperar", "/ingresar", "/registro", "/sumate",
 ];
+
+/** Ficha de Fixy en Google Play. */
+export const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${APP_ID}`;
+
+/** Ficha de Fixy en el App Store. null hasta que Apple apruebe la app: mientras tanto, en iPhone se usa la web. */
+export const APP_STORE_URL: string | null = null;
+
+/** Link corto para compartir la app: manda a la tienda según el celular (ver /descargar). */
+export const DOWNLOAD_PATH = "/descargar";
+
+export type StoreTarget = "android" | "ios" | "other";
+
+/** Qué tienda corresponde según el navegador. iPadOS se presenta como Mac: cae en "other" y ve la página con las dos opciones. */
+export function storeFor(userAgent: string): StoreTarget {
+  if (/android/i.test(userAgent)) return "android";
+  if (/iphone|ipad|ipod/i.test(userAgent)) return "ios";
+  return "other";
+}
+
+/** Link a Google Play con el origen de la descarga (?src=whatsapp, qr…) para verlo en las estadísticas de Play Console. */
+export function playStoreUrl(source?: string | null): string {
+  const src = source && /^[a-z0-9_-]{1,40}$/i.test(source) ? source : null;
+  return src ? `${PLAY_STORE_URL}&referrer=${encodeURIComponent(`utm_source=${src}&utm_medium=link`)}` : PLAY_STORE_URL;
+}

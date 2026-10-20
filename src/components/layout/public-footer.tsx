@@ -3,14 +3,17 @@ import { SUPPORT_EMAIL } from "@/lib/contact";
 import { LEGAL } from "@/lib/legal";
 import { paymentsAreTestMode } from "@/server/env";
 import { Logo } from "@/components/brand/logo";
+import { inFixyApp } from "@/components/auth/google-button";
 
 const COLUMNS = [
-  { title: "Clientes", links: [["Pedir un servicio", "/solicitar"], ["Cómo funciona", "/#como-funciona"], ["Empresas", "/#empresas"], ["Trabajos grandes y obras", "/#trabajos-grandes"], ["Ayuda y soporte", "/ayuda"]] },
+  { title: "Clientes", links: [["Pedir un servicio", "/solicitar"], ["Cómo funciona", "/#como-funciona"], ["Empresas", "/#empresas"], ["Trabajos grandes y obras", "/#trabajos-grandes"], ["Descargá la app", "/descargar"], ["Ayuda y soporte", "/ayuda"]] },
   { title: "Profesionales", links: [["Ofrecé tus servicios", "/sumate"], ["Panel de profesionales", "/proveedor"]] },
   { title: "Legales", links: [["Términos y condiciones", "/terminos"], ["Condiciones para profesionales", "/terminos/profesionales"], ["Privacidad", "/privacidad"], ["Botón de arrepentimiento", "/arrepentimiento"]] },
 ];
 
-export function PublicFooter() {
+export async function PublicFooter() {
+  // Dentro de la app no tiene sentido ofrecer bajarla.
+  const inApp = await inFixyApp();
   return (
     <footer className="mt-28 border-t border-slate-line/30">
       <div className="mx-auto grid max-w-[1200px] gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
@@ -22,7 +25,7 @@ export function PublicFooter() {
           <div key={col.title}>
             <p className="m-strong text-sm text-ivory">{col.title}</p>
             <ul className="mt-4 space-y-3 text-sm text-ash">
-              {col.links.map(([label, href]) => <li key={href}><Link className="hover:text-ivory" href={href}>{label}</Link></li>)}
+              {col.links.filter(([, href]) => !(inApp && href === "/descargar")).map(([label, href]) => <li key={href}><Link className="hover:text-ivory" href={href}>{label}</Link></li>)}
               {col.title === "Clientes" && <li><a className="hover:text-ivory" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></li>}
             </ul>
           </div>
