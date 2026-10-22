@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stripImageMetadata } from "@/server/storage/strip-metadata";
+import { MetadataError, stripImageMetadata } from "@/server/storage/strip-metadata";
 
 const seg = (marker: number, body: string) => {
   const b = Buffer.from(body, "latin1");
@@ -33,8 +33,19 @@ describe("stripImageMetadata", () => {
     expect(out.toString("latin1")).toContain("IDAT");
   });
 
-  it("devuelve igual un archivo que no puede interpretar", () => {
-    const junk = Buffer.from("no es una imagen");
-    expect(stripImageMetadata(junk, "image/jpeg")).toBe(junk);
+  it("rechaza un archivo que no puede interpretar (no lo guarda con metadatos)", () => {
+    expect(() => stripImageMetadata(Buffer.from("no es una imagen"), "image/jpeg")).toThrow(MetadataError);
+    const cut = Buffer.concat([Buffer.from([0xff, 0xd8]), seg(0xe1, "Exif\0\0GPS-34.6")]); // sin datos de imagen
+    expect(() => stripImageMetadata(cut, "image/jpeg")).toThrow(MetadataError);
+    expect(() => stripImageMetadata(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 1]), "image/png")).toThrow(MetadataError);
+  });
+});
+
+describe("PDFs con contenido activo", () => {
+  it("rechaza JavaScript, apertura automática y adjuntos; acepta un PDF común", async () => {
+    const { pdfHasActiveContent } = await import("@/server/storage");
+    expect(pdfHasActiveContent(Buffer.from("%PDF-1.7\n1 0 obj << /Type /Catalog /OpenAction << /S /JavaScript /JS (app.alert(1)) >> >>"))).toBe(true);
+    expect(pdfHasActiveContent(Buffer.from("%PDF-1.7\n<< /Type /EmbeddedFile >>"))).toBe(true);
+    expect(pdfHasActiveContent(Buffer.from("%PDF-1.7\n<< /Type /Page /Contents 4 0 R >>"))).toBe(false);
   });
 });

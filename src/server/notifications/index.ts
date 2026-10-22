@@ -1,4 +1,5 @@
 import type { Db } from "@/server/db/client";
+import { claimOutbox, finishOutbox } from "@/server/outbox/lease";
 import { sql } from "@/server/db/client";
 import { env } from "@/server/env";
 import type { WaNotice } from "@/server/whatsapp/templates";
@@ -17,7 +18,9 @@ export type NotificationType =
   | "payout"
   | "provider_review"
   | "message"
-  | "review";
+  | "review"
+  /** Alertas operativas para el equipo (vigilancia). */
+  | "system";
 
 /**
  * Crea notificaciones internas y encola emails en el outbox (persistente, con reintentos).
@@ -84,7 +87,7 @@ export async function staffRecipients(db: Db): Promise<string[]> {
 // ───────── Adaptador de email ─────────
 export interface EmailAdapter {
   name: string;
-  send(msg: { to: string; subject: string; text: string; link: string | null }): Promise<void>;
+  send(msg: { to: string; subject: string; text: string; link: string | null }, opts?: { idempotencyKey?: string }): Promise<void>;
 }
 
 const consoleAdapter: EmailAdapter = {
@@ -99,13 +102,14 @@ const consoleAdapter: EmailAdapter = {
 /** Resend (https://resend.com) vía HTTP. Requiere dominio verificado para EMAIL_FROM. */
 const resendAdapter: EmailAdapter = {
   name: "resend",
-  async send(msg) {
+  async send(msg, opts) {
     const e = env();
     if (!e.RESEND_API_KEY) throw new Error("Falta RESEND_API_KEY");
     const link = msg.link ? `${e.APP_URL}${msg.link}` : null;
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { authorization: `Bearer ${e.RESEND_API_KEY}`, "content-type": "application/json" },
+      // Si un reintento repite el mismo aviso (el proceso se cayó después de enviarlo), Resend no lo manda dos veces.
+      headers: { authorization: `Bearer ${e.RESEND_API_KEY}`, "content-type": "application/json", ...(opts?.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}) },
       body: JSON.stringify({
         from: e.EMAIL_FROM,
         to: [msg.to],
@@ -129,32 +133,27 @@ export function emailAdapter(): EmailAdapter {
 
 const MAX_ATTEMPTS = 6;
 
-/** Procesa el outbox con backoff exponencial. Seguro para correr en paralelo (SKIP LOCKED). */
+/**
+ * Envía los emails pendientes. Reclama con lease y envía sin transacción abierta (ver src/server/outbox/lease.ts).
+ * Solo a casillas reales y confirmadas (o el enlace que las confirma). La clave idempotente del proveedor es el id del aviso.
+ */
 export async function processOutbox(limit = 20, adapter: EmailAdapter = emailAdapter()) {
   let sent = 0;
   let failed = 0;
-  await sql().begin(async (tx) => {
-    const rows = await tx<{ id: string; payload: { subject: string; text: string; link: string | null }; attempts: number; email: string }[]>`
-      select o.id, o.payload, o.attempts, u.email from outbox o join users u on u.id = o.recipient_user_id
-      where o.channel = 'email' and not u.sandbox and not u.email_placeholder and (u.email_verified or o.payload->>'kind' = 'verify_email') and o.status in ('pending','failed') and o.next_attempt_at <= now()
-      order by o.created_at limit ${limit} for update of o skip locked`;
-    for (const r of rows) {
-      try {
-        await adapter.send({ to: r.email, ...r.payload });
-        await tx`update outbox set status = 'sent', sent_at = now(), attempts = attempts + 1 where id = ${r.id}`;
-        await tx`insert into delivery_attempts (outbox_id, adapter, ok) values (${r.id}, ${adapter.name}, true)`;
-        sent++;
-      } catch (e) {
-        const attempts = r.attempts + 1;
-        const err = e instanceof Error ? e.message.slice(0, 300) : "error";
-        const delaySec = Math.min(3600, 30 * 2 ** attempts);
-        await tx`update outbox set attempts = ${attempts}, last_error = ${err},
-          status = ${attempts >= MAX_ATTEMPTS ? "dead" : "failed"},
-          next_attempt_at = now() + make_interval(secs => ${delaySec}) where id = ${r.id}`;
-        await tx`insert into delivery_attempts (outbox_id, adapter, ok, error) values (${r.id}, ${adapter.name}, false, ${err})`;
-        failed++;
-      }
+  const rows = await claimOutbox<{ subject: string; text: string; link: string | null }>("email", limit, sql()`
+    and exists (select 1 from users u where u.id = o.recipient_user_id and not u.sandbox and not u.email_placeholder
+      and (u.email_verified or o.payload->>'kind' = 'verify_email'))`);
+  if (!rows.length) return { sent, failed };
+  const emails = new Map((await sql()<{ id: string; email: string }[]>`select id, email from users where id in ${sql()(rows.map((r) => r.recipient_user_id!))}`).map((u) => [u.id, u.email]));
+  for (const r of rows) {
+    try {
+      await adapter.send({ to: emails.get(r.recipient_user_id!)!, subject: r.payload.subject, text: r.payload.text, link: r.payload.link }, { idempotencyKey: `outbox-${r.id}` });
+      await finishOutbox(r, adapter.name, { ok: true });
+      sent++;
+    } catch (e) {
+      await finishOutbox(r, adapter.name, { ok: false, error: e instanceof Error ? e.message : "error", retry: true, maxAttempts: MAX_ATTEMPTS, baseSeconds: 30, maxSeconds: 3600 });
+      failed++;
     }
-  });
+  }
   return { sent, failed };
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   LayoutDashboard, Inbox, House, Building2, Receipt, Bell, Briefcase, Wallet, Star, Users, Store, ClipboardList, Flag, Settings,
   ScrollText, HandCoins, FileText, UserRound, Search, Wrench, ChartColumnIncreasing, MessageCircle, Ellipsis,
 } from "lucide-react";
@@ -12,7 +13,7 @@ import { cn } from "@/lib/cn";
 const ICONS = {
   dashboard: LayoutDashboard, inbox: Inbox, house: House, building: Building2, receipt: Receipt, bell: Bell, briefcase: Briefcase,
   wallet: Wallet, star: Star, users: Users, store: Store, clipboard: ClipboardList, flag: Flag, settings: Settings, scroll: ScrollText,
-  coins: HandCoins, file: FileText, user: UserRound, search: Search, wrench: Wrench, chart: ChartColumnIncreasing, message: MessageCircle,
+  coins: HandCoins, file: FileText, user: UserRound, search: Search, wrench: Wrench, chart: ChartColumnIncreasing, message: MessageCircle, activity: Activity,
 } as const;
 export type NavIcon = keyof typeof ICONS;
 /** `short`: nombre para la barra de abajo en celular, donde entran unas diez letras. */

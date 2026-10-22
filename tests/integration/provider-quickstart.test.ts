@@ -3,7 +3,7 @@ import { sql, systemTx } from "@/server/db/client";
 import { loadActor } from "@/server/auth/actor";
 import { registerUser } from "@/server/modules/users";
 import * as providers from "@/server/modules/providers";
-import { actor, catId, providerId, zoneId } from "./helpers";
+import { actor, catId, providerId, zoneId, fakePng } from "./helpers";
 import { getPublicProfile } from "@/server/queries/provider";
 import { listBookableProviders } from "@/server/modules/booking";
 
@@ -40,7 +40,7 @@ describe("alta rápida de profesionales", () => {
     const lucia = await actor("lucia");
     const pid = await providerId("Plomería Sosa");
     const before = (await providers.getProfileStrength(sql(), pid))!.score;
-    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 0)]);
+    const png = fakePng();
     await expect(providers.setProviderAvatar(await actor("martin"), pid, { data: png, name: "x.png" })).rejects.toThrow();
     const fileId = await providers.setProviderAvatar(lucia, pid, { data: png, name: "lucia.png" });
     const [f] = await sql()<{ visibility: string; purpose: string }[]>`select visibility, purpose from files where id = ${fileId}`;

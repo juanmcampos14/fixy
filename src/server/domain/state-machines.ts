@@ -35,7 +35,8 @@ export const quoteMachine: Machine<QuoteStatus> = {
 export const JOB_STATES = ["pending_confirmation", "confirmed", "on_the_way", "in_progress", "pending_approval", "completed", "cancelled"] as const;
 export type JobStatus = (typeof JOB_STATES)[number];
 export const jobMachine: Machine<JobStatus> = {
-  pending_confirmation: { confirmed: ["provider"], cancelled: ["client", "provider", "staff"] },
+  // "system": reserva directa que el profesional ya aceptó y se confirma sola al pagarse (o si la visita es sin cargo).
+  pending_confirmation: { confirmed: ["provider", "system"], cancelled: ["client", "provider", "staff"] },
   confirmed: { on_the_way: ["provider", "technician"], in_progress: ["provider", "technician"], cancelled: ["staff"] },
   on_the_way: { in_progress: ["provider", "technician"], cancelled: ["staff"] },
   in_progress: { pending_approval: ["provider", "technician"], cancelled: ["staff"] },

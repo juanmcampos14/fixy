@@ -21,6 +21,7 @@ export const ADMIN_SECTIONS = [
   { key: "arrepentimientos", label: "Arrepentimientos", href: "/admin/arrepentimientos", manageable: true, hint: "Pedidos del botón de arrepentimiento." },
   { key: "whatsapp", label: "WhatsApp", href: "/admin/whatsapp", manageable: true, hint: "Plantillas de mensajes." },
   { key: "auditoria", label: "Auditoría", href: "/admin/auditoria", manageable: false, hint: "Registro de acciones sensibles." },
+  { key: "salud", label: "Salud del sistema", href: "/admin/salud", manageable: true, hint: "Tareas programadas, avisos sin enviar y alertas." },
 ] as const;
 
 export type AdminSection = (typeof ADMIN_SECTIONS)[number]["key"];
@@ -34,6 +35,7 @@ export const isSection = (s: string): s is AdminSection => (SECTION_KEYS as stri
 export const OPERATOR_PRESET: Permissions = {
   resumen: "view", socios: "view", proveedores: "manage", solicitudes: "manage", trabajos: "manage", reclamos: "manage",
   resenas: "manage", finanzas: "manage", catalogo: "view", comisiones: "view", arrepentimientos: "manage", whatsapp: "view", auditoria: "view",
+  salud: "manage",
 };
 
 /** Perfil "Socio": ve todo, no modifica nada. */

@@ -6,10 +6,10 @@ import { parseDay } from "@/server/whatsapp/pro-work";
 import { createProperty } from "@/server/modules/properties";
 import * as requests from "@/server/modules/requests";
 import { storeFile } from "@/server/storage";
-import { actor, catId, zoneId } from "./helpers";
+import { actor, catId, zoneId, fakeJpeg } from "./helpers";
 
 let seq = 0;
-const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, Math.floor(Math.random() * 200))]);
+const jpeg = fakeJpeg;
 const phoneFor = (n: number) => `54911${String(Date.now()).slice(-6)}${String(n).padStart(2, "0")}`;
 const msg = (from: string, m: Partial<Inbound>): Inbound => ({ id: `wamid.work.${Date.now()}.${seq++}`, from, type: "text", ...m });
 const outs = async (phone: string, n = 2) =>

@@ -5,6 +5,7 @@
  * Sin credenciales, la plataforma queda apagada: no se registran dispositivos ni se encolan avisos.
  */
 import { createPrivateKey, createSign, sign as cryptoSign } from "node:crypto";
+import { claimOutbox, finishOutbox } from "@/server/outbox/lease";
 import { connect } from "node:http2";
 import { sql } from "@/server/db/client";
 import { env } from "@/server/env";
@@ -127,35 +128,27 @@ const MAX_ATTEMPTS = 5;
 export async function processPushOutbox(limit = 100) {
   let sent = 0;
   let failed = 0;
-  await sql().begin(async (tx) => {
-    const rows = await tx<{ id: string; payload: PushPayload; attempts: number; user_id: string }[]>`
-      select o.id, o.payload, o.attempts, o.recipient_user_id as user_id from outbox o
-      where o.channel = 'push' and o.status in ('pending','failed') and o.next_attempt_at <= now()
-      order by o.created_at limit ${limit} for update of o skip locked`;
-    for (const r of rows) {
-      const devices = await tx<{ id: string; platform: PushPlatform; token: string }[]>`
-        select id, platform, token from push_devices where user_id = ${r.user_id} and disabled_at is null`;
-      let ok = 0;
-      let retry = false;
-      for (const d of devices) {
-        const res = await (d.platform === "ios" ? sendIos(d.token, r.payload) : sendAndroid(d.token, r.payload)).catch(() => "failed" as const);
-        if (res === "ok") ok++;
-        else if (res === "gone") await tx`update push_devices set disabled_at = now() where id = ${d.id}`;
-        else retry = true;
-      }
-      const attempts = r.attempts + 1;
-      if (ok || !retry) {
-        // Llegó a algún dispositivo, o ya no queda ninguno activo: no hay nada que reintentar.
-        await tx`update outbox set status = ${ok ? "sent" : "dead"}, sent_at = ${ok ? tx`now()` : null}, attempts = ${attempts},
-          last_error = ${ok ? null : "Sin dispositivos activos"} where id = ${r.id}`;
-        if (ok) sent++;
-      } else {
-        await tx`update outbox set attempts = ${attempts}, last_error = 'El servicio de avisos rechazó el envío',
-          status = ${attempts >= MAX_ATTEMPTS ? "dead" : "failed"}, next_attempt_at = now() + make_interval(secs => ${Math.min(1800, 30 * 2 ** attempts)}) where id = ${r.id}`;
-        failed++;
-      }
-      await tx`insert into delivery_attempts (outbox_id, adapter, ok, error) values (${r.id}, 'push', ${ok > 0}, ${ok ? null : "sin entrega"})`;
+  const rows = await claimOutbox<PushPayload>("push", limit);
+  for (const r of rows) {
+    const devices = await sql()<{ id: string; platform: PushPlatform; token: string }[]>`
+      select id, platform, token from push_devices where user_id = ${r.recipient_user_id} and disabled_at is null`;
+    let ok = 0;
+    let retry = false;
+    // Envío a FCM/APNs sin transacción abierta.
+    for (const d of devices) {
+      const res = await (d.platform === "ios" ? sendIos(d.token, r.payload) : sendAndroid(d.token, r.payload)).catch(() => "failed" as const);
+      if (res === "ok") ok++;
+      else if (res === "gone") await sql()`update push_devices set disabled_at = now() where id = ${d.id}`;
+      else retry = true;
     }
-  });
+    if (ok) {
+      await finishOutbox(r, "push", { ok: true });
+      sent++;
+    } else {
+      // Sin dispositivos activos no hay nada que reintentar; si el servicio rechazó, se reintenta.
+      await finishOutbox(r, "push", { ok: false, error: retry ? "El servicio de avisos rechazó el envío" : "Sin dispositivos activos", retry, maxAttempts: MAX_ATTEMPTS, baseSeconds: 30, maxSeconds: 1800 });
+      if (retry) failed++;
+    }
+  }
   return { sent, failed };
 }

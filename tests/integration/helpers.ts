@@ -66,3 +66,22 @@ export async function verifyEmailOf(userId: string) {
   const { confirmEmail } = await import("@/server/modules/email-verification");
   await confirmEmail((await lastVerifyToken(userId))!);
 }
+
+/** JPEG mínimo pero bien formado (SOI, JFIF, inicio de imagen, datos al azar, EOI): pasa la limpieza de metadatos. */
+export const fakeJpeg = () => Buffer.concat([
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from("JFIF\0\x01\x01\0\0\x01\0\x01\0\0", "latin1"),
+  Buffer.from([0xff, 0xda, 0x00, 0x02]), Buffer.from(Array.from({ length: 64 }, () => Math.floor(Math.random() * 250))), Buffer.from([0xff, 0xd9]),
+]);
+
+/** PNG mínimo bien formado (firma, IHDR, IDAT al azar, IEND). */
+export const fakePng = () => {
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    return Buffer.concat([len, Buffer.from(type, "latin1"), data, Buffer.alloc(4)]);
+  };
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", Buffer.alloc(13, 1)), chunk("IDAT", Buffer.from(Array.from({ length: 32 }, () => Math.floor(Math.random() * 250)))), chunk("IEND", Buffer.alloc(0)),
+  ]);
+};

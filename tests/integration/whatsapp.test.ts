@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { sql } from "@/server/db/client";
 import { consumeWhatsAppLink, handleInbound, parseWebhook, type Inbound } from "@/server/whatsapp/bot";
 import { toGraphPayload, verifySignature } from "@/server/whatsapp/client";
-import { actor, catId, invitationFor, providerId, simpleQuote, zoneId } from "./helpers";
+import { actor, catId, invitationFor, providerId, simpleQuote, zoneId, fakeJpeg } from "./helpers";
 import * as props from "@/server/modules/properties";
 import * as requests from "@/server/modules/requests";
 import { storeFile } from "@/server/storage";
@@ -118,7 +118,7 @@ describe("WhatsApp", () => {
     const m2 = (m: Partial<Inbound>) => msg({ from: PHONE2, ...m });
 
     // Foto con texto: arranca el pedido y queda guardada (privada, sin dueño) hasta enviarlo.
-    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
+    const jpeg = fakeJpeg();
     const fileId = await storeFile(sql(), { data: jpeg, originalName: "foto.jpg", uploadedBy: carla.id, purpose: "request_photo", ownerType: null, ownerId: null, allowPdf: false });
     await sql()`insert into whatsapp_media (phone, file_id) values (${PHONE2}, ${fileId})`;
     await handleInbound(m2({ type: "image", fileId, text: "Pierde agua la canilla del baño y gotea todo el día" }));

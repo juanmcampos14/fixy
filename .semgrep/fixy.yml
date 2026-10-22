@@ -172,12 +172,12 @@ rules:
         - "tests/**"
     pattern-regex: 'fixy-demo-2026'
 
-  # ── 8. (deuda) Transición de trabajos por fuera de moveJob ───────────────────
+  # ── 8. Transición de trabajos por fuera de moveJob (corregido en la Etapa 3: ahora bloquea) ──
   # Auditoría, hallazgo 1: las transiciones de estado tienen tres fuentes y ya divergieron. moveJob hace
   # assert + update + timestamp + evento; un `update jobs set status` suelto se saltea parte de eso.
   - id: fixy-estado-de-trabajo-fuera-de-movejob
     languages: [typescript]
-    severity: WARNING
+    severity: ERROR
     message: >
       `update jobs set status` fuera de moveJob. La transición no pasa por el assert de la máquina de
       estados, el timestamp ni el evento, y el efecto "completado → liquidación" depende de acordarse.
@@ -190,7 +190,7 @@ rules:
         - "**/*.test.ts"
         - "tests/**"
     patterns:
-      - pattern-regex: '`\s*update\s+jobs\s+set\s+status\b'
+      - pattern-regex: '`\s*update\s+jobs(\s+\w+)?\s+set\s+status\b'
       - pattern-not-inside: |
           async function moveJob(...) { ... }
 

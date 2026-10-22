@@ -25,6 +25,12 @@ export type FilePurpose =
   | "provider_avatar";
 export type FileOwnerType = "provider" | "request" | "job" | "conversation" | "dispute" | "property";
 
+/** Marcadores de contenido activo en un PDF (JavaScript, apertura automática, lanzar programas, archivos adjuntos). */
+export function pdfHasActiveContent(buf: Buffer): boolean {
+  const text = buf.toString("latin1");
+  return /\/(JavaScript|JS|Launch|EmbeddedFile|RichMedia|XFA)\b/.test(text) || /\/OpenAction[^>]{0,200}\/(JavaScript|JS|Launch)/.test(text);
+}
+
 /** Verifica el tipo real por "magic bytes" (no confiamos en la extensión ni en el MIME del navegador). */
 export function sniffMime(buf: Buffer): string | null {
   if (buf.length < 12) return null;
@@ -102,7 +108,16 @@ export async function storeFile(
   if (!mime || (mime === "application/pdf" && input.allowPdf === false)) {
     throw invalid("Formato no admitido. Usá JPG, PNG, WEBP" + (input.allowPdf === false ? "." : " o PDF."));
   }
-  if (mime !== "application/pdf") input = { ...input, data: stripImageMetadata(input.data, mime) };
+  if (mime === "application/pdf") {
+    // Sin antivirus todavía: al menos se rechazan PDFs con código ejecutable, acciones automáticas o adjuntos.
+    if (pdfHasActiveContent(input.data)) throw invalid("Ese PDF tiene contenido activo (código o adjuntos) y no lo podemos aceptar. Exportalo de nuevo o subí una foto.");
+  } else {
+    try {
+      input = { ...input, data: stripImageMetadata(input.data, mime) };
+    } catch {
+      throw invalid("No pudimos procesar esa imagen. Probá con otra foto o con una captura de pantalla.");
+    }
+  }
   const id = randomUUID();
   const key = `${input.purpose}/${id}.${ALLOWED_MIME[mime]}`;
   await (await driver()).put(key, input.data);

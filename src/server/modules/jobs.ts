@@ -53,7 +53,7 @@ async function requireSide(tx: Tx, actor: Actor, job: JobRow, allowed: ActorSide
   return side;
 }
 
-async function moveJob(tx: Tx, job: JobRow, to: JobStatus, side: ActorSide, actor: Actor, reason?: string | null, data: Record<string, unknown> = {}) {
+async function moveJob(tx: Tx, job: JobRow, to: JobStatus, side: ActorSide, actor: Actor | null, reason?: string | null, data: Record<string, unknown> = {}) {
   assertTransition(jobMachine, job.status, to, side);
   const ts: Partial<Record<JobStatus, string>> = {
     confirmed: "confirmed_at",
@@ -64,10 +64,21 @@ async function moveJob(tx: Tx, job: JobRow, to: JobStatus, side: ActorSide, acto
   };
   const col = ts[to];
   await tx`update jobs set status = ${to} ${col ? tx`, ${tx(col)} = coalesce(${tx(col)}, now())` : tx``} where id = ${job.id}`;
-  await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: job.status, to, actorId: actor.id, actorRole: side, reason: reason ?? null, data });
+  await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: job.status, to, actorId: actor?.id ?? null, actorRole: side, reason: reason ?? null, data });
   const from = job.status;
   job.status = to;
   return from;
+}
+
+/**
+ * Única puerta para que otros módulos (reclamos, presupuestos, pagos) cambien el estado de un trabajo: pasa por la
+ * máquina de estados, el timestamp y el evento, igual que las acciones de este módulo. Semgrep bloquea `update jobs
+ * set status` fuera de moveJob.
+ */
+export async function transitionJobTx(tx: Tx, jobId: string, to: JobStatus, side: ActorSide, actor: Actor | null, reason?: string | null) {
+  const job = await loadJob(tx, jobId);
+  if (job.status === to) return job.status;
+  return moveJob(tx, job, to, side, actor, reason);
 }
 
 async function notifyBoth(tx: Tx, job: JobRow, title: string, body = "", opts: { client?: boolean; provider?: boolean } = {}) {

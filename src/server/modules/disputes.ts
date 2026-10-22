@@ -1,5 +1,6 @@
 /** Reclamos y reseñas. */
 import { randomInt } from "node:crypto";
+import { transitionJobTx } from "./jobs";
 import { z } from "zod";
 import { systemTx, type Db } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
@@ -137,11 +138,9 @@ export async function resolveDispute(actor: Actor, disputeId: string, input: z.i
     await recordEvent(tx, { entityType: "dispute", entityId: disputeId, action: "status", from: disp.status, to: "resolved", actorId: actor.id, actorRole: actor.platformRole, reason: d.note, data: { resolution: d.resolution } });
     // El trabajo conserva su historial. Según la resolución, operación puede reabrirlo o completarlo.
     if (d.resolution === "redo_work" && job.status === "pending_approval") {
-      await tx`update jobs set status = 'in_progress' where id = ${job.id}`;
-      await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: "pending_approval", to: "in_progress", actorId: actor.id, actorRole: "staff", reason: "Resolución de reclamo: rehacer trabajo" });
+      await transitionJobTx(tx, job.id, "in_progress", "staff", actor, "Resolución de reclamo: rehacer trabajo");
     } else if (d.completeJob && job.status === "pending_approval") {
-      await tx`update jobs set status = 'completed', completed_at = now() where id = ${job.id}`;
-      await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: "pending_approval", to: "completed", actorId: actor.id, actorRole: "staff", reason: "Cierre por resolución de reclamo" });
+      await transitionJobTx(tx, job.id, "completed", "staff", actor, "Cierre por resolución de reclamo");
       const { createPayoutForJob } = await import("./payments");
       await createPayoutForJob(tx, job.id);
     }

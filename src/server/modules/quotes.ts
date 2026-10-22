@@ -1,5 +1,6 @@
 /** Presupuestos: creación por el proveedor, comparación y aceptación atómica por el cliente. */
 import { maskContactInfo } from "@/server/domain/contact-guard";
+import { transitionJobTx } from "./jobs";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import type { Tx } from "@/server/db/client";
@@ -358,8 +359,7 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
     await audit(tx, actor, "quote.accept", "job", job.id, null, { quoteId, totalMinor: q.total_minor });
     // Reserva directa con visita sin cargo: el profesional ya aceptó, queda confirmada.
     if (!charge && req.request_mode === "direct") {
-      await tx`update jobs set status = 'confirmed', confirmed_at = now() where id = ${job.id}`;
-      await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: "pending_confirmation", to: "confirmed", actorRole: "system", reason: "Visita sin cargo confirmada por ambas partes" });
+      await transitionJobTx(tx, job.id, "confirmed", "system", null, "Visita sin cargo confirmada por ambas partes");
     }
     return { jobId: job.id, checkoutUrl: charge ? payLink(charge.id) : null, alreadyAccepted: false };
   });

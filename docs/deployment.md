@@ -72,7 +72,7 @@ Verificación: en Supabase → Table Editor deberías ver `categories` (13 filas
 | `ASSISTANT_PROVIDER` | `rules` (o `claude` + `ANTHROPIC_API_KEY`) |
 
 3. **Deploy**. Al terminar, abrí la URL `*.vercel.app` y probá: landing, registro, `/solicitar`, ingreso con tu admin en `/ingresar` → `/admin`.
-4. El archivo `vercel.json` ya define la región `gru1` (São Paulo, cerca de la base) y un cron diario a `/api/cron/outbox` (envía emails pendientes y vence presupuestos). En el plan Hobby los cron corren una vez por día; en Pro podés pasarlo a cada 5–10 minutos (`*/10 * * * *`).
+4. `vercel.json` define la región `iad1` y seis tareas programadas separadas (`/api/cron/<tarea>`: avisos cada 5 min, pagos, pedidos y vigilancia cada 10, reseñas cada 30 y plantillas de WhatsApp cada hora). Requiere el plan Pro (en Hobby los cron solo corren una vez por día). Detalle y guías en `docs/operations-runbooks.md`.
 
 ## 4. Dominio fixy.solutions
 1. Vercel → Project → **Settings → Domains** → agregá `fixy.solutions` y `www.fixy.solutions` (elegí redirigir `www` al dominio principal).

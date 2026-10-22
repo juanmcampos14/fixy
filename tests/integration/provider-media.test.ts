@@ -7,9 +7,9 @@ import { addPortfolioItems, updateSocialLinks } from "@/server/modules/providers
 import { getPublicProfile } from "@/server/queries/provider";
 import { handleInbound, type Inbound } from "@/server/whatsapp/bot";
 import { storeFile } from "@/server/storage";
-import { actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf } from "./helpers";
+import { actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf, fakeJpeg } from "./helpers";
 
-const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, Math.floor(Math.random() * 200))]);
+const jpeg = fakeJpeg;
 const pdf = () => Buffer.from(`%PDF-1.4 catálogo ${Date.now()}`);
 let seq = 0;
 

@@ -11,7 +11,7 @@
 | Archivos | Adaptador de almacenamiento: disco local (dev) / **Supabase Storage bucket privado** (prod). Descarga solo por URL firmada propia y temporal. | Archivos privados por defecto. |
 | Validación | Zod en servicios de dominio | Mensajes en español, fuente única. |
 | Pagos | Interfaz `PaymentGateway` con adaptador simulado y esqueleto de Mercado Pago | Ver `docs/payments.md`. |
-| Notificaciones | Tabla `notifications` (internas) + **outbox persistente** con reintentos y backoff para email | No se pierden eventos si falla un envío. |
+| Notificaciones | Tabla `notifications` (internas) + **outbox persistente** (email, WhatsApp, celular) con lease, reintentos con backoff y jitter, y reintento manual | No se pierden eventos si falla un envío y nunca se espera a la red con filas bloqueadas (`src/server/outbox/lease.ts`). |
 | Asistente | Reglas locales + adaptador opcional de Claude (servidor, salida validada) | Funciona sin servicios externos. |
 | Pruebas | Vitest: unitarias + integración contra Postgres real | Reglas de negocio, concurrencia, RLS, webhooks. |
 

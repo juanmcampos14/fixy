@@ -594,3 +594,31 @@ export async function resetMemberMfaAction(_: ActionState, f: FormData): Promise
     return { ok: true, message: "Segundo factor reiniciado. Al volver a entrar lo tiene que activar de nuevo." };
   });
 }
+
+export async function runTaskNowAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("salud", "manage")).actor;
+    const { TASKS, isTask } = await import("@/server/ops/tasks");
+    const { runTask } = await import("@/server/ops/cron");
+    const task = str(f, "task");
+    if (!isTask(task)) throw invalid("Tarea desconocida.");
+    const def: import("@/server/ops/tasks").TaskDef = TASKS[task];
+    const r = await runTask(task, "manual", def.maxSeconds, def.run);
+    await audit(sql(), actor, "ops.task_run", "cron_task", null, task, { ok: "ok" in r ? r.ok : null });
+    revalidatePath("/admin/salud");
+    if ("skipped" in r) return { ok: true, message: "La tarea ya se está ejecutando. Probá en unos minutos." };
+    return r.ok ? { ok: true, message: `Listo en ${Math.round(r.durationMs / 100) / 10} s.` } : { error: `Falló: ${r.error}` };
+  });
+}
+
+export async function replayOutboxAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("salud", "manage")).actor;
+    const { replayOutbox } = await import("@/server/outbox/lease");
+    const id = str(f, "outboxId");
+    if (!(await replayOutbox(id))) throw invalid("Ese aviso ya no está pendiente de reintento.");
+    await audit(sql(), actor, "ops.outbox_replay", "outbox", id, "Reintento manual");
+    revalidatePath("/admin/salud");
+    return { ok: true, message: "Aviso reprogramado: sale en la próxima vuelta (máximo 5 minutos)." };
+  });
+}
