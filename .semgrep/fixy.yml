@@ -194,12 +194,12 @@ rules:
       - pattern-not-inside: |
           async function moveJob(...) { ... }
 
-  # ── 9. (deuda) Llamada a la pasarela con la transacción abierta ─────────────
+  # ── 9. Llamada a la pasarela con la transacción abierta (corregido en la Etapa 1: ahora bloquea) ──
   # Auditoría, hallazgo 3: con el mock es atómico; con Mercado Pago real es HTTP. Si algo falla después,
   # el rollback borra el registro de un reembolso o cobro que ya salió.
   - id: fixy-pasarela-dentro-de-transaccion
     languages: [typescript]
-    severity: WARNING
+    severity: ERROR
     message: >
       Llamada a la pasarela de pagos con la transacción de base abierta. Con Mercado Pago real esto es HTTP:
       si la transacción revierte después, el dinero ya se movió y el registro se pierde. Registrá la
@@ -222,12 +222,12 @@ rules:
           metavariable: $TX
           regex: '^(tx|db|t)$'
 
-  # ── 10. (deuda) El dominio leyendo la tabla del mock de la pasarela ──────────
+  # ── 10. El dominio leyendo la tabla del mock de la pasarela (corregido: ahora bloquea) ──
   # Auditoría, hallazgo 4: reconcile, resyncCharge y cancelJob consultan mock_gateway_payments; con
   # Mercado Pago real responden "no hay pago" aunque lo haya.
   - id: fixy-tabla-del-mock-fuera-del-mock
     languages: [typescript]
-    severity: WARNING
+    severity: ERROR
     message: >
       mock_gateway_payments usado fuera del adaptador mock. El dominio no puede depender de la pasarela
       concreta: con Mercado Pago real esta consulta no encuentra nada. Agregá la operación a PaymentGateway.

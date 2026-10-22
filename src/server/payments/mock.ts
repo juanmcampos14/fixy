@@ -1,13 +1,43 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type { Db } from "@/server/db/client";
+import { sql, type Db } from "@/server/db/client";
 import { env } from "@/server/env";
-import type { GatewayPayment, PaymentGateway } from "./gateway";
+import { GatewayError, type GatewayPayment, type PaymentGateway } from "./gateway";
 
 /**
  * Pasarela simulada. MODO DE PRUEBA: no mueve dinero real ni retiene fondos.
  * Mantiene su propio "estado del lado de la pasarela" (tablas mock_gateway_*) para que el
  * flujo de confirmación sea igual al real: webhook firmado + consulta verificada.
  */
+/**
+ * Fallas simuladas, solo en pruebas: `before` falla sin hacer nada (p. ej., 500 al recibir); `after` hace la operación
+ * y después falla (p. ej., timeout cuando la pasarela ya cobró o devolvió). Cada falla se consume una vez.
+ */
+type MockOp = "createCheckout" | "refund" | "transfer" | "getPayment" | "searchPayments";
+const faults: { op: MockOp; when: "before" | "after"; retryable: boolean }[] = [];
+export function injectMockFault(op: MockOp, when: "before" | "after", retryable = true) {
+  if (env().NODE_ENV !== "test") throw new Error("Las fallas simuladas solo existen en pruebas");
+  faults.push({ op, when, retryable });
+}
+export function clearMockFaults() {
+  faults.length = 0;
+}
+function fault(op: MockOp, when: "before" | "after") {
+  const i = faults.findIndex((f) => f.op === op && f.when === when);
+  if (i < 0) return;
+  const [f] = faults.splice(i, 1);
+  throw new GatewayError(`Pasarela simulada: falla ${when === "before" ? "antes" : "después"} de ${op}`, f.retryable);
+}
+
+const toGatewayPayment = (p: { id: string; external_reference: string; amount_minor: number; currency: string; status: GatewayPayment["status"]; refunded_minor: number }): GatewayPayment => ({
+  id: p.id,
+  externalReference: p.external_reference,
+  amountMinor: Number(p.amount_minor),
+  currency: p.currency,
+  status: p.status,
+  refundedMinor: Number(p.refunded_minor),
+  feesMinor: 0,
+});
+
 export function signMockWebhook(rawBody: string, ts: string): string {
   return createHmac("sha256", env().MOCK_WEBHOOK_SECRET).update(`${ts}.${rawBody}`).digest("hex");
 }
@@ -16,37 +46,51 @@ export const mockGateway: PaymentGateway = {
   name: "mock",
   isTest: true,
 
+  // Idempotente por referencia (como una preferencia con clave idempotente): reintentar no crea otro pago.
   async createCheckout(db, req) {
-    const id = `mockpay_${randomUUID()}`;
-    await db`insert into mock_gateway_payments (id, external_reference, amount_minor, currency, status)
-      values (${id}, ${req.externalReference}, ${req.amountMinor}, ${req.currency}, 'pending')`;
+    fault("createCheckout", "before");
+    const [existing] = await db<{ id: string }[]>`select id from mock_gateway_payments where external_reference = ${req.externalReference} limit 1`;
+    if (!existing) {
+      await db`insert into mock_gateway_payments (id, external_reference, amount_minor, currency, status)
+        values (${`mockpay_${randomUUID()}`}, ${req.externalReference}, ${req.amountMinor}, ${req.currency}, 'pending')`;
+    }
+    fault("createCheckout", "after");
     return { checkoutUrl: `/pagos/prueba/${encodeURIComponent(req.externalReference)}` };
   },
 
   async getPayment(db, paymentId) {
-    const [p] = await db<{ id: string; external_reference: string; amount_minor: number; currency: string; status: GatewayPayment["status"]; refunded_minor: number }[]>`
-      select * from mock_gateway_payments where id = ${paymentId}`;
-    if (!p) return null;
-    return {
-      id: p.id,
-      externalReference: p.external_reference,
-      amountMinor: p.amount_minor,
-      currency: p.currency,
-      status: p.status,
-      refundedMinor: p.refunded_minor,
-      feesMinor: 0,
-    };
+    fault("getPayment", "before");
+    const [p] = await db<Parameters<typeof toGatewayPayment>[0][]>`select * from mock_gateway_payments where id = ${paymentId}`;
+    return p ? toGatewayPayment(p) : null;
   },
 
-  async refund(db, paymentId, amountMinor) {
-    const [p] = await db<{ amount_minor: number; refunded_minor: number; status: string }[]>`
-      select amount_minor, refunded_minor, status from mock_gateway_payments where id = ${paymentId} for update`;
-    if (!p || !["approved", "partially_refunded"].includes(p.status)) throw new Error("Pago no reembolsable en la pasarela simulada");
-    const refunded = p.refunded_minor + amountMinor;
-    if (refunded > p.amount_minor) throw new Error("El reembolso supera el pago");
-    await db`update mock_gateway_payments set refunded_minor = ${refunded},
-      status = ${refunded === p.amount_minor ? "refunded" : "partially_refunded"}, updated_at = now() where id = ${paymentId}`;
-    return { refundId: `mockref_${randomUUID()}` };
+  async searchPayments(db, externalReference) {
+    fault("searchPayments", "before");
+    const rows = await db<Parameters<typeof toGatewayPayment>[0][]>`
+      select * from mock_gateway_payments where external_reference = ${externalReference} order by created_at desc`;
+    return rows.map(toGatewayPayment);
+  },
+
+  // Idempotente por clave y atómico: la misma clave devuelve el mismo reembolso sin volver a descontar.
+  async refund(db, paymentId, amountMinor, idempotencyKey) {
+    fault("refund", "before");
+    // Atómico en su propia transacción (la pasarela simulada vive "afuera" de la del dominio).
+    const result = await sql().begin(async (t) => {
+      const [done] = await t<{ id: string }[]>`select id from mock_gateway_refunds where idempotency_key = ${idempotencyKey}`;
+      if (done) return { refundId: done.id };
+      const [p] = await t<{ amount_minor: number; refunded_minor: number; status: string }[]>`
+        select amount_minor, refunded_minor, status from mock_gateway_payments where id = ${paymentId} for update`;
+      if (!p || !["approved", "partially_refunded"].includes(p.status)) throw new GatewayError("Pago no reembolsable en la pasarela simulada", false);
+      const refunded = Number(p.refunded_minor) + amountMinor;
+      if (refunded > Number(p.amount_minor)) throw new GatewayError("El reembolso supera el pago", false);
+      const id = `mockref_${randomUUID()}`;
+      await t`insert into mock_gateway_refunds (idempotency_key, id, payment_id, amount_minor) values (${idempotencyKey}, ${id}, ${paymentId}, ${amountMinor})`;
+      await t`update mock_gateway_payments set refunded_minor = ${refunded},
+        status = ${refunded === Number(p.amount_minor) ? "refunded" : "partially_refunded"}, updated_at = now() where id = ${paymentId}`;
+      return { refundId: id };
+    });
+    fault("refund", "after");
+    return result;
   },
 
   verifyWebhook(rawBody, headers) {
@@ -68,12 +112,14 @@ export const mockGateway: PaymentGateway = {
   },
 
   async transfer(db, accountRef, amountMinor, reference) {
+    fault("transfer", "before");
     const [existing] = await db<{ id: string; status: "processing" | "paid" | "failed" }[]>`
       select id, status from mock_gateway_transfers where reference = ${reference}`;
     if (existing) return { transferId: existing.id, status: existing.status }; // idempotente
     const id = `mocktr_${randomUUID()}`;
     await db`insert into mock_gateway_transfers (id, account_id, amount_minor, reference, status)
       values (${id}, ${accountRef}, ${amountMinor}, ${reference}, 'paid')`;
+    fault("transfer", "after");
     return { transferId: id, status: "paid" };
   },
 };

@@ -19,7 +19,8 @@ import { cancelJob, operatorMoveJob } from "@/server/modules/jobs";
 import { markWithdrawalPaid, rejectWithdrawal, settleRecoveryManually, waiveRecovery } from "@/server/modules/withdrawals";
 import { resolveRevocation } from "@/server/modules/revocations";
 import { createMissingTemplates } from "@/server/whatsapp/templates-sync";
-import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, resyncCharge, setPayoutHold } from "@/server/modules/payments";
+import { executePayout, postManualAdjustment, refundCharge, releasePayoutWithoutReview, setPayoutHold } from "@/server/modules/payments";
+import { replayCommand, resolveIncident, resyncCharge, runReconciliation } from "@/server/modules/payment-reconciliation";
 import { moveDispute, replyDispute, resolveDispute } from "@/server/modules/disputes";
 import * as admin from "@/server/modules/admin";
 import { sql } from "@/server/db/client";
@@ -215,14 +216,38 @@ export async function resyncChargeAction(_: ActionState, f: FormData): Promise<A
     const actor = (await requireSection("finanzas", "manage")).actor;
     const r = await resyncCharge(actor, str(f, "chargeId"));
     refresh();
-    const msg: Record<string, string> = {
-      applied: "Cobro actualizado con el estado de la pasarela.",
-      ignored_stale: "Sin cambios: el estado interno ya está al día o la pasarela informa un estado que no se aplica automáticamente.",
-      rejected: `La pasarela no confirmó el pago${r.error ? `: ${r.error}` : ""}.`,
-      ignored_duplicate: "Sin cambios.",
-      error: "No se pudo sincronizar.",
+    return {
+      ok: true,
+      message: r.applied ? `Cobro actualizado con el estado de la pasarela (${r.applied} cambio/s).` : r.incidents ? "Hay diferencias que no se reparan solas: quedaron como incidencias." : "Sin cambios: coincide con la pasarela.",
     };
-    return { ok: r.result !== "error", message: msg[r.result] ?? "Listo." };
+  });
+}
+
+export async function runReconciliationAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("finanzas", "manage")).actor;
+    const r = await runReconciliation({ limit: 100 });
+    await audit(sql(), actor, "payment.reconciliation_run", "payment", null, "Conciliación manual", r);
+    refresh();
+    return { ok: true, message: `Revisados ${r.checked} cobros: ${r.applied} actualizados, ${r.incidents} incidencias nuevas${r.errors ? `, ${r.errors} sin respuesta de la pasarela` : ""}.` };
+  });
+}
+
+export async function resolveIncidentAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("finanzas", "manage")).actor;
+    await resolveIncident(actor, str(f, "incidentId"), str(f, "reason"));
+    refresh();
+    return { ok: true, message: "Incidencia resuelta." };
+  });
+}
+
+export async function replayCommandAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("finanzas", "manage")).actor;
+    await replayCommand(actor, str(f, "commandId"));
+    refresh();
+    return { ok: true, message: "Reintento enviado a la pasarela con la misma clave." };
   });
 }
 

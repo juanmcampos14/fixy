@@ -6,7 +6,7 @@ import type { ActionState } from "@/lib/action-state";
 import { requireActor } from "@/server/auth/session";
 import { sql, systemTx } from "@/server/db/client";
 import { paymentsAreTestMode } from "@/server/env";
-import { processPaymentWebhook, retryCharge } from "@/server/modules/payments";
+import { payLink, processPaymentWebhook, retryCharge } from "@/server/modules/payments";
 import { buildMockWebhook, mockCompleteCheckout } from "@/server/payments/mock";
 import { DomainError, forbidden } from "@/server/domain/errors";
 
@@ -39,7 +39,7 @@ export async function retryChargeAction(_: ActionState, f: FormData): Promise<Ac
   const r = await act(async () => {
     const actor = await requireActor();
     const c = await retryCharge(actor, str(f, "chargeId"));
-    url = c.checkout_url ?? "";
+    url = payLink(c.id);
   });
   if (r.error) return r;
   redirect(url);

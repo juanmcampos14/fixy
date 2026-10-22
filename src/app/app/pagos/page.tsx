@@ -7,6 +7,7 @@ import { StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { chargeKindLabel, chargeStatusLabel } from "@/server/domain/labels";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { payLink } from "@/server/modules/payments";
 
 export const metadata = { title: "Pagos" };
 
@@ -42,7 +43,7 @@ export default async function Payments() {
                 <div className="flex items-center gap-3">
                   <span className="tabular font-semibold">{formatMoney(c.amount_minor)}</span>
                   <StatusBadge status={c.status} labels={chargeStatusLabel} />
-                  {c.status === "pending" && c.checkout_url && <Link href={c.checkout_url} className="text-sm font-semibold text-fixy-800 underline">Pagar</Link>}
+                  {c.status === "pending" && <a href={payLink(c.id)} className="text-sm font-semibold text-fixy-800 underline">Pagar</a>}
                   {["approved", "partially_refunded", "refunded"].includes(c.status) && <Link href={`/app/pagos/${c.id}`} className="inline-flex items-center gap-1 text-sm font-semibold text-fixy-800 underline"><FileText className="h-4 w-4" aria-hidden />Comprobante</Link>}
                 </div>
               </li>

@@ -34,13 +34,13 @@ Proveedor: importe bruto (su presupuesto), comisión Fixy, ajustes (reembolsos),
 | Liquidación | Evento simulado separado, ejecutado por operación, claramente identificado como simulado. |
 
 ## Flujo implementado (adaptador simulado)
-1. Cliente acepta → `acceptQuote` crea la orden + `charges(pending)` con `external_reference` único + intención de pago en la pasarela simulada (`mock_gateway_payments`) → redirección a `/pagos/prueba/<ref>` (pantalla marcada "MODO DE PRUEBA").
+1. Cliente acepta → `acceptQuote` crea la orden + `charges(pending)` con `external_reference` único + el comando `create_checkout` (sin llamar a la pasarela) → redirección a `/pagos/ir/<cobro>`, que crea el checkout fuera de la transacción y lleva a la pasarela (en prueba, `/pagos/prueba/<ref>`, pantalla marcada "MODO DE PRUEBA"). Ver "Operaciones con la pasarela".
 2. "Simular pago aprobado/rechazado" cambia el estado **del lado de la pasarela simulada** y emite un webhook firmado (HMAC-SHA256 con timestamp y ventana anti-replay).
 3. `processPaymentWebhook`: verifica firma → registra evento (único por id) → consulta el pago a la pasarela → valida referencia, monto y moneda → aplica la transición si avanza (`status_rank`) → asientos contables → notificaciones. El endpoint HTTP equivalente es `POST /api/webhooks/payments/mock`.
 4. El proveedor confirma (requiere cobro aprobado) → ejecuta → el cliente da conformidad → se crea `payouts(pending)` con bruto, comisión, ajustes y neto. Si hay reclamo abierto, la liquidación queda en pausa.
-5. Operación ejecuta la liquidación simulada (`executePayout`): pending → scheduled → processing → paid, con transferencia ficticia idempotente y asiento contable.
-6. Reembolsos (`refundCharge`, solo operación, con motivo): vinculados al cobro original, nunca superan lo cobrado, se reparten proporcionalmente entre neto del proveedor y plataforma; si la liquidación aún no se pagó, se ajusta; si ya se pagó, queda auditado como recupero pendiente.
-7. Conciliación (`/admin/finanzas?tab=conciliacion`): compara estado y monto internos contra la pasarela; "re-sincronizar" usa la misma lógica que el webhook.
+5. Operación ejecuta la liquidación simulada (`executePayout`): pending → scheduled → processing (+ comando `transfer`) → paid cuando la pasarela confirma, con asiento contable.
+6. Reembolsos (`refundCharge`, solo operación, con motivo): se registran **pendientes** y se encola el comando `refund`; recién cuando la pasarela confirma se aplican al cobro, al registro financiero y a las liquidaciones (o recupero si el profesional ya cobró). Los pendientes cuentan para no superar lo cobrado.
+7. Conciliación (`/admin/finanzas?tab=conciliacion`): tablero de salud + incidencias abiertas; cada 10 minutos se consulta la pasarela por referencia y se repara lo reparable. Ver `docs/payments-runbooks.md`.
 
 ### Asientos contables
 | Evento | Cuentas |
@@ -103,4 +103,38 @@ Paneles: cliente (acordado, pagado, saldo, movimientos, comprobantes, reembolsos
 - Sin efectivo ni cajeros (tardan días en acreditarse); la preferencia vence a las 48 h.
 - Reintegros: `POST /v1/payments/{id}/refunds` con clave de idempotencia.
 - Profesionales: cobran por retiros mensuales a su cuenta bancaria (no se usan cuentas de la pasarela).
-- Pendiente: contracargos y reclamos (retener el saldo del profesional), conciliación diaria contra Mercado Pago.
+- Contracargos y reclamos: retienen la liquidación y se registran como reembolso (`source = chargeback`).
+- Conciliación: `GET /v1/payments/search?external_reference=…` por turnos (cron) y manual desde Finanzas.
+
+## Operaciones con la pasarela (auditoría H-02 / H-03, migración 0043)
+
+Ninguna llamada a la pasarela ocurre con una transacción de base abierta. Toda operación que mueve dinero es un
+**comando durable** (`payment_commands`) con una **clave idempotente estable** derivada de la operación de negocio:
+
+```text
+acción de negocio ── tx corta: valida + guarda el comando ── commit
+procesador ──────── reclama con lease de 60 s (una sentencia, sin locks durante la red)
+                 ── llama a la pasarela con la clave del comando (X-Idempotency-Key en Mercado Pago)
+                 ── guarda la respuesta en el comando
+                 ── tx corta: aplica estado + registro financiero + avisos y cierra el comando
+conciliador ────── compara Fixy con la pasarela por referencia y abre incidencias
+```
+
+| Comando | Clave | Al confirmarse | Si muere (rechazo o 8 intentos) |
+|---|---|---|---|
+| `create_checkout` | `charge:<trabajo>:<tipo>:<extra>:<cobro>` | guarda `checkout_url` | cobro `failed`; el cliente reintenta (cobro nuevo) |
+| `refund` | `refund:<cobro>:<ya devuelto+pendiente>:<importe>` | reembolso `approved` + efectos | reembolso `failed` + incidencia crítica; reintento manual con la misma clave |
+| `orphan_refund` | `orphan:<pago>` | auditoría + aviso al cliente | incidencia crítica; reintento manual |
+| `transfer` | `payout:<liquidación>` | liquidación `paid` + asiento | liquidación `failed` (se reprograma con la misma clave) |
+
+Estados del comando: `pending → leased → succeeded`, `leased → retryable → leased…`, `leased → dead`. Errores
+reintentables: sin respuesta, 5xx, 408/409/425/429 (backoff exponencial con jitter, 30 s → 1 h). Si la pasarela ya hizo
+la operación y se cae el registro, el reintento con la misma clave devuelve la misma operación: nunca se duplica.
+
+Los avisos (webhooks) se procesan en tres pasos: registrar el evento (transacción propia), consultar el pago a la
+pasarela (sin transacción) y aplicarlo (`applyGatewayPayment`, transacción breve). Una devolución propia todavía
+pendiente no se registra como "devolución hecha en la pasarela" aunque el aviso llegue antes.
+
+Pruebas de fallas: `tests/integration/payment-failures.test.ts` (timeout después de la operación, rechazo, dos
+procesadores, lease vencido, aviso antes del registro, pasarela sin respuesta, pago duplicado, transferencia).
+Semgrep bloquea (ERROR) llamadas a la pasarela con `tx`/`db` y lecturas de `mock_gateway_payments` fuera del simulador.

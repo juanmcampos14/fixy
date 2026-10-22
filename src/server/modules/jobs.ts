@@ -14,7 +14,7 @@ import { jobStatusLabel } from "@/server/domain/labels";
 import { clientRecipients, notify, providerRecipients, staffRecipients } from "@/server/notifications";
 import { storeFile } from "@/server/storage";
 import { check, providerRole } from "./authz";
-import { createCharge, createPayoutForJob, refundChargeTx, type ChargeRow } from "./payments";
+import { createCharge, createPayoutForJob, drainPaymentCommands, payLink, refundChargeTx, type ChargeRow } from "./payments";
 import { formatMoney, formatDate } from "@/lib/format";
 
 type JobRow = {
@@ -241,18 +241,18 @@ export async function approveJob(actor: Actor, jobId: string) {
  */
 export async function cancelJob(actor: Actor, jobId: string, reason: string, opts: { refundAll?: boolean; asStaff?: boolean } = {}) {
   if (!reason || reason.trim().length < 5) throw invalid("Indicá el motivo de la cancelación.");
-  return systemTx(async (tx) => {
+  await systemTx(async (tx) => {
     const job = await loadJob(tx, jobId);
     // Desde el panel de operación se actúa siempre como equipo Fixy, aunque el usuario también sea parte del trabajo.
     const side = opts.asStaff && can(actor, "trabajos", "manage") ? "staff" : await requireSide(tx, actor, job, ["client", "provider", "staff"]);
     await moveJob(tx, job, "cancelled", side, actor, reason);
     await tx`update jobs set cancel_reason = ${reason}, cancelled_by = ${actor.id} where id = ${jobId}`;
     await tx`update job_extras set status = 'withdrawn', decided_at = now() where job_id = ${jobId} and status = 'proposed'`;
-    // Cobros pendientes: se cancelan en la pasarela simulada y se marcan como fallidos.
-    const pending = await tx<{ id: string; external_reference: string }[]>`select id, external_reference from charges where job_id = ${jobId} and status in ('pending','processing')`;
+    // Cobros pendientes: quedan fallidos. Si el cliente igual llega a pagar el link viejo, el pago se detecta como
+    // huérfano y se devuelve completo (applyGatewayPayment → refundOrphanPayment).
+    const pending = await tx<{ id: string }[]>`select id from charges where job_id = ${jobId} and status in ('pending','processing')`;
     for (const c of pending) {
       await tx`update charges set status = 'failed', failure_reason = 'Trabajo cancelado' where id = ${c.id}`;
-      await tx`update mock_gateway_payments set status = 'rejected', updated_at = now() where external_reference = ${c.external_reference} and status = 'pending'`;
     }
     const refundAll = side !== "staff" || opts.refundAll === true;
     if (refundAll) {
@@ -264,6 +264,8 @@ export async function cancelJob(actor: Actor, jobId: string, reason: string, opt
     if (side === "staff") await audit(tx, actor, "job.cancel", "job", jobId, reason, { refundAll });
     await notifyBoth(tx, job, "Trabajo cancelado", reason);
   });
+  // Los reembolsos se piden a la pasarela después del commit.
+  await drainPaymentCommands();
 }
 
 // ───────────────────────── Adicionales ─────────────────────────
@@ -346,7 +348,7 @@ export async function decideExtra(actor: Actor, extraId: string, decision: "acce
         description: `Adicional ${job.code}: ${e.description.slice(0, 60)}`,
         payoutAccountRef: prov.payout_account_ref,
       });
-      checkoutUrl = c.checkout_url;
+      checkoutUrl = payLink(c.id);
     }
     await notify(tx, await providerRecipients(tx, job.provider_id, job.assigned_user_id), {
       type: "extra",

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/server/env";
-import type { GatewayPayment, GatewayPaymentStatus, PaymentGateway } from "./gateway";
+import { GatewayError, type GatewayPayment, type GatewayPaymentStatus, type PaymentGateway } from "./gateway";
 
 /**
  * Mercado Pago — Checkout Pro (API de Preferences), cobrando en la cuenta de FLIPS S.R.L.
@@ -21,18 +21,27 @@ function token() {
 }
 
 async function mp<T>(path: string, init: { method?: string; body?: unknown; idempotencyKey?: string } = {}): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: init.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      "Content-Type": "application/json",
-      ...(init.idempotencyKey ? { "X-Idempotency-Key": init.idempotencyKey } : {}),
-    },
-    body: init.body ? JSON.stringify(init.body) : undefined,
-    signal: AbortSignal.timeout(15000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method: init.method ?? "GET",
+      headers: {
+        Authorization: `Bearer ${token()}`,
+        "Content-Type": "application/json",
+        ...(init.idempotencyKey ? { "X-Idempotency-Key": init.idempotencyKey } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (e) {
+    // Sin respuesta (timeout, red): no sabemos si la operación se hizo. Se reintenta con la misma clave.
+    throw new GatewayError(`Mercado Pago sin respuesta: ${e instanceof Error ? e.name : "error"}`, true);
+  }
   const json = (await res.json().catch(() => ({}))) as T & { message?: string; error?: string };
-  if (!res.ok) throw new Error(`Mercado Pago ${res.status}: ${(json.message ?? json.error ?? "error").toString().slice(0, 200)}`);
+  if (!res.ok) {
+    const retryable = res.status >= 500 || [408, 409, 425, 429].includes(res.status);
+    throw new GatewayError(`Mercado Pago ${res.status}: ${(json.message ?? json.error ?? "error").toString().slice(0, 200)}`, retryable);
+  }
   return json;
 }
 
@@ -56,6 +65,25 @@ function mapStatus(p: { status: string; status_detail?: string; transaction_amou
       // pending, in_process, authorized: no cambian el estado aprobado ya registrado.
       return "pending";
   }
+}
+
+type MpPayment = {
+  id: number; external_reference: string | null; transaction_amount: number; currency_id: string; status: string; status_detail?: string;
+  transaction_amount_refunded?: number; transaction_details?: { net_received_amount?: number };
+};
+
+function toGatewayPayment(p: MpPayment): GatewayPayment | null {
+  if (!p.external_reference) return null;
+  return {
+    id: String(p.id),
+    externalReference: p.external_reference,
+    amountMinor: toMinor(p.transaction_amount),
+    currency: p.currency_id,
+    status: mapStatus(p),
+    refundedMinor: toMinor(p.transaction_amount_refunded ?? 0),
+    // Lo que Mercado Pago no nos acredita: su comisión e impuestos/retenciones del cobro.
+    feesMinor: p.transaction_details?.net_received_amount != null ? Math.max(0, toMinor(p.transaction_amount) - toMinor(p.transaction_details.net_received_amount)) : 0,
+  };
 }
 
 export const mercadoPagoGateway: PaymentGateway = {
@@ -88,22 +116,18 @@ export const mercadoPagoGateway: PaymentGateway = {
   async getPayment(_db, paymentId): Promise<GatewayPayment | null> {
     if (!/^\d{3,25}$/.test(paymentId)) return null;
     try {
-      const p = await mp<{ id: number; external_reference: string | null; transaction_amount: number; currency_id: string; status: string; status_detail?: string; transaction_amount_refunded?: number; transaction_details?: { net_received_amount?: number } }>(`/v1/payments/${paymentId}`);
-      if (!p.external_reference) return null;
-      return {
-        id: String(p.id),
-        externalReference: p.external_reference,
-        amountMinor: toMinor(p.transaction_amount),
-        currency: p.currency_id,
-        status: mapStatus(p),
-        refundedMinor: toMinor(p.transaction_amount_refunded ?? 0),
-        // Lo que Mercado Pago no nos acredita: su comisión e impuestos/retenciones del cobro.
-        feesMinor: p.transaction_details?.net_received_amount != null ? Math.max(0, toMinor(p.transaction_amount) - toMinor(p.transaction_details.net_received_amount)) : 0,
-      };
+      const p = await mp<MpPayment>(`/v1/payments/${paymentId}`);
+      return toGatewayPayment(p);
     } catch (e) {
       if (e instanceof Error && /Mercado Pago 404/.test(e.message)) return null;
       throw e;
     }
+  },
+
+  async searchPayments(_db, externalReference) {
+    const q = new URLSearchParams({ external_reference: externalReference, sort: "date_created", criteria: "desc", limit: "20" });
+    const r = await mp<{ results?: MpPayment[] }>(`/v1/payments/search?${q}`);
+    return (r.results ?? []).map(toGatewayPayment).filter((p): p is GatewayPayment => !!p && p.externalReference === externalReference);
   },
 
   async refund(_db, paymentId, amountMinor, idempotencyKey) {
@@ -113,10 +137,10 @@ export const mercadoPagoGateway: PaymentGateway = {
 
   // Con retiros mensuales Fixy transfiere a la cuenta bancaria del profesional: no hay cuentas de cobro en la pasarela.
   async createPayoutAccount() {
-    throw new Error("Con Mercado Pago, los profesionales cargan sus datos bancarios y cobran por retiros mensuales.");
+    throw new GatewayError("Con Mercado Pago, los profesionales cargan sus datos bancarios y cobran por retiros mensuales.", false);
   },
   async transfer() {
-    throw new Error("Los retiros se transfieren por banco y se registran desde Finanzas → Retiros.");
+    throw new GatewayError("Los retiros se transfieren por banco y se registran desde Finanzas → Retiros.", false);
   },
 
   /**

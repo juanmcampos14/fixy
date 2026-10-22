@@ -9,6 +9,8 @@ import { expireDirectBookings, rematchOpenRequests } from "@/server/modules/requ
 import { processWhatsAppOutbox } from "@/server/whatsapp/outbox";
 import { processPushOutbox } from "@/server/push";
 import { syncWhatsAppTemplates } from "@/server/whatsapp/templates-sync";
+import { runPaymentCommands } from "@/server/modules/payment-commands";
+import { runReconciliation } from "@/server/modules/payment-reconciliation";
 
 /** Tareas periódicas (llamar con cron externo): envíos pendientes y vencimiento de presupuestos. */
 async function run(req: Request) {
@@ -34,7 +36,16 @@ async function run(req: Request) {
     return { sent: 0, failed: 0 };
   });
   const expired = await sql().begin((tx) => expireQuotes(tx as never));
-  return Response.json({ outbox, whatsapp, push, templates, expiredQuotes: expired, reviews, reviewDisputes, expiredBookings, rematched });
+  // Pagos: operaciones pendientes con la pasarela y conciliación por turnos. Un fallo acá no frena lo demás.
+  const paymentCommands = await runPaymentCommands({ limit: 50 }).catch((e) => {
+    console.error("[cron] payment commands:", e instanceof Error ? e.message : "error");
+    return null;
+  });
+  const reconciliation = await runReconciliation({ limit: 40 }).catch((e) => {
+    console.error("[cron] reconciliation:", e instanceof Error ? e.message : "error");
+    return null;
+  });
+  return Response.json({ outbox, whatsapp, push, templates, expiredQuotes: expired, reviews, reviewDisputes, expiredBookings, rematched, paymentCommands, reconciliation });
 }
 
 // Vercel Cron llama con GET y envía "Authorization: Bearer $CRON_SECRET".

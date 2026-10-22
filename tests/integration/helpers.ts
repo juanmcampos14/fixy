@@ -1,7 +1,7 @@
 import { sql, systemTx } from "@/server/db/client";
 import { loadActor, type Actor } from "@/server/auth/actor";
 import { demoEmail } from "@/server/seed/demo";
-import { processPaymentWebhook } from "@/server/modules/payments";
+import { drainPaymentCommands, processPaymentWebhook } from "@/server/modules/payments";
 import { buildMockWebhook, mockCompleteCheckout } from "@/server/payments/mock";
 import * as quotes from "@/server/modules/quotes";
 
@@ -18,9 +18,21 @@ export const propertyOf = (userKey: string, label: string) =>
   id("select p.id from properties p join users u on u.id = p.owner_user_id where u.email = $1 and p.label = $2", [demoEmail(userKey), label]);
 export const invitationFor = (requestId: string, pid: string) => id("select id from request_invitations where request_id = $1 and provider_id = $2", [requestId, pid]);
 
+/** El cliente abre el link de pago: el procesador crea el checkout en la pasarela (simulada) si todavía no existe. */
+export async function openCheckout(externalReference: string) {
+  const [c] = await sql()<{ id: string }[]>`select id from charges where external_reference = ${externalReference}`;
+  await drainPaymentCommands({ chargeId: c.id });
+}
+
+/** Abre el checkout y simula la respuesta del comprador en la pasarela de prueba. */
+export async function completeCheckout(externalReference: string, outcome: "approved" | "rejected" = "approved") {
+  await openCheckout(externalReference);
+  return systemTx((tx) => mockCompleteCheckout(tx, externalReference, outcome));
+}
+
 export async function payPending(jobId: string, outcome: "approved" | "rejected" = "approved") {
   const [c] = await sql()<{ external_reference: string }[]>`select external_reference from charges where job_id = ${jobId} and status = 'pending' order by created_at desc limit 1`;
-  const paymentId = await systemTx((tx) => mockCompleteCheckout(tx, c.external_reference, outcome));
+  const paymentId = await completeCheckout(c.external_reference, outcome);
   const hook = buildMockWebhook(paymentId);
   const result = await processPaymentWebhook("mock", hook.rawBody, hook.headers);
   return { paymentId, result, hook };

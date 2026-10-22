@@ -87,7 +87,9 @@ describe("recorrido principal de punta a punta", () => {
 
     // 5. Cliente acepta y paga en modo de prueba
     const accepted = await quotes.acceptQuote(cliente, quoteId, { totalMinor: q.total_minor, acceptedTerms: true });
-    expect(accepted.checkoutUrl).toMatch(/^\/pagos\/prueba\//);
+    // El link lleva a /pagos/ir: el checkout en la pasarela se crea recién ahí, fuera de la transacción de la aceptación.
+    expect(accepted.checkoutUrl).toMatch(/^\/pagos\/ir\/[0-9a-f-]{36}$/);
+    expect((await sql()<{ checkout_url: string | null }[]>`select checkout_url from charges where job_id = ${accepted.jobId}`)[0].checkout_url).toBeNull();
     await expect(jobs.confirmJob(me, accepted.jobId)).rejects.toThrow(/pago/); // sin pago no se confirma
     const pay = await payPending(accepted.jobId);
     expect(pay.result).toBe("applied");

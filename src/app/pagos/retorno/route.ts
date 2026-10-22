@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { sql } from "@/server/db/client";
-import { syncPaymentFromGateway } from "@/server/modules/payments";
+import { syncPayment } from "@/server/modules/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const paymentId = (url.searchParams.get("payment_id") ?? url.searchParams.get("collection_id") ?? "").replace(/\D/g, "").slice(0, 25);
   const [charge] = ref ? await sql()<{ job_id: string }[]>`select job_id from charges where external_reference = ${ref} and gateway = 'mercadopago'` : [];
   if (charge && paymentId) {
-    await sql().begin((tx) => syncPaymentFromGateway(tx as never, "mercadopago", paymentId)).catch(() => {
+    await syncPayment("mercadopago", paymentId).catch(() => {
       console.warn("[mercadopago] no se pudo verificar el pago a la vuelta; queda el webhook");
     });
   }

@@ -8,7 +8,8 @@ import { chargeKindLabel, chargeStatusLabel, disputeReasonLabel, disputeStatusLa
 import { Card, CardHeader, DefinitionList, PageHeader } from "@/components/ui/card";
 import { Badge, StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { ButtonLink } from "@/components/ui/button";
+import { ButtonLink, buttonClass } from "@/components/ui/button";
+import { payLink } from "@/server/modules/payments";
 import { ActionForm, ConfirmAction, SubmitButton } from "@/components/ui/form";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Mascot } from "@/components/brand/mascot";
@@ -60,6 +61,7 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
       {pago === "procesado" && (pendingCharges.length === 0
         ? <Alert tone="ok" className="mb-6" title="Pago registrado">La pasarela confirmó el pago{isTest ? " (modo de prueba)" : ""}. Un pago aprobado no implica que el trabajo esté terminado.</Alert>
         : <Alert tone="info" className="mb-6" title="Estamos esperando la confirmación de la pasarela">Actualizá en unos segundos.</Alert>)}
+      {pago === "preparando" && <Alert tone="warn" className="mb-6" title="Estamos preparando el pago">Mercado Pago está demorando en responder. Probá de nuevo en un minuto con «Ir a pagar».</Alert>}
       {pago === "rechazado" && <Alert tone="danger" className="mb-6" title="El pago no se pudo completar">No se cobró nada. Podés reintentarlo cuando quieras.</Alert>}
 
       {/* Acciones pendientes */}
@@ -71,7 +73,7 @@ export default async function ClientJob({ params, searchParams }: { params: Prom
               <p className="mt-0.5 text-ink-2">Vas a pagar <strong>{formatMoney(c.amount_minor)}</strong> en total. Incluye {formatMoney(c.client_fee_minor + c.tax_minor)} de cargo de servicio.</p>
               {c.kind === "job_total" || c.kind === "visit" ? <p className="text-sm text-muted">El profesional confirma el trabajo cuando se registra el pago.</p> : null}
             </div>
-            <div className="flex items-center gap-2">{c.is_test && <TestModeBadge />}{c.checkout_url && <ButtonLink href={c.checkout_url}>Ir a pagar</ButtonLink>}</div>
+            <div className="flex items-center gap-2">{c.is_test && <TestModeBadge />}{c.status === "pending" && <a href={payLink(c.id)} className={buttonClass("primary", "md")}>Ir a pagar</a>}</div>
           </Card>
         ))}
         {lastFailed && !hasLiveForFailed && job.status !== "cancelled" && (

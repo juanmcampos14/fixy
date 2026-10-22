@@ -15,7 +15,7 @@ import * as requests from "@/server/modules/requests";
 import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
-import { processPaymentWebhook } from "@/server/modules/payments";
+import { drainPaymentCommands, processPaymentWebhook } from "@/server/modules/payments";
 import * as withdrawals from "@/server/modules/withdrawals";
 import { buildMockWebhook, mockCompleteCheckout } from "@/server/payments/mock";
 
@@ -179,8 +179,9 @@ export async function seedDemo(db: Db, log: (m: string) => void = console.log) {
   // ── Helpers de flujo ──
   const visitCode = async (jobId: string) => (await db<{ visit_code: string }[]>`select visit_code from jobs where id = ${jobId}`)[0].visit_code;
   const pay = async (jobId: string, kind?: string) => {
-    const [c] = await db<{ external_reference: string }[]>`
-      select external_reference from charges where job_id = ${jobId} and status = 'pending' ${kind ? db`and kind = ${kind}` : db``} order by created_at desc limit 1`;
+    const [c] = await db<{ id: string; external_reference: string }[]>`
+      select id, external_reference from charges where job_id = ${jobId} and status = 'pending' ${kind ? db`and kind = ${kind}` : db``} order by created_at desc limit 1`;
+    await drainPaymentCommands({ chargeId: c.id }); // el cliente abre el link de pago
     const paymentId = await systemTx((tx) => mockCompleteCheckout(tx, c.external_reference, "approved"));
     const { rawBody, headers } = buildMockWebhook(paymentId);
     await processPaymentWebhook("mock", rawBody, headers);

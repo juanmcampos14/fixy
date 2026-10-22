@@ -1,7 +1,10 @@
 /**
  * Interfaz de pasarela de pagos. El dominio nunca habla directamente con una pasarela concreta.
  * - MockGateway: modo de prueba, sin dinero real (por defecto).
- * - MercadoPagoGateway: esqueleto no activado; ver docs/payments.md antes de habilitarlo.
+ * - MercadoPagoGateway: Checkout Pro; ver docs/payments.md.
+ * Nunca se llama con una transacción de base abierta: el dominio guarda la intención, confirma y la ejecuta un
+ * procesador (src/server/modules/payment-commands.ts). Por eso todas las operaciones que mueven dinero reciben una
+ * clave idempotente estable: reintentar con la misma clave devuelve la misma operación.
  */
 import type { Db } from "@/server/db/client";
 
@@ -25,6 +28,17 @@ export type GatewayPayment = {
   feesMinor: number;
 };
 
+/**
+ * Error de la pasarela clasificado. `retryable`: timeouts, 5xx, límites de frecuencia (se reintenta con la misma clave).
+ * No reintentable: la pasarela rechazó la operación (datos inválidos, pago no reembolsable…).
+ */
+export class GatewayError extends Error {
+  constructor(message: string, public readonly retryable: boolean) {
+    super(message);
+    this.name = "GatewayError";
+  }
+}
+
 export type CheckoutRequest = {
   externalReference: string;
   amountMinor: number;
@@ -42,6 +56,9 @@ export interface PaymentGateway {
   createCheckout(db: Db, req: CheckoutRequest): Promise<{ checkoutUrl: string }>;
   /** Consulta verificada del estado de un pago en la pasarela. */
   getPayment(db: Db, paymentId: string): Promise<GatewayPayment | null>;
+  /** Pagos asociados a una referencia de Fixy (el más reciente primero). Lo usa la conciliación. */
+  searchPayments(db: Db, externalReference: string): Promise<GatewayPayment[]>;
+  /** Idempotente por clave: la misma clave devuelve el mismo reembolso. */
   refund(db: Db, paymentId: string, amountMinor: number, idempotencyKey: string): Promise<{ refundId: string }>;
   /** Verifica la autenticidad de una notificación entrante. */
   verifyWebhook(rawBody: string, headers: Headers): boolean;

@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { requireSection } from "@/server/auth/session";
 import { isPlatformAdmin } from "@/server/auth/actor";
+import { can } from "@/server/auth/permissions";
 import { sql } from "@/server/db/client";
-import { reconcile } from "@/server/modules/payments";
+import { paymentHealth } from "@/server/modules/payment-reconciliation";
 import { env } from "@/server/env";
 import { mpAccountStatus } from "@/server/payments/mercadopago";
 import { getLedger, jobsForAdjustment, listCharges, listPayouts, listRefunds } from "@/server/queries/admin";
@@ -16,7 +17,7 @@ import { ConfirmAction } from "@/components/ui/form";
 import { DataTable, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { listChargebacks, listPendingWithdrawals, listRecoveries } from "@/server/modules/withdrawals";
-import { payWithdrawalAction, rejectWithdrawalAction, executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction, settleRecoveryAction, waiveRecoveryAction } from "../actions";
+import { payWithdrawalAction, rejectWithdrawalAction, executePayoutAction, releaseWithoutReviewAction, manualAdjustmentAction, payoutHoldAction, resyncChargeAction, settleRecoveryAction, waiveRecoveryAction, runReconciliationAction, resolveIncidentAction, replayCommandAction } from "../actions";
 
 export const metadata = { title: "Finanzas" };
 
@@ -51,6 +52,7 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const actor = (await requireSection("finanzas")).actor;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? "retiros") as TabKey;
+  const canManageFinance = can(actor, "finanzas", "manage");
   // Con qué cuenta y en qué modo se está cobrando (solo lo ve el dueño).
   const gateway = isPlatformAdmin(actor) && env().PAYMENTS_GATEWAY === "mercadopago" ? await mpAccountStatus() : null;
 
@@ -83,7 +85,7 @@ export default async function FinanceAdmin({ searchParams }: { searchParams: Pro
       {tab === "reembolsos" && <Refunds userId={actor.id} />}
       {tab === "recuperos" && <Recoveries all={sp.estado === "todos"} canWaive={isPlatformAdmin(actor)} />}
       {tab === "contracargos" && <Chargebacks />}
-      {tab === "conciliacion" && <Reconciliation />}
+      {tab === "conciliacion" && <Reconciliation canManage={canManageFinance} />}
       {tab === "registro" && <Ledger userId={actor.id} canAdjust={isPlatformAdmin(actor)} />}
     </>
   );
@@ -355,41 +357,82 @@ async function Chargebacks() {
   );
 }
 
-async function Reconciliation() {
-  // La pasarela simulada vive en tablas de sistema: se lee con la conexión del servidor (página ya restringida a operación).
-  const rows = await reconcile(sql());
+const INCIDENT_LABEL: Record<string, string> = {
+  amount_mismatch: "Monto o moneda distintos",
+  missing_in_gateway: "Cobro aprobado que la pasarela no confirma",
+  refund_not_in_gateway: "Reembolso registrado que la pasarela no tiene",
+  command_dead: "Operación con la pasarela sin procesar",
+  command_stuck: "Operación con la pasarela demorada",
+};
+const COMMAND_LABEL: Record<string, string> = { create_checkout: "Crear link de pago", refund: "Reembolso", orphan_refund: "Devolución de pago duplicado", transfer: "Transferencia" };
+
+async function Reconciliation({ canManage }: { canManage: boolean }) {
+  // Tablas de sistema (cola de la pasarela e incidencias): conexión del servidor, página ya restringida a operación.
+  const h = await paymentHealth(sql());
+  const dead = h.commands.dead ?? 0;
+  const queued = (h.commands.pending ?? 0) + (h.commands.retryable ?? 0) + (h.commands.leased ?? 0);
   return (
     <>
-      <p className="mb-4 text-[15px] text-ink-2">Compara cada cobro (últimos 500) con el estado informado por la pasarela. Si hay diferencias, «Re-sincronizar» consulta la pasarela y aplica el estado con la misma lógica que los webhooks.</p>
-      {rows.length === 0 ? <EmptyState title="Sin diferencias" description="Todos los cobros coinciden con la pasarela." /> : (
-        <DataTable caption="Diferencias de conciliación" minWidth={860}>
-          <thead><tr><Th>Trabajo</Th><Th>Referencia</Th><Th>Diferencia</Th><Th>Interno</Th><Th>Pasarela</Th><Th>Acción</Th></tr></thead>
+      <p className="mb-4 text-[15px] text-ink-2">
+        Cada 10 minutos se compara una tanda de cobros con la pasarela. Lo que se puede reparar (un aviso perdido, una devolución o
+        un contracargo hecho allá, un pago duplicado) se aplica solo, con la misma lógica que los webhooks. Lo demás queda abajo como
+        incidencia. Guía de cada caso: <span className="font-semibold">docs/payments-runbooks.md</span>.
+      </p>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <HealthTile label="Cobros pendientes +1 h" value={h.pending.h1} warn={h.pending.h1 > 0} hint={`${h.pending.m15} de más de 15 min · ${h.pending.d1} de más de 1 día`} />
+        <HealthTile label="Operaciones en cola" value={queued} warn={queued > 0} hint={dead ? `${dead} sin procesar` : "Ninguna sin procesar"} danger={dead > 0} />
+        <HealthTile label="Reembolsos" value={h.refunds.pending} warn={h.refunds.pending > 0} hint={`${h.refunds.failed} fallidos en total`} danger={h.refunds.failed > 0} />
+        <HealthTile label="Sin conciliar +2 días" value={h.unreconciled.n} warn={h.unreconciled.n > 0} hint={`${formatMoney(h.unreconciled.amount)} · retenidas: ${h.holds.n} (${formatMoney(h.holds.amount)})`} />
+      </div>
+      {canManage && (
+        <div className="mb-4">
+          <ConfirmAction action={runReconciliationAction} label="Conciliar ahora" size="sm" variant="secondary" title="Conciliar ahora"
+            description="Consulta la pasarela por los próximos 100 cobros y aplica lo que se repara solo. Queda auditado." confirmLabel="Conciliar" />
+        </div>
+      )}
+      {h.incidents.length === 0 ? <EmptyState title="Sin incidencias" description="No hay diferencias abiertas entre Fixy y la pasarela." /> : (
+        <DataTable caption="Incidencias abiertas" minWidth={900}>
+          <thead><tr><Th>Severidad</Th><Th>Qué pasó</Th><Th>Trabajo</Th><Th>Detalle</Th><Th>Desde</Th>{canManage && <Th>Acción</Th>}</tr></thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.chargeId}>
-                <Td className="font-semibold">{r.jobCode}</Td>
-                <Td className="text-xs text-muted">{r.externalReference}</Td>
-                <Td><Badge tone="warn">{r.issue}</Badge></Td>
-                <Td className="text-sm">{chargeStatusLabel[r.internalStatus] ?? r.internalStatus}<div className="tabular">{formatMoney(r.internalAmount)}</div></Td>
-                <Td className="text-sm">{r.gatewayStatus ?? "—"}<div className="tabular">{formatMoney(r.gatewayAmount)}</div></Td>
-                <Td>
-                  <ConfirmAction
-                    action={resyncChargeAction}
-                    label="Re-sincronizar"
-                    size="sm"
-                    variant="secondary"
-                    title="Re-sincronizar cobro"
-                    description="Consulta la pasarela y, si corresponde, actualiza el cobro y el registro financiero. Queda auditado."
-                    confirmLabel="Re-sincronizar"
-                    hidden={{ chargeId: r.chargeId }}
-                  />
-                </Td>
+            {h.incidents.map((i) => (
+              <tr key={i.id}>
+                <Td><Badge tone={i.severity === "critical" ? "danger" : i.severity === "warning" ? "warn" : "info"}>{i.severity === "critical" ? "Crítica" : i.severity === "warning" ? "Atención" : "Info"}</Badge></Td>
+                <Td className="font-semibold">{INCIDENT_LABEL[i.kind] ?? i.kind}{i.command_kind && <div className="text-xs font-normal text-muted">{COMMAND_LABEL[i.command_kind] ?? i.command_kind}</div>}</Td>
+                <Td>{i.job_code ?? "—"}</Td>
+                <Td className="max-w-80 text-xs text-muted break-all">{JSON.stringify(i.detail)}</Td>
+                <Td className="text-sm">{formatDateTime(i.detected_at)}</Td>
+                {canManage && (
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
+                      {i.charge_id && (
+                        <ConfirmAction action={resyncChargeAction} label="Re-sincronizar" size="sm" variant="secondary" title="Re-sincronizar cobro"
+                          description="Consulta la pasarela y, si corresponde, actualiza el cobro y el registro financiero. Queda auditado." confirmLabel="Re-sincronizar" hidden={{ chargeId: i.charge_id }} />
+                      )}
+                      {i.command_id && i.command_status === "dead" && (i.command_kind === "refund" || i.command_kind === "orphan_refund") && (
+                        <ConfirmAction action={replayCommandAction} label="Reintentar" size="sm" variant="secondary" title="Reintentar el reembolso"
+                          description="Se vuelve a pedir a la pasarela con la misma clave: si ya lo había hecho, no se duplica." confirmLabel="Reintentar" hidden={{ commandId: i.command_id }} />
+                      )}
+                      <ConfirmAction action={resolveIncidentAction} label="Marcar resuelta" size="sm" variant="ghost" title="Marcar incidencia como resuelta"
+                        description="Contá qué se verificó o se hizo (queda en la auditoría)." confirmLabel="Resolver" requireReason reasonLabel="Qué se hizo" hidden={{ incidentId: i.id }} />
+                    </div>
+                  </Td>
+                )}
               </tr>
             ))}
           </tbody>
         </DataTable>
       )}
     </>
+  );
+}
+
+function HealthTile({ label, value, hint, warn, danger }: { label: string; value: number; hint: string; warn?: boolean; danger?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <p className="text-sm text-muted">{label}</p>
+      <p className={`mt-1 text-2xl tabular ${danger ? "text-danger" : warn ? "text-warn" : "text-ink"}`}>{value}</p>
+      <p className="mt-1 text-xs text-muted">{hint}</p>
+    </div>
   );
 }
 

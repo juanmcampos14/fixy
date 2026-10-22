@@ -13,7 +13,7 @@ import { clientRecipients, notify, providerRecipients } from "@/server/notificat
 import { commissionRuleFor } from "./catalog";
 import { assertProviderAdmin, check } from "./authz";
 import { providerEligibility } from "./providers";
-import { createCharge } from "./payments";
+import { createCharge, payLink } from "./payments";
 import { formatMoney } from "@/lib/format";
 
 /** "jueves 15/10" para avisos por WhatsApp. */
@@ -271,8 +271,8 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
 
     if (q.status === "accepted") {
       const [existing] = await tx<{ id: string }[]>`select id from jobs where quote_id = ${quoteId}`;
-      const [charge] = await tx<{ checkout_url: string | null; status: string }[]>`select checkout_url, status from charges where job_id = ${existing.id} order by created_at desc limit 1`;
-      return { jobId: existing.id, checkoutUrl: charge?.status === "pending" ? charge.checkout_url : null, alreadyAccepted: true };
+      const [charge] = await tx<{ id: string; status: string }[]>`select id, status from charges where job_id = ${existing.id} order by created_at desc limit 1`;
+      return { jobId: existing.id, checkoutUrl: charge?.status === "pending" ? payLink(charge.id) : null, alreadyAccepted: true };
     }
     if (req.status === "converted") throw conflict("Esta solicitud ya fue contratada con otro presupuesto.");
     if (q.status !== "sent") throw invalid(q.status === "expired" ? "Este presupuesto está vencido." : "Este presupuesto ya no está disponible.");
@@ -361,7 +361,7 @@ async function acceptQuoteTx(actor: Actor, quoteId: string, confirmation: { tota
       await tx`update jobs set status = 'confirmed', confirmed_at = now() where id = ${job.id}`;
       await recordEvent(tx, { entityType: "job", entityId: job.id, action: "status", from: "pending_confirmation", to: "confirmed", actorRole: "system", reason: "Visita sin cargo confirmada por ambas partes" });
     }
-    return { jobId: job.id, checkoutUrl: charge?.checkout_url ?? null, alreadyAccepted: false };
+    return { jobId: job.id, checkoutUrl: charge ? payLink(charge.id) : null, alreadyAccepted: false };
   });
 }
 

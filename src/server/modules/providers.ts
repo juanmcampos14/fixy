@@ -8,7 +8,7 @@ import { normalizeSocialLinks, type SocialKey } from "@/lib/social";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Db, Tx } from "@/server/db/client";
-import { systemTx } from "@/server/db/client";
+import { sql, systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
 import { can } from "@/server/auth/permissions";
 import { audit, recordEvent } from "@/server/audit";
@@ -199,11 +199,14 @@ export async function uploadProviderDocument(
 
 /** Paso 8: configuración de cobros mediante el proceso de la pasarela (simulado en modo de prueba). */
 export async function setupPayouts(actor: Actor, providerId: string) {
-  return systemTx(async (tx) => {
+  await systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
     await assertContactVerified(tx, actor.id, "configurar tus cobros");
-    const gw = activeGateway();
-    const { accountRef, onboardingUrl } = await gw.createPayoutAccount(tx, providerId);
+  });
+  // Alta en la pasarela fuera de la transacción (idempotente por profesional: reintentar devuelve la misma cuenta).
+  const gw = activeGateway();
+  const { accountRef, onboardingUrl } = await gw.createPayoutAccount(sql(), providerId);
+  return systemTx(async (tx) => {
     await tx`update providers set payout_account_ref = ${accountRef}, payout_provider = ${gw.name},
       payouts_status = ${onboardingUrl ? "pending" : "enabled"} where id = ${providerId}`;
     await audit(tx, actor, "provider.payouts_setup", "provider", providerId, null, { gateway: gw.name, test: gw.isTest });

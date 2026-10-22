@@ -114,7 +114,7 @@ export const resolutionSchema = z.object({
 export async function resolveDispute(actor: Actor, disputeId: string, input: z.infer<typeof resolutionSchema>) {
   if (!can(actor, "reclamos", "manage")) throw forbidden();
   const d = resolutionSchema.parse(input);
-  return systemTx(async (tx) => {
+  await systemTx(async (tx) => {
     const [disp] = await tx<{ status: DisputeStatus; job_id: string }[]>`select status, job_id from disputes where id = ${disputeId} for update`;
     if (!disp) throw notFound();
     assertTransition(disputeMachine, disp.status, "resolved", "staff");
@@ -156,6 +156,9 @@ export async function resolveDispute(actor: Actor, disputeId: string, input: z.i
       link: `/app/trabajos/${job.id}`,
     });
   });
+  // Los reembolsos decididos se piden a la pasarela después del commit.
+  const { drainPaymentCommands } = await import("./payments");
+  await drainPaymentCommands();
 }
 
 // ───────────────────────── Reseñas ─────────────────────────

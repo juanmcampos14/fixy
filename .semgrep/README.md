@@ -30,8 +30,8 @@ Una regla **WARNING** es deuda conocida de la auditoría del 13/10/2026: la list
 | `fixy-sql-unsafe` | ERROR | Nada de `.unsafe(...)`: SQL siempre parametrizado. |
 | `fixy-contrasena-demo-fuera-del-seed` | ERROR | La contraseña demo publicada no se usa fuera de `src/server/seed`. |
 | `fixy-estado-de-trabajo-fuera-de-movejob` | WARNING | El estado de un trabajo cambia por `moveJob` (assert, timestamp, evento, efectos). |
-| `fixy-pasarela-dentro-de-transaccion` | WARNING | La pasarela no se llama con la transacción abierta (con Mercado Pago real es HTTP). |
-| `fixy-tabla-del-mock-fuera-del-mock` | WARNING | El dominio no lee `mock_gateway_payments`: habla con `PaymentGateway`. |
+| `fixy-pasarela-dentro-de-transaccion` | ERROR | La pasarela no se llama con la transacción abierta (con Mercado Pago real es HTTP). |
+| `fixy-tabla-del-mock-fuera-del-mock` | ERROR | El dominio no lee `mock_gateway_payments`: habla con `PaymentGateway`. |
 
 Para silenciar un caso puntual y justificado: comentario `// nosemgrep: <id-de-la-regla> — motivo` en la línea.
 

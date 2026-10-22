@@ -5,9 +5,10 @@ import * as requests from "@/server/modules/requests";
 import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as providers from "@/server/modules/providers";
-import { processPaymentWebhook, refundCharge, reconcile } from "@/server/modules/payments";
-import { buildMockWebhook, mockCompleteCheckout } from "@/server/payments/mock";
-import { actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf, ledgerBalance } from "./helpers";
+import { processPaymentWebhook, refundCharge } from "@/server/modules/payments";
+import { resyncCharge } from "@/server/modules/payment-reconciliation";
+import { buildMockWebhook } from "@/server/payments/mock";
+import { completeCheckout, actor, catId, invitationFor, payPending, propertyOf, providerId, simpleQuote, totalOf, ledgerBalance } from "./helpers";
 
 let ana: Actor, bruno: Actor, lucia: Actor, roberto: Actor, martin: Actor, operador: Actor, admin: Actor, jorge: Actor, carla: Actor, diego: Actor;
 let luciaPid: string, sinPid: string, anaCasa: string;
@@ -140,7 +141,7 @@ describe("pagos", () => {
 
     // Firma inválida: no cambia nada
     const [c0] = await sql()<{ external_reference: string }[]>`select external_reference from charges where job_id = ${jobId}`;
-    const paymentId = await systemTx((tx) => mockCompleteCheckout(tx, c0.external_reference, "approved"));
+    const paymentId = await completeCheckout(c0.external_reference, "approved");
     const forged = buildMockWebhook(paymentId);
     forged.headers.set("x-mock-signature", "0".repeat(64));
     expect(await processPaymentWebhook("mock", forged.rawBody, forged.headers)).toBe("rejected");
@@ -169,13 +170,16 @@ describe("pagos", () => {
     const q = await simpleQuote(lucia, await invitationFor(reqId, luciaPid));
     const { jobId } = await quotes.acceptQuote(ana, q, { totalMinor: await totalOf(q), acceptedTerms: true });
     const [c] = await sql()<{ external_reference: string }[]>`select external_reference from charges where job_id = ${jobId}`;
-    const pidPay = await systemTx((tx) => mockCompleteCheckout(tx, c.external_reference, "approved"));
+    const pidPay = await completeCheckout(c.external_reference, "approved");
     await sql()`update mock_gateway_payments set amount_minor = amount_minor - 1 where id = ${pidPay}`;
     const h = buildMockWebhook(pidPay);
     expect(await processPaymentWebhook("mock", h.rawBody, h.headers)).toBe("rejected");
     expect((await sql()<{ status: string }[]>`select status from charges where job_id = ${jobId}`)[0].status).toBe("pending");
-    const diffs = await reconcile(sql());
-    expect(diffs.some((d) => d.externalReference === c.external_reference && d.issue === "Monto distinto")).toBe(true);
+    // La conciliación consulta la pasarela por la referencia y abre una incidencia crítica.
+    const [ch] = await sql()<{ id: string }[]>`select id from charges where external_reference = ${c.external_reference}`;
+    await resyncCharge(admin, ch.id);
+    const inc = await sql()<{ kind: string; severity: string }[]>`select kind, severity from payment_incidents where charge_id = ${ch.id} and status = 'open'`;
+    expect(inc).toContainEqual({ kind: "amount_mismatch", severity: "critical" });
   });
 
   it("los reembolsos se vinculan al cobro original, no superan lo cobrado y mantienen el registro balanceado", async () => {
