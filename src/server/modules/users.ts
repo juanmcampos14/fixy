@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { audit } from "@/server/audit";
 import { sql, systemTx } from "@/server/db/client";
-import { hashPassword, verifyPassword } from "@/server/auth/password";
+import { hashPassword, needsRehash, verifyPassword } from "@/server/auth/password";
 import { DomainError, conflict, notFound } from "@/server/domain/errors";
 import type { Actor } from "@/server/auth/actor";
 import { sendEmailVerificationTx } from "./email-verification";
@@ -50,6 +50,10 @@ export async function authenticate(email: string, password: string): Promise<str
     throw new DomainError("unauthenticated", "Esta cuenta ingresa con Google. Usá «Continuar con Google» (o creá una contraseña desde «Olvidé mi contraseña»).");
   }
   if (u.disabled_at || !(await verifyPassword(password, u.password_hash))) throw fail;
+  // Contraseña guardada con parámetros viejos: se vuelve a cifrar con los actuales (solo si nadie la cambió en el medio).
+  if (needsRehash(u.password_hash)) {
+    await sql()`update users set password_hash = ${await hashPassword(password)} where id = ${u.id} and password_hash = ${u.password_hash}`;
+  }
   return u.id;
 }
 

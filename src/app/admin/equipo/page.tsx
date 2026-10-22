@@ -10,7 +10,7 @@ import { EditAccessForm, InviteForm } from "@/components/admin/access-form";
 import { formatDateTime } from "@/lib/format";
 import { ReviewAccounts } from "@/components/admin/review-accounts";
 import { sql } from "@/server/db/client";
-import { generateReviewAccountsAction, inviteMemberAction, removeMemberAction, revokeInvitationAction, updateMemberAccessAction } from "../actions";
+import { generateReviewAccountsAction, inviteMemberAction, removeMemberAction, resetMemberMfaAction, revokeInvitationAction, updateMemberAccessAction } from "../actions";
 
 export const metadata = { title: "Equipo y permisos" };
 export const dynamic = "force-dynamic";
@@ -69,7 +69,10 @@ export default async function TeamPage() {
                       <p className="font-semibold">{m.full_name}{m.id === actor.id && <span className="text-muted"> (vos)</span>}</p>
                       <p className="text-sm text-muted">{m.email}</p>
                     </div>
-                    <Badge tone={m.platform_role === "admin" ? "brand" : "neutral"} icon={false}>{label}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={m.mfa ? "ok" : "warn"}>{m.mfa ? "Segundo factor" : "Sin segundo factor"}</Badge>
+                      <Badge tone={m.platform_role === "admin" ? "brand" : "neutral"} icon={false}>{label}</Badge>
+                    </div>
                   </div>
                   {summary && <p className="mt-1 text-sm text-ink-2">{summary}</p>}
                   {m.platform_role !== "admin" && (
@@ -77,6 +80,11 @@ export default async function TeamPage() {
                       <summary className="cursor-pointer text-sm font-semibold text-fixy-800">Cambiar permisos o quitar acceso</summary>
                       <div className="mt-3 space-y-4">
                         <EditAccessForm action={updateMemberAccessAction} sections={sections} userId={m.id} initialProfile={profile} initial={m.permissions} />
+                        {m.mfa && isPlatformAdmin(actor) && (
+                          <ConfirmAction action={resetMemberMfaAction} label="Reiniciar segundo factor" variant="secondary" size="sm" title={`¿Reiniciar el segundo factor de ${m.full_name}?`}
+                            description="Usalo solo si perdió el celular y los códigos de respaldo. Se cierran sus sesiones y al volver a entrar lo activa de nuevo. Confirmá su identidad por otro medio antes."
+                            hidden={{ userId: m.id }} confirmLabel="Reiniciar" requireReason reasonLabel="Motivo y cómo verificaste que es la persona" />
+                        )}
                         <ConfirmAction action={removeMemberAction} label="Quitar acceso al panel" variant="danger" size="sm" title={`¿Quitarle el acceso a ${m.full_name}?`}
                           description="Deja de ver el panel de administración. Su cuenta de Fixy sigue funcionando." hidden={{ userId: m.id }} confirmLabel="Quitar acceso" />
                       </div>

@@ -125,8 +125,10 @@ export async function revokeInvitation(actor: Actor, invitationId: string) {
 }
 
 export async function listTeam() {
-  const members = await sql()<{ id: string; full_name: string; email: string; platform_role: "admin" | "operator" | "team"; created_at: Date }[]>`
-    select id, full_name, email, platform_role, created_at from users where platform_role is not null and disabled_at is null
+  const members = await sql()<{ id: string; full_name: string; email: string; platform_role: "admin" | "operator" | "team"; created_at: Date; mfa: boolean }[]>`
+    select id, full_name, email, platform_role, created_at,
+      exists (select 1 from user_mfa m where m.user_id = users.id and m.enabled_at is not null) as mfa
+    from users where platform_role is not null and disabled_at is null
     order by case platform_role when 'admin' then 0 when 'operator' then 1 else 2 end, full_name`;
   const perms = members.length
     ? await sql()<{ user_id: string; section: string; level: "view" | "manage" }[]>`select user_id, section, level from admin_permissions where user_id in ${sql()(members.map((m) => m.id))}`

@@ -50,6 +50,9 @@ const schema = z.object({
   APNS_KEY: z.string().optional().default(""),
   APNS_KEY_ID: z.string().optional().default(""),
   APNS_TEAM_ID: z.string().optional().default(""),
+  // Clave para cifrar los secretos del segundo factor del equipo (32+ caracteres aleatorios). Sin ella, en producción
+  // el segundo factor no se puede activar y el panel lo avisa.
+  MFA_ENCRYPTION_KEY: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -74,6 +77,11 @@ export function env(): Env {
         console.error(`[env] ${key} tiene un valor de ejemplo en producción: se ignora. Cargá una clave propia.`);
         cached[key] = randomBytes(32).toString("hex");
       }
+    }
+    // Esta clave no se puede reemplazar por una aleatoria (dejaría ilegibles los secretos guardados): se ignora.
+    if (cached.MFA_ENCRYPTION_KEY && (cached.MFA_ENCRYPTION_KEY.length < 32 || isPlaceholderSecret(cached.MFA_ENCRYPTION_KEY))) {
+      console.error("[env] MFA_ENCRYPTION_KEY es corta o de ejemplo: el segundo factor queda deshabilitado hasta cargar una clave propia.");
+      cached.MFA_ENCRYPTION_KEY = "";
     }
   }
   return cached;

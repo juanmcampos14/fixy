@@ -1,11 +1,34 @@
 /**
  * Ingreso con Google (OpenID Connect, flujo "authorization code" con PKCE).
  * - state + nonce + code_verifier viajan en una cookie httpOnly de corta vida y se comparan a la vuelta.
- * - El id_token se recibe directo del endpoint de tokens de Google por TLS (servidor a servidor), por eso alcanza con
- *   validar emisor, audiencia, vencimiento y nonce (OIDC Core §3.1.3.7). Nunca se usa un token que venga del navegador.
+ * - El id_token llega directo del endpoint de tokens de Google (servidor a servidor) y además se valida con `jose`
+ *   (auditoría A-02): firma contra las claves públicas de Google (JWKS), algoritmo RS256, emisor, audiencia, azp,
+ *   vencimiento, fecha de emisión, nonce y sujeto. La cuenta se identifica por `sub`, no por el email.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { env } from "@/server/env";
+
+const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
+let googleKeys: JWTVerifyGetKey | null = null;
+const googleJwks = () => (googleKeys ??= createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"), { timeoutDuration: 5000, cooldownDuration: 30_000 }));
+
+/** Valida un id_token de Google. `keys` permite inyectar claves en pruebas. */
+export async function verifyGoogleIdToken(idToken: string, opts: { clientId: string; nonce: string; keys?: JWTVerifyGetKey }): Promise<GoogleIdentity> {
+  const { payload } = await jwtVerify(idToken, opts.keys ?? googleJwks(), {
+    issuer: GOOGLE_ISSUERS,
+    audience: opts.clientId,
+    algorithms: ["RS256"],
+    requiredClaims: ["iat", "exp", "sub"],
+    maxTokenAge: "10m",
+    clockTolerance: 60,
+  });
+  const p = payload as { azp?: string; nonce?: string; sub?: string; email?: string; email_verified?: boolean | string; name?: string };
+  if (p.azp && p.azp !== opts.clientId) throw new Error("Cliente autorizado inválido");
+  if (!p.nonce || p.nonce !== opts.nonce) throw new Error("Nonce inválido");
+  if (!p.sub || !/^[\w-]{1,255}$/.test(p.sub) || !p.email) throw new Error("Identidad incompleta");
+  return { sub: p.sub, email: p.email, emailVerified: p.email_verified === true || p.email_verified === "true", name: p.name ?? "" };
+}
 
 export const GOOGLE_COOKIE = "fixy_google";
 const b64url = (b: Buffer) => b.toString("base64url");
@@ -39,14 +62,5 @@ export async function finishGoogleLogin(code: string, saved: { nonce: string; ve
   if (!res.ok) throw new Error(`Google respondió ${res.status}`);
   const { id_token } = (await res.json()) as { id_token?: string };
   if (!id_token) throw new Error("Google no devolvió la identidad");
-  const payload = JSON.parse(Buffer.from(id_token.split(".")[1] ?? "", "base64url").toString("utf8")) as {
-    iss?: string; aud?: string; exp?: number; nonce?: string; sub?: string; email?: string; email_verified?: boolean | string; name?: string;
-  };
-  const now = Math.floor(Date.now() / 1000);
-  if (!["https://accounts.google.com", "accounts.google.com"].includes(payload.iss ?? "")) throw new Error("Emisor inválido");
-  if (payload.aud !== e.GOOGLE_CLIENT_ID) throw new Error("Audiencia inválida");
-  if (!payload.exp || payload.exp < now) throw new Error("Identidad vencida");
-  if (payload.nonce !== saved.nonce) throw new Error("Nonce inválido");
-  if (!payload.sub || !payload.email) throw new Error("Identidad incompleta");
-  return { sub: payload.sub, email: payload.email, emailVerified: payload.email_verified === true || payload.email_verified === "true", name: payload.name ?? "" };
+  return verifyGoogleIdToken(id_token, { clientId: e.GOOGLE_CLIENT_ID, nonce: saved.nonce });
 }

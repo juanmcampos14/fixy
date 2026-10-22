@@ -6,9 +6,10 @@ import { revalidatePath } from "next/cache";
 import { env } from "@/server/env";
 import { act, bool, files, str, strs } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
-import { requireSection, requireStaff } from "@/server/auth/session";
+import { requireRecentMfa, requireSection, requireStaff } from "@/server/auth/session";
 import { ADMIN_SECTIONS } from "@/server/auth/permissions";
 import * as team from "@/server/modules/team";
+import { resetMemberMfa } from "@/server/modules/mfa";
 import type { Access } from "@/server/modules/team";
 import { invalid } from "@/server/domain/errors";
 import { parseArsToMinor } from "@/server/domain/money";
@@ -130,6 +131,7 @@ export async function moveJobAction(_: ActionState, f: FormData): Promise<Action
 export async function cancelJobAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("trabajos", "manage")).actor;
+    await requireRecentMfa(actor);
     await cancelJob(actor, str(f, "jobId"), str(f, "reason"), { refundAll: bool(f, "refundAll"), asStaff: true });
     refresh();
     return { ok: true, message: "Trabajo cancelado." };
@@ -139,6 +141,7 @@ export async function cancelJobAction(_: ActionState, f: FormData): Promise<Acti
 export async function refundChargeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     // Una clave por formulario: un doble clic no genera dos reembolsos.
     const key = str(f, "refundKey");
     const amountMinor = money(f, "amount", "el importe del reembolso");
@@ -175,6 +178,7 @@ export async function moveDisputeAction(_: ActionState, f: FormData): Promise<Ac
 export async function resolveDisputeAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("reclamos", "manage")).actor;
+    await requireRecentMfa(actor);
     const resolution = str(f, "resolution");
     const refundMinor = resolution === "partial_refund" ? money(f, "refund", "el importe a reembolsar") : 0;
     await resolveDispute(actor, str(f, "disputeId"), {
@@ -193,6 +197,7 @@ export async function resolveDisputeAction(_: ActionState, f: FormData): Promise
 export async function executePayoutAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     const r = await executePayout(actor, str(f, "payoutId"), str(f, "reason"));
     refresh();
     return r.status === "paid"
@@ -245,6 +250,7 @@ export async function resolveIncidentAction(_: ActionState, f: FormData): Promis
 export async function replayCommandAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     await replayCommand(actor, str(f, "commandId"));
     refresh();
     return { ok: true, message: "Reintento enviado a la pasarela con la misma clave." };
@@ -254,6 +260,7 @@ export async function replayCommandAction(_: ActionState, f: FormData): Promise<
 export async function manualAdjustmentAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     const [job] = await sql()<{ id: string; provider_id: string }[]>`select id, provider_id from jobs where id = ${str(f, "jobId")}`;
     if (!job) throw invalid("Elegí un trabajo.");
     const amount = money(f, "amount");
@@ -391,6 +398,7 @@ function pct(f: FormData, key: string, label: string): number {
 export async function replaceCommissionAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("comisiones", "manage")).actor;
+    await requireRecentMfa(actor);
     const scope = str(f, "categoryId");
     await admin.replaceCommissionRule(
       actor,
@@ -428,6 +436,7 @@ export async function updateSettingsAction(_: ActionState, f: FormData): Promise
 export async function releaseWithoutReviewAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     await releasePayoutWithoutReview(actor, str(f, "payoutId"), str(f, "reason"));
     revalidatePath("/admin/finanzas");
     return { ok: true, message: "Liquidación habilitada sin reseña (auditado)." };
@@ -464,6 +473,7 @@ export async function reviewDisputeResolveAction(_: ActionState, f: FormData): P
 export async function payWithdrawalAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     await markWithdrawalPaid(actor, str(f, "withdrawalId"), str(f, "reason"), { allowEarly: str(f, "early") === "1" });
     refresh();
     return { ok: true, message: "Retiro registrado como transferido." };
@@ -482,6 +492,7 @@ export async function rejectWithdrawalAction(_: ActionState, f: FormData): Promi
 export async function settleRecoveryAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     await settleRecoveryManually(actor, str(f, "recoveryId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Recupero saldado." };
@@ -491,6 +502,7 @@ export async function settleRecoveryAction(_: ActionState, f: FormData): Promise
 export async function waiveRecoveryAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = (await requireSection("finanzas", "manage")).actor;
+    await requireRecentMfa(actor);
     await waiveRecovery(actor, str(f, "recoveryId"), str(f, "reason"));
     refresh();
     return { ok: true, message: "Recupero condonado: Fixy absorbe el importe." };
@@ -529,6 +541,7 @@ function accessInput(f: FormData): Access {
 export async function inviteMemberAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
     const actor = await requireStaff();
+    await requireRecentMfa(actor);
     const r = await team.inviteMember(actor, { email: str(f, "email"), access: accessInput(f) });
     revalidatePath("/admin/equipo");
     return { ok: true, message: "Invitación creada. Copiá el link y mandáselo: vence en 7 días.", data: { link: `${env().APP_URL.replace(/\/$/, "")}${r.link}` } };
@@ -537,7 +550,9 @@ export async function inviteMemberAction(_: ActionState, f: FormData): Promise<A
 
 export async function updateMemberAccessAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    await team.updateMemberAccess(await requireStaff(), str(f, "userId"), accessInput(f));
+    const actor = await requireStaff();
+    await requireRecentMfa(actor);
+    await team.updateMemberAccess(actor, str(f, "userId"), accessInput(f));
     revalidatePath("/admin/equipo");
     return { ok: true, message: "Permisos actualizados." };
   });
@@ -545,7 +560,9 @@ export async function updateMemberAccessAction(_: ActionState, f: FormData): Pro
 
 export async function removeMemberAction(_: ActionState, f: FormData): Promise<ActionState> {
   return act(async () => {
-    await team.removeMember(await requireStaff(), str(f, "userId"));
+    const actor = await requireStaff();
+    await requireRecentMfa(actor);
+    await team.removeMember(actor, str(f, "userId"));
     revalidatePath("/admin/equipo");
     return { ok: true, message: "Acceso quitado." };
   });
@@ -565,5 +582,15 @@ export async function generateReviewAccountsAction(_: ActionState, _f: FormData)
     const { ensureReviewAccounts } = await import("@/server/modules/review-accounts");
     const r = await ensureReviewAccounts(await requireStaff());
     return { ok: true, message: "Cuentas listas. Copiá la contraseña ahora: no se vuelve a mostrar.", data: r };
+  });
+}
+
+export async function resetMemberMfaAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireStaff();
+    await requireRecentMfa(actor);
+    await resetMemberMfa(actor, str(f, "userId"), str(f, "reason"));
+    revalidatePath("/admin/equipo");
+    return { ok: true, message: "Segundo factor reiniciado. Al volver a entrar lo tiene que activar de nuevo." };
   });
 }

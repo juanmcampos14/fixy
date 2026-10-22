@@ -42,12 +42,12 @@ describe("avisos de oportunidades por WhatsApp para profesionales", () => {
       await handleInbound(msg(other, `Mi código: ${code}`));
       expect((await alertsState(roberto.id)).phoneTail).toBe(phone.slice(-4));
 
-      // El emparejamiento invita a los mejor ubicados y rota: con otras pruebas corriendo a la vez, puede no tocarle en el primer pedido.
-      let t1 = new Date();
-      let reqId = await newReq("Pedido con avisos");
-      for (let i = 0; i < 6 && !(await sql()`select 1 from request_invitations where request_id = ${reqId} and provider_id = ${pid}`).length; i++) {
-        t1 = new Date();
-        reqId = await newReq("Pedido con avisos");
+      // El emparejamiento rota entre profesionales (y depende de lo que dejaron otras pruebas): si no lo invitó,
+      // lo invita operación a mano. El aviso por WhatsApp es el mismo en los dos casos.
+      const t1 = new Date();
+      const reqId = await newReq("Pedido con avisos");
+      if (!(await sql()`select 1 from request_invitations where request_id = ${reqId} and provider_id = ${pid}`).length) {
+        await requests.operatorInvite(await actor("operador"), reqId, pid, "Prueba de avisos por WhatsApp");
       }
       const sent = await waOutboxFor(roberto.id, t1);
       expect(sent).toHaveLength(1);

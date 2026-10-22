@@ -241,3 +241,21 @@ rules:
         - "tests/**"
         - "db/**"
     pattern-regex: '\bmock_gateway_payments\b'
+
+  # ── 12. (deuda) Página leyendo la base con la conexión propietaria ───────────
+  # Auditoría M-01: sql() saltea RLS; si una página olvida filtrar, la base no la frena. Las lecturas de usuario van
+  # por asUser() (o por las consultas de src/server/queries). Las existentes son deuda conocida: no sumes nuevas.
+  - id: fixy-lectura-privilegiada-en-pagina
+    languages: [typescript]
+    severity: WARNING
+    message: >
+      Página o layout leyendo con sql() (conexión propietaria, sin RLS). Usá asUser(actor.id, …) o una consulta de
+      src/server/queries; si de verdad necesita la conexión del servidor, explicá por qué en un comentario.
+    metadata:
+      category: security
+      confidence: MEDIUM
+    paths:
+      include:
+        - "src/app/**/page.tsx"
+        - "src/app/**/layout.tsx"
+    pattern-regex: '\bsql\(\)\s*(<[^`]*>)?\s*`'

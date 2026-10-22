@@ -1,4 +1,6 @@
 import { requireStaff } from "@/server/auth/session";
+import { mfaAvailable } from "@/server/auth/mfa";
+import { Alert } from "@/components/ui/alert";
 import { isPlatformAdmin } from "@/server/auth/actor";
 import { ADMIN_SECTIONS, levelFor, type AdminSection } from "@/server/auth/permissions";
 import { navCounts } from "@/server/queries/admin";
@@ -26,6 +28,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (isPlatformAdmin(actor)) nav.push({ href: "/admin/equipo", label: "Equipo y permisos", icon: "users" });
   return (
     <PanelShell actor={actor} area="admin" nav={nav}>
+      {!mfaAvailable() && isPlatformAdmin(actor) && (
+        <Alert tone="warn" className="mb-4" title="Falta activar el segundo factor del equipo">
+          Cargá MFA_ENCRYPTION_KEY en Vercel (una clave aleatoria larga) y volvé a desplegar: desde ahí el panel pide código al entrar.
+        </Alert>
+      )}
       {children}
     </PanelShell>
   );
