@@ -136,7 +136,7 @@ export async function processOutbox(limit = 20, adapter: EmailAdapter = emailAda
   await sql().begin(async (tx) => {
     const rows = await tx<{ id: string; payload: { subject: string; text: string; link: string | null }; attempts: number; email: string }[]>`
       select o.id, o.payload, o.attempts, u.email from outbox o join users u on u.id = o.recipient_user_id
-      where o.channel = 'email' and not u.sandbox and not u.email_placeholder and u.email_verified and o.status in ('pending','failed') and o.next_attempt_at <= now()
+      where o.channel = 'email' and not u.sandbox and not u.email_placeholder and (u.email_verified or o.payload->>'kind' = 'verify_email') and o.status in ('pending','failed') and o.next_attempt_at <= now()
       order by o.created_at limit ${limit} for update of o skip locked`;
     for (const r of rows) {
       try {

@@ -1,0 +1,3 @@
+# Falsos positivos: contraseñas de prueba en tests de integración (no son claves reales).
+a611c51629d82a1e4d39f0507fc96e7927863b3d:tests/integration/unverified-providers.test.ts:generic-api-key:13
+145b00aed416f050337bd5f4b60db162d527c80a:tests/integration/provider-quickstart.test.ts:generic-api-key:11

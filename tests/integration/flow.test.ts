@@ -15,7 +15,7 @@ import * as quotes from "@/server/modules/quotes";
 import * as jobs from "@/server/modules/jobs";
 import * as disputes from "@/server/modules/disputes";
 import { executePayout } from "@/server/modules/payments";
-import { actor, catId, invitationFor, payPending, zoneId, ledgerBalance, visitCode } from "./helpers";
+import { actor, catId, invitationFor, payPending, zoneId, ledgerBalance, visitCode, verifyEmailOf } from "./helpers";
 
 const pdf = { data: readFileSync("db/seed-assets/documento-demo.pdf"), name: "dni.pdf" };
 const jpg = { data: readFileSync("db/seed-assets/demo-1.jpg"), name: "foto.jpg" };
@@ -24,6 +24,7 @@ describe("recorrido principal de punta a punta", () => {
   it("completa el ciclo con persistencia, permisos y registros consistentes", async () => {
     // 1. Registro abierto del profesional
     const uid = await registerUser({ fullName: "Nora Test", email: `nora.${Date.now()}@test.local`, password: "password-123", acceptTerms: true });
+    await verifyEmailOf(uid);
     const nora = (await systemTx((tx) => loadActor(tx, uid)))!;
     expect(nora.platformRole).toBeNull();
     const pid = await providers.createProvider(nora, {

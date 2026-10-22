@@ -12,14 +12,15 @@ import { GoogleButton } from "@/components/auth/google-button";
 
 export const metadata: Metadata = { title: "Ingresar" };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; restablecida?: string; aviso?: string }> }) {
-  const { next = "", restablecida, aviso } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; restablecida?: string; aviso?: string; email?: string }> }) {
+  const { next = "", restablecida, aviso, email } = await searchParams;
   const demo = demoLoginEnabled();
   return (
     <>
       <h1 className="text-3xl font-extrabold">Ingresar</h1>
       <p className="mt-1 text-muted">¿Qué necesitás resolver hoy?</p>
       {restablecida && <Alert tone="ok" className="mt-6">Listo, actualizamos tu contraseña. Ya podés ingresar.</Alert>}
+      {email === "confirmado" && <Alert tone="ok" className="mt-6">Listo, confirmaste tu email. Ingresá para seguir.</Alert>}
       {aviso && <Alert tone="warn" className="mt-6">{aviso.slice(0, 200)}</Alert>}
       <Card className="mt-6">
         <GoogleButton next={next} signup />

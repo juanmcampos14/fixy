@@ -8,6 +8,7 @@
  *  - Los movimientos financieros no se borran ni se editan: se registran ajustes o reversos.
  */
 import { randomUUID } from "node:crypto";
+import { assertContactVerified } from "./email-verification";
 import type { Db, Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
@@ -102,6 +103,7 @@ export async function createCharge(
     payoutAccountRef: string | null;
   },
 ): Promise<ChargeRow> {
+  await assertContactVerified(tx, input.payerUserId, "pagar");
   const gw = activeGateway();
   if (input.amountMinor !== input.providerNetMinor + input.providerFeeMinor + input.clientFeeMinor + input.taxMinor) {
     throw new Error("Desglose de cobro inconsistente");

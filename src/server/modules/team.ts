@@ -77,6 +77,8 @@ export async function acceptInvitation(actor: Actor, token: string) {
       }
     }
     await tx`update admin_invitations set accepted_at = now(), accepted_by = ${actor.id} where id = ${inv.id}`;
+    // La invitación llegó por email a esa casilla: abrirla prueba que es suya.
+    await tx`update users set email_verified = true where id = ${actor.id} and not email_placeholder`;
     await audit(tx, actor, "team.accept", "admin_invitation", inv.id, null, { label: inv.label });
   });
 }

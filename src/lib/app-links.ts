@@ -9,12 +9,11 @@ export const APP_ID = "solutions.fixy.app";
 export const APPLE_TEAM_ID: string | null = null;
 
 /**
- * Huellas SHA-256 de los certificados que firman la app de Android.
- * - La de depuración de la Mac de desarrollo (para probar en el emulador).
- * - La de "Firma de apps de Google Play": con esa llega firmada la app que se instala desde la tienda.
+ * Huellas SHA-256 de los certificados que firman la app de Android: la de "Firma de apps de Google Play", con la que
+ * llega firmada la app que se instala desde la tienda. La de depuración no se publica (auditoría M-09): para probar
+ * links en el emulador, agregala solo en local.
  */
 export const ANDROID_CERT_SHA256 = [
-  "A9:97:7A:33:FA:98:43:25:A9:65:AD:DA:B5:77:C3:68:FC:D4:E2:1C:96:5C:25:C6:30:54:2B:92:0B:BC:09:7F",
   "02:B0:95:48:B4:37:26:7A:57:ED:41:10:AE:33:A3:F2:55:1B:DE:D4:CC:F1:89:E5:BE:1D:F4:BA:8C:B5:FF:B2",
 ];
 

@@ -13,7 +13,7 @@ export type Actor = {
   sandbox?: boolean;
   /** false: cuenta creada por WhatsApp, sin email propio (el guardado es interno y no se muestra ni se le escribe). */
   hasEmail?: boolean;
-  /** false: email agregado después de un alta por WhatsApp, sin verificar (no se le escribe). */
+  /** false: todavía no se probó que el email sea de esta persona (no se le escribe salvo el enlace de confirmación). */
   emailVerified?: boolean;
   organizations: { id: string; name: string; role: "admin" | "member" }[];
   providers: { id: string; name: string; role: "admin" | "technician"; status: string; slug: string }[];

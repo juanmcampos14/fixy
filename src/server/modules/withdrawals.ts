@@ -8,6 +8,7 @@
  *  - La operación registra la transferencia con su referencia; recién ahí se asienta el pago en el registro financiero.
  */
 import { z } from "zod";
+import { assertContactVerified } from "./email-verification";
 import type { Db, Tx } from "@/server/db/client";
 import { systemTx } from "@/server/db/client";
 import type { Actor } from "@/server/auth/actor";
@@ -52,6 +53,7 @@ async function saveBankAccountTx(tx: Tx, actor: Actor, providerId: string, input
 export async function saveBankAccount(actor: Actor, providerId: string, input: BankAccountInput) {
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
+    await assertContactVerified(tx, actor.id, "cargar tu cuenta para cobrar");
     await saveBankAccountTx(tx, actor, providerId, input);
   });
 }
@@ -115,6 +117,7 @@ type BankSnapshot = { holderName: string; holderTaxId: string; cbu: string | nul
 export async function requestWithdrawal(actor: Actor, providerId: string, bankInput?: BankAccountInput | null) {
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
+    await assertContactVerified(tx, actor.id, "retirar tu saldo");
     // Serializa pedidos concurrentes del mismo profesional.
     const [prov] = await tx<{ status: string; identity_status: string }[]>`select status, identity_status from providers where id = ${providerId} for update`;
     // Se puede trabajar con el DNI enviado, pero para retirar dinero el equipo tiene que haber verificado la identidad.

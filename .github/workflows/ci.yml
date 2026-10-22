@@ -1,0 +1,74 @@
+# Controles obligatorios antes de publicar (auditoría M-10 / P1).
+# Corre en cada push y pull request: si algo falla, no se mergea ni se despliega a ciegas.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fixy
+          POSTGRES_PASSWORD: fixy_local_only
+          POSTGRES_DB: fixy_test
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fixy" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://fixy:fixy_local_only@localhost:54329/fixy_test
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias (lockfile exacto)
+        run: npm ci
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Pruebas (unitarias + integración con PostgreSQL y migraciones desde cero)
+        run: npm test
+
+      - name: Reglas de arquitectura (Semgrep; las de nivel ERROR bloquean)
+        run: |
+          python3 -m pip install --quiet semgrep==1.95.0
+          semgrep scan --metrics=off --config .semgrep/fixy.yml --error --severity ERROR src/ scripts/
+
+      - name: Dependencias de producción sin vulnerabilidades altas
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Secretos en el repositorio
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build de producción
+        env:
+          DATABASE_URL: postgres://fixy:fixy_local_only@localhost:54329/fixy_test
+        run: |
+          cp .env.example .env.local
+          npm run build

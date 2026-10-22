@@ -19,7 +19,8 @@ loadEnv();
     console.log(`✔ ${email} ahora tiene rol ${role}.`);
   } else {
     if (password.length < 12) throw new Error("ADMIN_PASSWORD debe tener al menos 12 caracteres");
-    await sql()`insert into users (email, password_hash, full_name, platform_role) values (${email}, ${await hashPassword(password)}, ${name}, ${role})`;
+    // Lo da de alta quien opera el servidor con ese email: se toma como confirmado.
+    await sql()`insert into users (email, password_hash, full_name, platform_role, email_verified) values (${email}, ${await hashPassword(password)}, ${name}, ${role}, true)`;
     console.log(`✔ Usuario ${role} creado: ${email}`);
   }
   await sql()`insert into audit_log (action, entity_type, entity_id, reason) values ('user.platform_role', 'user', ${email}, 'Alta por script create-admin')`;

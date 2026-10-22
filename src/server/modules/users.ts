@@ -5,6 +5,7 @@ import { sql, systemTx } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { DomainError, conflict, notFound } from "@/server/domain/errors";
 import type { Actor } from "@/server/auth/actor";
+import { sendEmailVerificationTx } from "./email-verification";
 
 export const registerSchema = z.object({
   fullName: z.string().trim().min(2, "Ingresá tu nombre.").max(120),
@@ -14,7 +15,10 @@ export const registerSchema = z.object({
   acceptTerms: z.literal(true, { error: "Tenés que aceptar los términos y la política de privacidad." }),
 });
 
-/** Registro abierto. Nunca asigna roles de plataforma: eso solo ocurre desde administración. */
+/**
+ * Registro abierto. Nunca asigna roles de plataforma: eso solo ocurre desde administración.
+ * El email queda sin confirmar y le mandamos el enlace (las cuentas de demostración nacen confirmadas).
+ */
 export async function registerUser(input: z.infer<typeof registerSchema>, opts: { isDemo?: boolean } = {}) {
   const d = registerSchema.parse(input);
   const hash = await hashPassword(d.password);
@@ -22,8 +26,10 @@ export async function registerUser(input: z.infer<typeof registerSchema>, opts: 
     const [exists] = await tx`select 1 from users where lower(email) = ${d.email}`;
     if (exists) throw conflict("Ya existe una cuenta con ese email. Probá ingresar.");
     const [u] = await tx<{ id: string }[]>`
-      insert into users (email, password_hash, full_name, phone, is_demo) values (${d.email}, ${hash}, ${d.fullName}, ${d.phone || null}, ${!!opts.isDemo})
+      insert into users (email, password_hash, full_name, phone, is_demo, email_verified)
+      values (${d.email}, ${hash}, ${d.fullName}, ${d.phone || null}, ${!!opts.isDemo}, ${!!opts.isDemo})
       returning id`;
+    if (!opts.isDemo) await sendEmailVerificationTx(tx, u.id);
     const policies = await tx<{ id: string }[]>`select distinct on (kind) id from policy_documents where kind in ('terms','privacy') order by kind, published_at desc`;
     for (const p of policies) await tx`insert into policy_acceptances (user_id, policy_id) values (${u.id}, ${p.id}) on conflict do nothing`;
     return u.id;
@@ -108,14 +114,14 @@ export async function signInWithGoogle(g: { sub: string; email: string; emailVer
       // El registro con email no verifica la casilla: alguien pudo crear la cuenta con un email ajeno y una contraseña suya.
       // Google sí prueba que el email es de esta persona, así que al vincular se anulan la contraseña y las sesiones abiertas
       // (si la contraseña era suya, la recupera con "Olvidé mi contraseña").
-      await tx`update users set google_sub = ${g.sub}, password_hash = null where id = ${byEmail.id}`;
+      await tx`update users set google_sub = ${g.sub}, password_hash = null, email_verified = true where id = ${byEmail.id}`;
       await tx`delete from sessions where user_id = ${byEmail.id}`;
       await tx`update password_resets set used_at = now() where user_id = ${byEmail.id} and used_at is null`;
       await audit(tx, null, "user.google_linked", "user", byEmail.id, null);
       return { userId: byEmail.id, created: false };
     }
     const name = g.name.trim().slice(0, 120) || email.split("@")[0];
-    const [u] = await tx<{ id: string }[]>`insert into users (email, password_hash, full_name, google_sub) values (${email}, null, ${name}, ${g.sub}) returning id`;
+    const [u] = await tx<{ id: string }[]>`insert into users (email, password_hash, full_name, google_sub, email_verified) values (${email}, null, ${name}, ${g.sub}, true) returning id`;
     const policies = await tx<{ id: string }[]>`select distinct on (kind) id from policy_documents where kind in ('terms','privacy') order by kind, published_at desc`;
     for (const p of policies) await tx`insert into policy_acceptances (user_id, policy_id) values (${u.id}, ${p.id}) on conflict do nothing`;
     await audit(tx, null, "user.google_signup", "user", u.id, null);
@@ -130,7 +136,8 @@ export const emailAccessSchema = z.object({
 
 /**
  * Cuenta creada por WhatsApp: suma (o cambia) un email y una clave para entrar también desde /ingresar.
- * El email queda sin verificar: no recibe correos ni enlaces de recuperación (ver migración 0040).
+ * El email queda sin confirmar hasta que abre el enlace que le mandamos: mientras tanto no recibe otros correos ni
+ * enlaces de recuperación (ver migraciones 0040 y 0041).
  */
 export async function setEmailAccess(actor: Actor, input: z.input<typeof emailAccessSchema>) {
   const d = emailAccessSchema.parse(input);
@@ -147,5 +154,6 @@ export async function setEmailAccess(actor: Actor, input: z.input<typeof emailAc
     await tx`update providers set contact_email = ${d.email} where contact_email = ${u.email}
       and id in (select provider_id from provider_members where user_id = ${actor.id} and role = 'admin')`;
     await audit(tx, actor, "user.email_access_set", "user", actor.id, null, { replaced: !u.email_placeholder });
+    await sendEmailVerificationTx(tx, actor.id);
   });
 }

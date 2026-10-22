@@ -160,7 +160,10 @@ describe("cuenta de WhatsApp que suma email y clave", () => {
     await systemTx((tx) => notify(tx, [u.id], { type: "message", title: "Mensaje nuevo" }));
     expect(await sql()`select 1 from outbox where recipient_user_id = ${u.id} and channel = 'whatsapp' and payload->>'audience' = 'account'`).toHaveLength(1);
     await processOutbox(500);
-    expect((await sql()<{ status: string }[]>`select status from outbox where recipient_user_id = ${u.id} and channel = 'email'`).every((r) => r.status === "pending")).toBe(true);
+    // Solo sale el enlace de confirmación; el resto de los correos espera a que confirme.
+    const mails = await sql()<{ status: string; kind: string | null }[]>`select status, payload->>'kind' as kind from outbox where recipient_user_id = ${u.id} and channel = 'email'`;
+    expect(mails.filter((r) => r.kind === "verify_email").map((r) => r.status)).toEqual(["sent"]);
+    expect(mails.filter((r) => r.kind !== "verify_email").every((r) => r.status === "pending")).toBe(true);
 
     // Puede cambiar la clave las veces que quiera (entrando con el link de WhatsApp).
     await setEmailAccess(actor, { email, password: "otra-clave-22" });

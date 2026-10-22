@@ -65,12 +65,23 @@ export function env(): Env {
     throw new Error(`Configuración inválida. Revisá estas variables de entorno: ${fields}`);
   }
   cached = parsed.data;
-  // Sin CRON_SECRET propio en producción, el cron queda cerrado (nadie conoce la clave) en vez de abierto con la de ejemplo.
-  if (cached.NODE_ENV === "production" && cached.CRON_SECRET === "change-me-cron-secret-000000000000") {
-    console.error("[env] Falta CRON_SECRET en producción: el procesamiento programado queda deshabilitado.");
-    cached.CRON_SECRET = randomBytes(32).toString("hex");
+  // Claves de ejemplo en producción (auditoría M-06): una copia de .env.example dejaría firmas predecibles.
+  // Se reemplazan por una clave aleatoria de este proceso (falla cerrado: el cron no corre, los enlaces de archivos
+  // firmados por otra instancia dejan de valer, los webhooks simulados no se aceptan) y se avisa en los registros.
+  if (cached.NODE_ENV === "production") {
+    for (const key of ["CRON_SECRET", "FILE_SIGNING_SECRET", "MOCK_WEBHOOK_SECRET"] as const) {
+      if (isPlaceholderSecret(cached[key])) {
+        console.error(`[env] ${key} tiene un valor de ejemplo en producción: se ignora. Cargá una clave propia.`);
+        cached[key] = randomBytes(32).toString("hex");
+      }
+    }
   }
   return cached;
+}
+
+/** Valores de ejemplo de .env.example (o claves triviales) que nunca deben usarse en producción. */
+export function isPlaceholderSecret(v: string): boolean {
+  return /change-?me|example|placeholder|^(.)\1+$/i.test(v) || new Set(v).size < 8;
 }
 
 /** El selector de cuentas demo nunca se habilita en producción, aunque DEMO_MODE=true. */

@@ -36,8 +36,14 @@ export type { RequestPayload } from "@/server/modules/request-submit";
 export async function submitRequestAction(_: ActionState, f: FormData): Promise<ActionState> {
   let target = "";
   const r = await act(async () => {
+    // Límites contra spam (auditoría M-05): cada pedido dispara matching y avisos a profesionales.
+    await rateLimit(`submit-request:${clientIp(await headers())}`, 30, 3600);
     const payload = requestPayloadSchema.parse(JSON.parse(str(f, "payload") || "{}"));
     const actor = await getActor();
+    if (actor) {
+      await rateLimit(`submit-request:user:${actor.id}`, 10, 3600);
+      await rateLimit(`submit-request:user-day:${actor.id}`, 30, 86400);
+    }
     if (!actor) {
       const jar = await cookies();
       const token = await saveAnonymousDraft(jar.get(DRAFT_COOKIE)?.value ?? null, payload);

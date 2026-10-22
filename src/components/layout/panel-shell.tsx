@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/logo";
 import { PanelNav, type NavItem } from "./panel-nav";
 import { logoutAction } from "@/app/(auth)/actions";
 import { cn } from "@/lib/cn";
+import { VerifyEmailBanner } from "@/components/auth/verify-email-banner";
 
 export type Area = "client" | "provider" | "admin";
 
@@ -59,7 +60,7 @@ export async function PanelShell({ actor, area, nav, children }: { actor: Actor;
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <PanelNav items={nav} />
         </aside>
-        <main id="contenido" className="min-w-0 pb-28 pt-2 lg:pb-24 lg:pt-0">{children}</main>
+        <main id="contenido" className="min-w-0 pb-28 pt-2 lg:pb-24 lg:pt-0"><VerifyEmailBanner actor={actor} />{children}</main>
       </div>
     </div>
   );

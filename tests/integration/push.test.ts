@@ -16,7 +16,7 @@ describe("avisos push", () => {
   it("solo se encola el aviso para quien tiene un dispositivo activo", async () => {
     const withApp = await newUser("a");
     const without = await newUser("b");
-    await registerDevice(withApp, "android", `tok-${withApp}-aaaaaaaaaaaaaaaa`);
+    await registerDevice(withApp, "android", `tok-${withApp}-aaaaaaaaaaaaaaaa`, null);
     await systemTx((tx) => notify(tx, [withApp, without], { type: "message", title: "Mensaje nuevo", body: "Hola", link: "/app/trabajos/1", email: false }));
     expect(await pushRows(without)).toEqual([]);
     const rows = await pushRows(withApp);
@@ -24,24 +24,34 @@ describe("avisos push", () => {
     expect(rows[0].payload).toMatchObject({ title: "Mensaje nuevo", link: "/app/trabajos/1" });
   });
 
-  it("un token pasa a la cuenta que inició sesión en ese dispositivo y se borra al cerrar sesión", async () => {
+  it("un token pasa a la cuenta que inició sesión en ese dispositivo y se borra al cerrar esa sesión", async () => {
     const first = await newUser("c");
     const second = await newUser("d");
     const token = `tok-shared-${Date.now()}-aaaaaaaa`;
-    await registerDevice(first, "ios", token);
-    await registerDevice(second, "ios", token);
+    const session = async (userId: string) => {
+      const hash = `sess-${userId}-${Date.now()}`;
+      await sql()`insert into sessions (token_hash, user_id, expires_at) values (${hash}, ${userId}, now() + interval '1 day')`;
+      return hash;
+    };
+    await registerDevice(first, "ios", token, await session(first));
+    const secondSession = await session(second);
+    await registerDevice(second, "ios", token, secondSession);
     const owners = await sql()<{ user_id: string }[]>`select user_id from push_devices where token = ${token}`;
     expect(owners).toEqual([{ user_id: second }]);
-    await unregisterDevice(token);
+    // Conocer el token no alcanza para darlo de baja: tiene que ser la dueña.
+    await unregisterDevice(first, token);
+    expect(await sql()`select 1 from push_devices where token = ${token}`).toHaveLength(1);
+    // Al cerrar la sesión, el dispositivo deja de recibir avisos.
+    await sql()`delete from sessions where token_hash = ${secondSession}`;
     expect(await sql()`select 1 from push_devices where token = ${token}`).toHaveLength(0);
   });
 
   it("si la persona ya no tiene dispositivos, el aviso se descarta en vez de reintentarse", async () => {
     const id = await newUser("e");
     const token = `tok-${id}-bbbbbbbbbbbbbbbb`;
-    await registerDevice(id, "android", token);
+    await registerDevice(id, "android", token, null);
     await systemTx((tx) => notify(tx, [id], { type: "payment", title: "Pago acreditado", email: false }));
-    await unregisterDevice(token);
+    await unregisterDevice(id, token);
     await processPushOutbox(500);
     expect((await pushRows(id)).map((r) => r.status)).toEqual(["dead"]);
   });

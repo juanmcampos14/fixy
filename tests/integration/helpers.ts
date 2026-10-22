@@ -41,3 +41,16 @@ export async function totalOf(quoteId: string) {
 export const ledgerBalance = async () => (await sql()<{ s: number }[]>`select coalesce(sum(amount_minor),0)::bigint as s from ledger_entries`)[0].s;
 
 export const visitCode = async (jobId: string) => (await sql()<{ visit_code: string }[]>`select visit_code from jobs where id = ${jobId}`)[0].visit_code;
+
+/** Token del último enlace de confirmación de email encolado para el usuario. */
+export async function lastVerifyToken(userId: string) {
+  const [o] = await sql()<{ payload: { link: string } }[]>`
+    select payload from outbox where recipient_user_id = ${userId} and payload->>'kind' = 'verify_email' order by created_at desc limit 1`;
+  return o?.payload.link.split("/").pop() ?? null;
+}
+
+/** Confirma el email de una cuenta recién registrada, como si abriera el enlace del correo. */
+export async function verifyEmailOf(userId: string) {
+  const { confirmEmail } = await import("@/server/modules/email-verification");
+  await confirmEmail((await lastVerifyToken(userId))!);
+}

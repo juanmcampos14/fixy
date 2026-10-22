@@ -10,6 +10,8 @@ import { rateLimit } from "@/server/rate-limit";
 import { demoLoginEnabled } from "@/server/env";
 import { sql } from "@/server/db/client";
 import { DomainError } from "@/server/domain/errors";
+import { confirmEmail, requestEmailVerification } from "@/server/modules/email-verification";
+import { getActor, requireActor } from "@/server/auth/session";
 
 /** Solo rutas internas: evita redirecciones abiertas. */
 function safeNext(next: string) {
@@ -78,4 +80,24 @@ export async function resetPasswordAction(_: ActionState, f: FormData): Promise<
   });
   if (r.error) return r;
   redirect("/ingresar?restablecida=1");
+}
+
+/** "Reenviarme el enlace" desde el aviso del panel. */
+export async function resendVerificationAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = await requireActor();
+    await rateLimit(`verify-email:${actor.id}`, 5, 3600);
+    await requestEmailVerification(actor);
+    return { ok: true, message: `Listo: te mandamos un enlace nuevo a ${actor.email}. Revisá también la carpeta de spam.` };
+  });
+}
+
+/** Confirmación con un botón (no al abrir la página): los antivirus de correo abren los enlaces solos y gastarían el token. */
+export async function confirmEmailAction(_: ActionState, f: FormData): Promise<ActionState> {
+  const r = await act(async () => {
+    await rateLimit(`verify-email-confirm:${await clientKey()}`, 20, 3600);
+    await confirmEmail(str(f, "token"));
+  });
+  if (r.error) return r;
+  redirect((await getActor()) ? "/app" : "/ingresar?email=confirmado");
 }

@@ -106,15 +106,19 @@ function sendIos(token: string, p: PushPayload): Promise<PushResult> {
 }
 
 // ── Dispositivos ──
-/** Guarda (o reasigna) el token del dispositivo a la persona que inició sesión en la app. */
-export async function registerDevice(userId: string, platform: PushPlatform, token: string) {
-  await sql()`insert into push_devices (user_id, platform, token) values (${userId}, ${platform}, ${token})
-    on conflict (token) do update set user_id = excluded.user_id, platform = excluded.platform, last_seen_at = now(), disabled_at = null`;
+/**
+ * Guarda (o reasigna) el token del dispositivo a la persona que inició sesión en la app, atado a esa sesión:
+ * cuando la sesión se cierra o se revoca, el dispositivo se borra solo (ver migración 0042).
+ */
+export async function registerDevice(userId: string, platform: PushPlatform, token: string, sessionHash: string | null) {
+  await sql()`insert into push_devices (user_id, platform, token, session_hash) values (${userId}, ${platform}, ${token}, ${sessionHash})
+    on conflict (token) do update set user_id = excluded.user_id, platform = excluded.platform, session_hash = excluded.session_hash,
+      last_seen_at = now(), disabled_at = null`;
 }
 
-/** Al cerrar sesión en la app: ese dispositivo deja de recibir avisos. Quien tiene el token es el propio dispositivo. */
-export async function unregisterDevice(token: string) {
-  await sql()`delete from push_devices where token = ${token}`;
+/** Baja explícita: solo la dueña del dispositivo, con su sesión. */
+export async function unregisterDevice(userId: string, token: string) {
+  await sql()`delete from push_devices where token = ${token} and user_id = ${userId}`;
 }
 
 // ── Envío ──

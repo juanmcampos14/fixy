@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "@/server/db/client";
 import { authenticate, registerUser, requestPasswordReset, resetPassword } from "@/server/modules/users";
+import { verifyEmailOf } from "./helpers";
 
 describe("autenticación", () => {
   it("el registro no otorga roles de plataforma y no admite emails duplicados", async () => {
@@ -17,6 +18,10 @@ describe("autenticación", () => {
   it("recupera la contraseña con un token de un solo uso", async () => {
     const email = `reset.${Date.now()}@test.local`;
     const id = await registerUser({ fullName: "Reset Persona", email, password: "password-123", acceptTerms: true });
+    // Sin confirmar el email no sale el enlace de recuperación.
+    await requestPasswordReset(email);
+    expect(await sql()`select 1 from password_resets where user_id = ${id}`).toHaveLength(0);
+    await verifyEmailOf(id);
     await requestPasswordReset(email);
     await requestPasswordReset("inexistente@test.local"); // no falla ni revela
     const [o] = await sql()<{ payload: { link: string } }[]>`select payload from outbox where recipient_user_id = ${id} order by created_at desc limit 1`;

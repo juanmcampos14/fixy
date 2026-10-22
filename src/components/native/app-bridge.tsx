@@ -36,11 +36,8 @@ async function setupPush(cap: CapacitorGlobal, push: PushPlugin, onCleanup: (h: 
   const cfg = await fetch("/api/push", { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<{ signedIn: boolean; platforms: Record<string, boolean> }>) : null)).catch(() => null);
   if (!cfg) return;
   if (!cfg.signedIn) {
-    const old = store.get();
-    if (old) {
-      await fetch("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: old }) }).catch(() => null);
-      store.set(null);
-    }
+    // Al cerrar sesión el servidor ya borró este dispositivo (estaba atado a la sesión): al volver a entrar se registra de nuevo.
+    store.set(null);
     return;
   }
   // Sin credenciales del lado del servidor no se toca el servicio nativo (en Android, sin Firebase configurado, fallaría).

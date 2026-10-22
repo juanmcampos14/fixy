@@ -3,6 +3,7 @@
  * y revisión administrativa. Estados separados: operativo, identidad, credenciales, cobros.
  */
 import { maskContactInfo } from "@/server/domain/contact-guard";
+import { assertContactVerified } from "./email-verification";
 import { normalizeSocialLinks, type SocialKey } from "@/lib/social";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -200,6 +201,7 @@ export async function uploadProviderDocument(
 export async function setupPayouts(actor: Actor, providerId: string) {
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
+    await assertContactVerified(tx, actor.id, "configurar tus cobros");
     const gw = activeGateway();
     const { accountRef, onboardingUrl } = await gw.createPayoutAccount(tx, providerId);
     await tx`update providers set payout_account_ref = ${accountRef}, payout_provider = ${gw.name},

@@ -28,6 +28,12 @@ export async function createSession(userId: string) {
   });
 }
 
+/** Hash de la sesión actual (para atarle recursos que deben morir con ella, como el dispositivo de avisos). */
+export async function currentSessionHash(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? hashToken(token) : null;
+}
+
 export async function destroySession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;

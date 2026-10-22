@@ -16,13 +16,15 @@ describe("ingreso con Google dentro de la app (traspaso de sesión)", () => {
     expect(validChallenge(challenge)).toBe(true);
 
     const code = await createHandoff(userId, challenge, "/app/solicitudes");
-    // Otra app (otro secreto) no puede usar el código, y el intento lo invalida.
+    // Otra app (otro secreto) no puede usar el código ni gastarlo: la app que lo pidió igual entra.
     expect(await redeemHandoff(code, pair().verifier)).toBeNull();
+    expect(await redeemHandoff(code, verifier)).toEqual({ userId, next: "/app/solicitudes" });
     expect(await redeemHandoff(code, verifier)).toBeNull();
 
+    // Dos canjes simultáneos con el secreto correcto: entra uno solo.
     const second = await createHandoff(userId, challenge, "/app/solicitudes");
-    expect(await redeemHandoff(second, verifier)).toEqual({ userId, next: "/app/solicitudes" });
-    expect(await redeemHandoff(second, verifier)).toBeNull();
+    const both = await Promise.all([redeemHandoff(second, verifier), redeemHandoff(second, verifier)]);
+    expect(both.filter(Boolean)).toHaveLength(1);
   });
 
   it("un código vencido no sirve", async () => {
