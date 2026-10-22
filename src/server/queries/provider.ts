@@ -76,7 +76,9 @@ export async function getProviderSetup(userId: string, providerId: string) {
     const categories = await tx<{ id: string; name: string; icon: string; description: string }[]>`
       select id, name, icon, description from categories where active order by sort, name`;
     const zones = await tx<{ id: string; name: string; region: string }[]>`select id, name, region from zones where active order by sort, name`;
-    const selectedCats = (await tx<{ category_id: string }[]>`select category_id from provider_categories where provider_id = ${providerId}`).map((r) => r.category_id);
+    const catRows = await tx<{ category_id: string; is_primary: boolean }[]>`select category_id, is_primary from provider_categories where provider_id = ${providerId}`;
+    const selectedCats = catRows.map((r) => r.category_id);
+    const primaryCat = catRows.find((r) => r.is_primary)?.category_id ?? null;
     const selectedZones = (await tx<{ zone_id: string }[]>`select zone_id from provider_zones where provider_id = ${providerId}`).map((r) => r.zone_id);
     const availability = await tx<{ weekday: number; start_minute: number; end_minute: number }[]>`
       select weekday, start_minute, end_minute from provider_availability where provider_id = ${providerId} order by weekday, start_minute`;
@@ -94,7 +96,7 @@ export async function getProviderSetup(userId: string, providerId: string) {
         exists (select 1 from policy_acceptances a where a.policy_id = d.id and a.user_id = ${userId}) as accepted
       from policy_documents d where d.kind = 'provider_terms' order by d.published_at desc limit 1`;
     return {
-      categories, zones, selectedCats, selectedZones, availability,
+      categories, zones, selectedCats, primaryCat, selectedZones, availability,
       portfolio: portfolioRows.map((p) => ({ ...p, url: publicFileUrl(p.file_id) })),
       documents: documents.map((d) => ({ ...d, url: signedFileUrl(d.file_id, 900) })),
       credentialTypes, terms: terms ?? null,
@@ -314,8 +316,13 @@ export async function getPublicProfile(slug: string) {
     from provider_public where slug = ${slug} and status in ('pending','in_review','approved')`;
   if (!p) return null;
   const [categories, zones, portfolio, credentials, reviews] = await Promise.all([
-    db<{ id: string; name: string; icon: string }[]>`
-      select c.id, c.name, c.icon from provider_categories pc join categories c on c.id = pc.category_id where pc.provider_id = ${p.id} and c.active order by c.sort, c.name`,
+    // Rubros con sus propias estrellas (las reseñas cuentan para el rubro del trabajo); el principal primero.
+    db<{ id: string; name: string; icon: string; is_primary: boolean; rating: number | null; reviews: number }[]>`
+      select c.id, c.name, c.icon, pc.is_primary,
+        (select round(avg(v.rating)::numeric, 1)::float from reviews_published v where v.provider_id = ${p.id} and v.category_id = c.id) as rating,
+        (select count(*)::int from reviews_published v where v.provider_id = ${p.id} and v.category_id = c.id) as reviews
+      from provider_categories pc join categories c on c.id = pc.category_id where pc.provider_id = ${p.id} and c.active
+      order by pc.is_primary desc, c.sort, c.name`,
     db<{ name: string; region: string }[]>`
       select z.name, z.region from provider_zones pz join zones z on z.id = pz.zone_id where pz.provider_id = ${p.id} and z.active order by z.sort, z.name`,
     db<{ id: string; file_id: string; caption: string; is_pdf: boolean; file_name: string }[]>`

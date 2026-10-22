@@ -15,6 +15,7 @@ import { Badge, StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { Checkbox, ChoiceChip, Field, Input, Select } from "@/components/ui/field";
 import { CategoryIcon } from "@/components/category-icon";
+import { PrimaryCategoryPicker } from "./primary-category";
 import { ButtonLink } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { SOCIAL_NETWORKS } from "@/lib/social";
@@ -101,6 +102,7 @@ export function CoverageSection({ setup, provider, id = "servicios" }: { setup: 
             ))}
           </div>
           <p className="mt-2 text-sm text-muted">Algunas especialidades piden una matrícula o credencial vigente. Las ves en Documentación.</p>
+          <PrimaryCategoryPicker categories={setup.categories} initial={setup.primaryCat} />
         </fieldset>
         <fieldset>
           <legend className="mb-2 text-[15px] font-semibold">Zonas donde trabajás</legend>

@@ -8,11 +8,11 @@
  *  4. Enviás. Los detalles (fotos, horarios, preguntas del oficio) son opcionales.
  */
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowUp, BadgeCheck, Camera, ChevronDown, HandCoins, LoaderCircle, LocateFixed, MapPin, Pencil, Star, TriangleAlert } from "lucide-react";
+import { ArrowUp, BadgeCheck, Camera, ChevronDown, HandCoins, LoaderCircle, LocateFixed, MapPin, Pencil, TriangleAlert } from "lucide-react";
 import { parseArsToMinor } from "@/server/domain/money";
 import type { TriageResult } from "@/server/assistant/rules";
 import { bookableProvidersAction, submitRequestAction, triageAction, type RequestPayload } from "./actions";
-import type { BookableProviderCard } from "./choose-provider";
+import { RubroRating, type BookableProviderCard } from "./choose-provider";
 import { Mascot } from "@/components/brand/mascot";
 import { AddressFields } from "@/components/location/address-fields";
 import { GatedToggle } from "@/components/location/gated-toggle";
@@ -492,7 +492,7 @@ function ProCard({ p, onChoose }: { p: BookableProviderCard; onChoose: () => voi
         <div className="min-w-0">
           <p className="text-lg font-bold leading-tight">{p.displayName}</p>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            {p.reviews ? <span className="inline-flex items-center gap-1 font-semibold"><Star className="h-4 w-4 fill-spark text-spark" aria-hidden />{p.rating} <span className="font-normal text-muted">({p.reviews} reseñas)</span></span> : <span className="text-muted">Nuevo en Fixy</span>}
+            <RubroRating p={p} long />
             {p.verified ? <span className="inline-flex items-center gap-1 text-ok"><BadgeCheck className="h-4 w-4" aria-hidden />Verificado</span> : <span className="rounded-full bg-warn-bg px-2 py-0.5 text-xs font-semibold text-warn">Todavía sin verificar</span>}
             {p.isDemo && <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-muted">Demostración</span>}
           </p>

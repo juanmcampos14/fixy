@@ -168,13 +168,20 @@ export default async function PublicProviderPage({ params }: { params: Promise<{
 
           <section aria-labelledby="sp-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">
             <h2 id="sp-t" className="text-lg font-bold">Especialidades</h2>
-            <ul className="mt-3 flex flex-wrap gap-2">
+            <ul className="mt-3 space-y-2">
               {categories.map((c) => (
-                <li key={c.id} className="inline-flex items-center gap-1.5 rounded-full bg-fixy-50 px-3 py-1.5 text-sm font-semibold text-fixy-800">
-                  <CategoryIcon icon={c.icon} className="h-4 w-4" />{c.name}
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-fixy-50 px-3 py-1.5 text-sm font-semibold text-fixy-800">
+                    <CategoryIcon icon={c.icon} className="h-4 w-4" />{c.name}
+                    {c.is_primary && <span className="ml-1 rounded-full bg-fixy-700 px-2 py-0.5 text-[11px] font-semibold text-white">Principal</span>}
+                  </span>
+                  <span className="text-sm text-muted">
+                    {c.reviews ? <><Stars rating={c.rating ?? 0} /> <span className="sr-only">{c.rating} de 5</span>({c.reviews})</> : "Sin reseñas todavía"}
+                  </span>
                 </li>
               ))}
             </ul>
+            <p className="mt-3 text-xs text-muted">Las estrellas de cada especialidad salen de trabajos de ese rubro.</p>
           </section>
 
           <section aria-labelledby="zn-t" className="rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-line">

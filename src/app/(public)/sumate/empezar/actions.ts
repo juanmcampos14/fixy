@@ -51,7 +51,8 @@ export async function guidedSignupAction(payload: GuidedSignupPayload): Promise<
     const description = `${d.fullName}. ${joinNames(cats.map((c) => c.name))} en ${joinNames(zones.slice(0, 4).map((z) => z.name))}${zones.length > 4 ? " y alrededores" : ""}. Perfil creado en el alta guiada de Fixy.`;
     await quickStartProvider(actor, {
       kind: "individual", displayName: d.fullName, contactPhone: d.phone, description,
-      categoryIds: d.categoryIds, zoneIds: d.zoneIds, baseZoneId: d.zoneIds[0],
+      // El primer oficio que tocó es el principal.
+      categoryIds: d.categoryIds, primaryCategoryId: d.categoryIds[0], zoneIds: d.zoneIds, baseZoneId: d.zoneIds[0],
       // Horario de arranque: lunes a sábado de 8 a 19. Se cambia después desde el perfil.
       availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startMinute: 8 * 60, endMinute: 19 * 60 })),
       priceRefs: [], aiAssisted: false,

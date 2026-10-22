@@ -206,9 +206,11 @@ async function finish(pro: ProDraft, ctx: Ctx): Promise<Result> {
     kind: "individual", displayName: pro.name.slice(0, 120), responsibleName: pro.name.slice(0, 120), contactEmail: contact.email, contactPhone: `+${ctx.phone}`, description,
   }, { source: "whatsapp", referrerSlug: pro.ref ?? null });
   const withProvider = (await systemTx((tx) => loadActor(tx, userId)))!;
-  const cats = await sql()<{ id: string }[]>`select id from categories where slug in ${sql()(pro.categories)} and active`;
+  // En el orden en que los nombró: el primero es su oficio principal.
+  const found = await sql()<{ id: string; slug: string }[]>`select id, slug from categories where slug in ${sql()(pro.categories)} and active`;
+  const cats = pro.categories.map((slug) => found.find((c) => c.slug === slug)).filter((c): c is { id: string; slug: string } => !!c);
   await updateCoverage(withProvider, providerId, {
-    categoryIds: cats.map((c) => c.id), zoneIds: [pro.zoneId], baseZoneId: pro.zoneId, acceptingJobs: true, maxActiveJobs: 5,
+    categoryIds: cats.map((c) => c.id), primaryCategoryId: cats[0]?.id, zoneIds: [pro.zoneId], baseZoneId: pro.zoneId, acceptingJobs: true, maxActiveJobs: 5,
     // Horario de arranque: lunes a sábado de 8 a 19. Lo cambia cuando quiera desde su panel.
     availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startMinute: 8 * 60, endMinute: 19 * 60 })),
   });

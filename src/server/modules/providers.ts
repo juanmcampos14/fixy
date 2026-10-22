@@ -87,8 +87,21 @@ export async function updateProviderProfile(actor: Actor, providerId: string, in
   });
 }
 
+/**
+ * Guarda los rubros del profesional con exactamente uno principal (si no se indica, el primero de la lista).
+ * En el principal aparece con prioridad; en los demás también recibe pedidos, pero más abajo.
+ */
+export async function setProviderCategoriesTx(tx: Tx, providerId: string, categoryIds: string[], primaryId?: string | null) {
+  const ids = [...new Set(categoryIds)];
+  const primary = primaryId && ids.includes(primaryId) ? primaryId : ids[0];
+  if (primaryId && !ids.includes(primaryId)) throw invalid("El rubro principal tiene que estar entre los que elegiste.");
+  await tx`delete from provider_categories where provider_id = ${providerId}`;
+  for (const c of ids) await tx`insert into provider_categories (provider_id, category_id, is_primary) values (${providerId}, ${c}, ${c === primary})`;
+}
+
 export const coverageSchema = z.object({
   categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos una especialidad."),
+  primaryCategoryId: z.string().uuid().optional().or(z.literal("")),
   zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona."),
   baseZoneId: z.string().uuid().optional().or(z.literal("")),
   acceptingJobs: z.boolean(),
@@ -106,10 +119,9 @@ export async function updateCoverage(actor: Actor, providerId: string, input: z.
     const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(data.categoryIds)}`;
     const validZones = await tx<{ id: string }[]>`select id from zones where active and id in ${tx(data.zoneIds)}`;
     if (validCats.length !== data.categoryIds.length || validZones.length !== data.zoneIds.length) throw invalid("Selección inválida.");
-    await tx`delete from provider_categories where provider_id = ${providerId}`;
+    await setProviderCategoriesTx(tx, providerId, data.categoryIds, data.primaryCategoryId || null);
     await tx`delete from provider_zones where provider_id = ${providerId}`;
     await tx`delete from provider_availability where provider_id = ${providerId}`;
-    for (const c of data.categoryIds) await tx`insert into provider_categories values (${providerId}, ${c})`;
     for (const z of data.zoneIds) await tx`insert into provider_zones values (${providerId}, ${z})`;
     for (const s of data.availability)
       await tx`insert into provider_availability (provider_id, weekday, start_minute, end_minute) values (${providerId}, ${s.weekday}, ${s.startMinute}, ${s.endMinute})`;
@@ -498,6 +510,7 @@ export const quickStartSchema = z.object({
   description: z.string().trim().min(30, "Contá un poco más sobre tu servicio (mínimo 30 caracteres).").max(2000),
   yearsExperience: z.coerce.number().int().min(0).max(80).optional(),
   categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos un rubro."),
+  primaryCategoryId: z.string().uuid().optional().or(z.literal("")),
   zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona."),
   baseZoneId: z.string().uuid().optional().or(z.literal("")),
   availability: z.array(z.object({ weekday: z.number().int().min(0).max(6), startMinute: z.number().int().min(0).max(1439), endMinute: z.number().int().min(1).max(1440) })).default([]),
@@ -518,7 +531,7 @@ export async function quickStartProvider(actor: Actor, input: z.input<typeof qui
     const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(d.categoryIds)}`;
     const validZones = await tx<{ id: string }[]>`select id from zones where active and id in ${tx(d.zoneIds)}`;
     if (validCats.length !== new Set(d.categoryIds).size || validZones.length !== new Set(d.zoneIds).size) throw invalid("Selección inválida.");
-    for (const c of new Set(d.categoryIds)) await tx`insert into provider_categories values (${providerId}, ${c})`;
+    await setProviderCategoriesTx(tx, providerId, d.categoryIds, d.primaryCategoryId || null);
     for (const z of new Set(d.zoneIds)) await tx`insert into provider_zones values (${providerId}, ${z})`;
     for (const s of d.availability.filter((a) => a.endMinute > a.startMinute))
       await tx`insert into provider_availability (provider_id, weekday, start_minute, end_minute) values (${providerId}, ${s.weekday}, ${s.startMinute}, ${s.endMinute})`;

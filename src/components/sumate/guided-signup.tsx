@@ -116,6 +116,8 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
 
       <div className="mt-6 flex-1">
         {step === "oficio" && (
+          <>
+          <p className="mb-3 text-[15px] text-ink-2">El primero que tocás es tu <strong className="text-ink">oficio principal</strong>: ahí te llegan más pedidos.</p>
           <ul className="grid grid-cols-2 gap-2.5">
             {categories.map((c) => {
               const on = d.categoryIds.includes(c.id);
@@ -126,12 +128,14 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
                       on ? "bg-fixy-50 ring-2 ring-fixy-700" : "bg-surface ring-1 ring-line")}>
                     <CategoryIcon icon={c.icon} className="h-6 w-6" />
                     <span>{c.name}</span>
+                    {on && d.categoryIds[0] === c.id && d.categoryIds.length > 1 && <span className="rounded-full bg-fixy-700 px-2 py-0.5 text-xs font-semibold text-white">Principal</span>}
                     {on && <Check className="absolute right-3 top-3 h-5 w-5 text-fixy-800" aria-hidden />}
                   </button>
                 </li>
               );
             })}
           </ul>
+          </>
         )}
 
         {step === "zona" && (

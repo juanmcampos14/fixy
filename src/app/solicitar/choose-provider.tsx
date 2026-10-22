@@ -8,7 +8,8 @@ import { formatMoney } from "@/lib/format";
 
 export type BookableProviderCard = {
   slug: string; displayName: string; kind: string; isDemo: boolean; description: string; yearsExperience: number | null;
-  rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; verified: boolean; credentials: string[];
+  /** Estrellas en el rubro buscado; overall*: en todos sus rubros. */
+  rating: number | null; reviews: number; overallRating: number | null; overallReviews: number; completedJobs: number; identityVerified: boolean; verified: boolean; credentials: string[];
   visitFeeMinor: number; visitFeeCredited: boolean; priceRefs: { title: string; fromMinor: number; note: string }[];
   availabilityMatch: boolean; sameZone: boolean; avatarUrl: string | null;
 };
@@ -49,9 +50,7 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
                 <span className="min-w-0">
                   <span className="block text-lg font-bold">{p.displayName}</span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    {p.reviews ? (
-                      <span className="inline-flex items-center gap-1 font-semibold"><Star className="h-4 w-4 fill-spark text-spark" aria-hidden />{p.rating} <span className="font-normal text-muted">({p.reviews})</span></span>
-                    ) : <span className="text-muted">Nuevo en Fixy</span>}
+                    <RubroRating p={p} />
                     {p.completedJobs > 0 && <span className="text-muted">{p.completedJobs} trabajo{p.completedJobs === 1 ? "" : "s"}</span>}
                     {p.kind === "company" && <span className="inline-flex items-center gap-1 text-muted"><Users className="h-3.5 w-3.5" aria-hidden />Empresa</span>}
                     {p.yearsExperience ? <span className="text-muted">{p.yearsExperience} años de experiencia</span> : null}
@@ -94,4 +93,20 @@ export function ChooseProvider({ loading, providers, chosen, onChoose, categoryN
       </div>
     </fieldset>
   );
+}
+
+/** Estrellas del rubro buscado. Si todavía no tiene reseñas en este rubro, se aclara y se muestra su nota en otros. */
+export function RubroRating({ p, long }: { p: Pick<BookableProviderCard, "rating" | "reviews" | "overallRating" | "overallReviews">; long?: boolean }) {
+  if (p.reviews) {
+    return (
+      <span className="inline-flex items-center gap-1 font-semibold" title="Calificación en este rubro">
+        <Star className="h-4 w-4 fill-spark text-spark" aria-hidden />{p.rating}
+        <span className="font-normal text-muted">({p.reviews}{long ? (p.reviews === 1 ? " reseña" : " reseñas") : ""} en este rubro)</span>
+      </span>
+    );
+  }
+  if (p.overallReviews) {
+    return <span className="text-muted">Nuevo en este rubro · <Star className="inline h-3.5 w-3.5 fill-spark text-spark" aria-hidden /> {p.overallRating} en otros</span>;
+  }
+  return <span className="text-muted">Nuevo en Fixy</span>;
 }

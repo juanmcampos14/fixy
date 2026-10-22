@@ -77,7 +77,7 @@ export async function bookableProvidersAction(categorySlug: string, zoneId: stri
   const list = await listBookableProviders(sql(), { categoryId: cat.id, zoneId, sandbox, preferredWindows: windows.filter((w) => ["morning", "afternoon", "evening", "weekend"].includes(w)) });
   return list.map((p) => ({
     slug: p.slug, displayName: p.displayName, kind: p.kind, isDemo: p.isDemo, description: p.description, yearsExperience: p.yearsExperience,
-    rating: p.rating, reviews: p.reviews, completedJobs: p.completedJobs, identityVerified: p.identityVerified, verified: p.verified, credentials: p.credentials,
+    rating: p.rating, reviews: p.reviews, overallRating: p.overallRating, overallReviews: p.overallReviews, completedJobs: p.completedJobs, identityVerified: p.identityVerified, verified: p.verified, credentials: p.credentials,
     visitFeeMinor: p.visitFeeMinor, visitFeeCredited: p.visitFeeCredited, priceRefs: p.priceRefs, availabilityMatch: p.availabilityMatch, sameZone: p.sameZone, avatarUrl: p.avatarUrl,
   }));
 }

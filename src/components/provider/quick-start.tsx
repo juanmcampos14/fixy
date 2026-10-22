@@ -37,6 +37,9 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
   const [text, setText] = useState("");
   const [d, setD] = useState<QuickDraft>({ displayName: "", description: "", yearsExperience: "", categoryIds: [], zoneIds: [], baseZoneId: "", availability: "weekdays", priceRefs: [], tips: [] });
   const [aiUsed, setAiUsed] = useState(false);
+  // Rubro principal: el elegido, o el primero que tocó.
+  const [primaryPick, setPrimaryPick] = useState("");
+  const primary = d.categoryIds.includes(primaryPick) ? primaryPick : (d.categoryIds[0] ?? "");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[] | undefined>>({});
   const [drafting, startDraft] = useTransition();
@@ -83,7 +86,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
     setFieldErrors({});
     startSave(async () => {
       const r = await quickStartAction({ kind, displayName: d.displayName, contactPhone: phone, description: d.description, yearsExperience: d.yearsExperience,
-        categoryIds: d.categoryIds, zoneIds: d.zoneIds, baseZoneId: d.baseZoneId, availability: d.availability, priceRefs: d.priceRefs, aiAssisted: aiUsed });
+        categoryIds: d.categoryIds, primaryCategoryId: primary, zoneIds: d.zoneIds, baseZoneId: d.baseZoneId, availability: d.availability, priceRefs: d.priceRefs, aiAssisted: aiUsed });
       if (r?.error) { setError(r.error); setFieldErrors(r.fieldErrors ?? {}); }
     });
   }
@@ -154,9 +157,19 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
             {categories.map((c) => (
               <button key={c.id} type="button" aria-pressed={d.categoryIds.includes(c.id)} onClick={() => toggle("categoryIds", c.id)} className={chip(d.categoryIds.includes(c.id))}>
                 <CategoryIcon icon={c.icon} className="h-4 w-4" />{c.name}
+                {primary === c.id && d.categoryIds.length > 1 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[11px]">Principal</span>}
               </button>
             ))}
           </div>
+          {d.categoryIds.length > 1 && (
+            <div>
+              <label htmlFor="qs-primary" className="mb-1 block text-[15px] font-semibold">¿Cuál es tu rubro principal?</label>
+              <Select id="qs-primary" value={primary} onChange={(e) => setPrimaryPick(e.target.value)} className="sm:max-w-sm">
+                {categories.filter((c) => d.categoryIds.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+              <p className="mt-1 text-sm text-muted">Es en el que aparecés primero. En los demás también te llegan pedidos, pero más abajo.</p>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">

@@ -79,8 +79,14 @@ export type Candidate = {
   score: number;
   reasons: string[];
   activeJobs: number;
+  /** Reseñas y promedio en el rubro del pedido (las estrellas son por rubro). */
   reviews: number;
   rating: number | null;
+  /** Reseñas y promedio en todos sus rubros (para mostrar si todavía no tiene reseñas en este). */
+  overallReviews: number;
+  overallRating: number | null;
+  /** El rubro del pedido es su rubro principal. */
+  primary: boolean;
   /** Aprobado, con identidad verificada y las credenciales que exige el rubro. Si no, puede recibir el pedido pero debe verificarse para aceptarlo. */
   verified: boolean;
 };
@@ -88,8 +94,8 @@ export type Candidate = {
 /**
  * Matching determinista. Filtros: categoría, cobertura, proveedor aprobado, identidad verificada,
  * cobros habilitados, credenciales requeridas vigentes, disponibilidad declarada, acepta trabajos.
- * Orden: disponibilidad, reputación (con prior: los nuevos no quedan excluidos), carga, cercanía,
- * y como desempate, menos invitaciones recientes (rotación justa).
+ * Orden: disponibilidad, reputación en el rubro (con prior: los nuevos no quedan excluidos), carga, cercanía,
+ * perfil completo y rubro principal; como desempate, menos invitaciones recientes (rotación justa).
  */
 export async function findCandidates(db: Db, requestId: string, opts: { excludeInvited?: boolean; verifiedOnly?: boolean } = {}): Promise<Candidate[]> {
   const [r] = await db<{ category_id: string | null; zone_id: string; region: string; preferred_windows: string[]; sandbox: boolean }[]>`
@@ -108,7 +114,7 @@ export async function findCandidatesFor(
   const requestId = q.excludeInvitedFor ?? null;
   const rows = await db<{
     id: string; display_name: string; base_zone_id: string | null; base_region: string | null; max_active_jobs: number;
-    active_jobs: number; reviews: number; rating_sum: number; recent_invites: number; verified: boolean;
+    active_jobs: number; reviews: number; rating_sum: number; cat_reviews: number; cat_rating_sum: number; is_primary: boolean; recent_invites: number; verified: boolean;
     slots: { weekday: number; start_minute: number; end_minute: number }[];
   }[]>`
     select p.id, p.display_name, p.base_zone_id, bz.region as base_region, p.max_active_jobs,
@@ -119,6 +125,9 @@ export async function findCandidatesFor(
       (select count(*)::int from jobs j where j.provider_id = p.id and j.status in ('pending_confirmation','confirmed','on_the_way','in_progress','pending_approval')) as active_jobs,
       (select count(*)::int from reviews_published v where v.provider_id = p.id) as reviews,
       (select coalesce(sum(rating), 0)::int from reviews_published v where v.provider_id = p.id) as rating_sum,
+      (select count(*)::int from reviews_published v where v.provider_id = p.id and v.category_id = ${r.category_id}) as cat_reviews,
+      (select coalesce(sum(rating), 0)::int from reviews_published v where v.provider_id = p.id and v.category_id = ${r.category_id}) as cat_rating_sum,
+      coalesce((select pc.is_primary from provider_categories pc where pc.provider_id = p.id and pc.category_id = ${r.category_id}), false) as is_primary,
       (select count(*)::int from request_invitations i where i.provider_id = p.id and i.created_at > now() - interval '14 days') as recent_invites,
       (select coalesce(json_agg(json_build_object('weekday', a.weekday, 'start_minute', a.start_minute, 'end_minute', a.end_minute)), '[]')
          from provider_availability a where a.provider_id = p.id) as slots
@@ -147,10 +156,16 @@ export async function findCandidatesFor(
         });
     const availability = overlaps ? 30 : 12;
     reasons.push(overlaps ? "Disponibilidad compatible con tus franjas" : "Disponibilidad parcial");
-    // Reputación bayesiana: prior de 4 estrellas con peso 3 (los nuevos arrancan en un valor neutro)
-    const bayes = (p.rating_sum + 4 * 3) / (p.reviews + 3);
+    // Reputación en ESTE rubro (bayesiana): el punto de partida es su promedio general (o 4 estrellas si es nuevo), con
+    // peso 3; cuantas más reseñas tenga en el rubro, más pesan esas. Así un buen electricista no hereda entera su nota
+    // en pintura, y uno nuevo en el rubro no queda excluido.
+    const prior = p.reviews ? p.rating_sum / p.reviews : 4;
+    const bayes = (p.cat_rating_sum + prior * 3) / (p.cat_reviews + 3);
     const reputation = Math.round(((bayes - 1) / 4) * 30);
-    reasons.push(p.reviews ? `Reputación ${(p.rating_sum / p.reviews).toFixed(1)} (${p.reviews} reseñas)` : "Proveedor nuevo (sin reseñas aún)");
+    reasons.push(p.cat_reviews ? `Reputación en este rubro ${(p.cat_rating_sum / p.cat_reviews).toFixed(1)} (${p.cat_reviews} reseñas)` : p.reviews ? `Sin reseñas en este rubro (${(p.rating_sum / p.reviews).toFixed(1)} en otros)` : "Proveedor nuevo (sin reseñas aún)");
+    // Rubro principal: ahí aparece con prioridad; en sus rubros secundarios, más abajo.
+    const primaryBonus = p.is_primary ? 12 : 0;
+    reasons.push(p.is_primary ? "Es su rubro principal" : "Rubro secundario");
     // Carga de trabajo
     const load = Math.min(p.active_jobs / Math.max(p.max_active_jobs, 1), 1);
     const workload = Math.round(25 * (1 - load));
@@ -173,18 +188,24 @@ export async function findCandidatesFor(
     return {
       providerId: p.id,
       displayName: p.display_name,
-      score: availability + reputation + workload + proximity + completeness,
+      score: availability + reputation + workload + proximity + completeness + primaryBonus,
       reasons,
       activeJobs: p.active_jobs,
-      reviews: p.reviews,
-      rating: p.reviews ? Math.round((p.rating_sum / p.reviews) * 10) / 10 : null,
+      reviews: p.cat_reviews,
+      rating: p.cat_reviews ? Math.round((p.cat_rating_sum / p.cat_reviews) * 10) / 10 : null,
+      overallReviews: p.reviews,
+      overallRating: p.reviews ? Math.round((p.rating_sum / p.reviews) * 10) / 10 : null,
+      primary: p.is_primary,
       recentInvites: p.recent_invites,
       verified: p.verified,
     };
   });
   // Primero los verificados; dentro de cada grupo, por puntaje.
   candidates.sort((a, b) => Number(b.verified) - Number(a.verified) || b.score - a.score || a.recentInvites - b.recentInvites || a.providerId.localeCompare(b.providerId));
-  return candidates.map((c) => ({ providerId: c.providerId, displayName: c.displayName, score: c.score, reasons: c.reasons, activeJobs: c.activeJobs, reviews: c.reviews, rating: c.rating, verified: c.verified }));
+  return candidates.map((c) => ({
+    providerId: c.providerId, displayName: c.displayName, score: c.score, reasons: c.reasons, activeJobs: c.activeJobs,
+    reviews: c.reviews, rating: c.rating, overallReviews: c.overallReviews, overallRating: c.overallRating, primary: c.primary, verified: c.verified,
+  }));
 }
 
 async function transitionRequest(tx: Tx, requestId: string, from: RequestStatus, to: RequestStatus, side: ActorSide, actor: Actor | null, reason?: string) {

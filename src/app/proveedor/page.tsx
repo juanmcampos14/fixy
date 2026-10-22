@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/empty";
 import { ProviderStatusCard } from "@/components/provider/sections";
 import { StrengthMeter } from "@/components/provider/strength-meter";
 import { getProfileStrength } from "@/server/modules/providers";
+import { providerReach } from "@/server/modules/provider-reach";
+import { ReachCard } from "@/components/provider/reach-card";
 import { providerBalance } from "@/server/modules/withdrawals";
 import { sql } from "@/server/db/client";
 import { alertsState } from "@/server/modules/whatsapp-alerts";
@@ -25,7 +27,9 @@ export default async function ProviderHome() {
     getDashboard(actor.id, provider.id, isAdmin),
     isAdmin ? getOnboardingState(actor.id, provider.id) : Promise.resolve(null),
   ]);
-  const [strength, balance] = isAdmin ? await Promise.all([getProfileStrength(sql(), provider.id), providerBalance(sql(), provider.id)]) : [null, null];
+  const [strength, balance, reach] = isAdmin
+    ? await Promise.all([getProfileStrength(sql(), provider.id), providerBalance(sql(), provider.id), providerReach(sql(), provider.id)])
+    : [null, null, null];
   const alerts = await alertsState(actor.id);
   const pendingActions = dash.toConfirm.length + dash.extrasWaiting.length + dash.reschedulesToAnswer.length + dash.openDisputes.length;
 
@@ -44,6 +48,7 @@ export default async function ProviderHome() {
             Ya te pueden llegar pedidos de tu rubro y zona; para aceptarlos, completá lo que falta en <Link href="/proveedor/alta">Alta de proveedor</Link>.
           </Alert>
         )}
+        {reach && <ReachCard reach={reach} />}
         {strength && strength.score < 100 && <Card><StrengthMeter {...strength} max={3} /></Card>}
         {!alerts.on && (
           <Card className="ring-2 ring-[#25D366]/30">

@@ -5,7 +5,8 @@ import { publicFileUrl } from "@/server/storage";
 
 export type BookableProvider = {
   id: string; slug: string; displayName: string; kind: string; isDemo: boolean; description: string; yearsExperience: number | null;
-  rating: number | null; reviews: number; completedJobs: number; identityVerified: boolean; verified: boolean; credentials: string[];
+  /** Estrellas y reseñas en el rubro buscado; overall*: en todos sus rubros. */
+  rating: number | null; reviews: number; overallRating: number | null; overallReviews: number; primary: boolean; completedJobs: number; identityVerified: boolean; verified: boolean; credentials: string[];
   visitFeeMinor: number; visitFeeCredited: boolean; priceRefs: { title: string; fromMinor: number; note: string }[];
   availabilityMatch: boolean; sameZone: boolean; approvedAt: Date | null; avatarUrl: string | null;
 };
@@ -32,7 +33,7 @@ export async function listBookableProviders(
     const p = rows.find((r) => r.id === c.providerId)!;
     return {
       id: p.id, slug: p.slug, displayName: p.display_name, kind: p.kind, isDemo: p.is_demo, description: p.description, yearsExperience: p.years_experience,
-      rating: c.rating, reviews: c.reviews, completedJobs: p.completed, identityVerified: p.identity_status === "verified", verified: c.verified,
+      rating: c.rating, reviews: c.reviews, overallRating: c.overallRating, overallReviews: c.overallReviews, primary: c.primary, completedJobs: p.completed, identityVerified: p.identity_status === "verified", verified: c.verified,
       credentials: creds.filter((x) => x.provider_id === p.id).map((x) => x.name),
       visitFeeMinor: p.visit_fee_minor, visitFeeCredited: p.visit_fee_credited,
       priceRefs: refs.filter((r) => r.provider_id === p.id).slice(0, 4).map((r) => ({ title: r.title, fromMinor: r.from_minor, note: r.note })),
