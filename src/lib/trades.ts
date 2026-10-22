@@ -30,12 +30,12 @@ export function tradeSlugsFromText(raw: string): string[] {
 
 /** Cómo se llama a quien hace cada oficio (para buscar y mostrar "Plomero/a · Plomería"). */
 export const TRADE_PERSON: Record<string, string> = {
-  plomeria: "Plomero/a", electricidad: "Electricista", gas: "Gasista", climatizacion: "Técnico/a de aires", electrodomesticos: "Técnico/a de electrodomésticos",
+  plomeria: "Plomero/a", electricidad: "Electricista", gas: "Gasista", climatizacion: "Técnico/a de aires", electrodomesticos: "Técnico/a de heladeras",
   cerrajeria: "Cerrajero/a", pintura: "Pintor/a", albanileria: "Albañil", carpinteria: "Carpintero/a", limpieza: "Limpieza", informatica: "Técnico/a en informática",
   jardineria: "Jardinero/a", piletas: "Piletero/a", fumigacion: "Fumigador/a", volquetes: "Volquetes", mudanzas: "Fletes y mudanzas", reformas: "Constructor/a",
   arquitectura: "Arquitecto/a", decoracion: "Decorador/a", techos: "Techista", pisos: "Colocador/a de pisos", durlock: "Durlero/a", herreria: "Herrero/a",
   vidrieria: "Vidriero/a", marmoleria: "Marmolero/a", seguridad: "Alarmas y cámaras", "energia-solar": "Instalador/a solar", cortinas: "Cortinas y toldos",
-  tapiceria: "Tapicero/a", "tv-audio": "Técnico/a de TV y audio", domotica: "Domótica", calefaccion: "Calefaccionista", ascensores: "Ascensorista", mantenimiento: "Mantenimiento general",
+  tapiceria: "Tapicero/a", "tv-audio": "Técnico/a de TV y audio", domotica: "Domótica", calefaccion: "Calefaccionista", ascensores: "Ascensorista", mantenimiento: "Arreglos generales",
 };
 
 /** Los oficios más pedidos: se muestran primero, sin buscar. */

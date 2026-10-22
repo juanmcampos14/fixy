@@ -194,8 +194,9 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
         )}
       </div>
 
-      {/* El aviso y el botón quedan siempre a la vista, aunque la lista sea larga. */}
-      <div className="sticky bottom-4 mt-5 space-y-2">
+      {/* El aviso y el botón quedan siempre a la vista, aunque la lista sea larga. El fondo se funde hacia arriba para
+          que las tarjetas que pasan por detrás se desvanezcan en vez de quedar cortadas. */}
+      <div className="sticky bottom-0 -mx-4 mt-5 space-y-2 bg-gradient-to-t from-cream from-70% to-transparent px-4 pb-4 pt-8">
         {error && <p role="alert" className="rounded-2xl bg-danger-bg px-4 py-3 text-[16px] text-danger shadow-[var(--shadow-lift)]">{error}</p>}
         <button type="button" onClick={next} disabled={pending} className="m-btn m-btn-primary h-16 w-full text-xl shadow-[var(--shadow-lift)] disabled:opacity-60">
           {pending ? "Creando tu perfil…" : i === steps.length - 1 ? "Listo, sumarme" : <>Siguiente <ArrowRight className="h-5 w-5" aria-hidden /></>}

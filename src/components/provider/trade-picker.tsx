@@ -63,7 +63,13 @@ export function TradePicker({
   const big = size === "lg";
   // Grande, como se dice el oficio ("Electricista"); abajo y más chico, el rubro, si es distinto.
   const person = (c: TradeCategory) => TRADE_PERSON[c.slug] ?? c.name;
-  const sub = (c: TradeCategory) => (TRADE_PERSON[c.slug] && TRADE_PERSON[c.slug] !== c.name ? c.name : null);
+  // El rubro abajo solo si suma información y es corto: así todas las tarjetas tienen la misma altura.
+  const sub = (c: TradeCategory) => {
+    const p = TRADE_PERSON[c.slug];
+    if (!p || c.name.length > 18 || p.length > 16) return null;
+    const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return norm(p).includes(norm(c.name)) || norm(c.name).includes(norm(p)) ? null : c.name;
+  };
 
   return (
     <div className="space-y-4">
@@ -115,13 +121,13 @@ export function TradePicker({
           return (
             <li key={c.id}>
               <button type="button" onClick={() => toggle(c.id)} aria-pressed={on} disabled={!on && full}
-                className={cn("relative flex w-full cursor-pointer items-center gap-2.5 rounded-2xl p-3 text-left leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                className={cn("relative flex h-full w-full cursor-pointer items-center gap-2.5 rounded-2xl p-3 text-left leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                   big ? "min-h-[72px] text-[16px]" : "min-h-14 text-[15px]",
                   on ? "bg-fixy-50 ring-2 ring-fixy-700" : "bg-surface ring-1 ring-line hover:ring-fixy-500")}>
                 <CategoryIcon icon={c.icon} className={cn("shrink-0", big ? "h-6 w-6" : "h-5 w-5")} />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">{person(c)}</span>
-                  {sub(c) && <span className={cn("block text-muted", big ? "text-sm" : "text-xs")}>{sub(c)}</span>}
+                  <span className="line-clamp-2 block font-semibold hyphens-auto [overflow-wrap:anywhere]">{person(c)}</span>
+                  {sub(c) && <span className={cn("block truncate text-muted", big ? "text-sm" : "text-xs")}>{sub(c)}</span>}
                 </span>
                 {on && <Check className="h-5 w-5 shrink-0 text-fixy-800" aria-hidden />}
               </button>
