@@ -99,9 +99,38 @@ export async function setProviderCategoriesTx(tx: Tx, providerId: string, catego
   for (const c of ids) await tx`insert into provider_categories (provider_id, category_id, is_primary) values (${providerId}, ${c}, ${c === primary})`;
 }
 
+/**
+ * "No está mi oficio": guarda lo que escribió para que el equipo lo sume al catálogo y lo avisa. Si no eligió ningún
+ * rubro de la lista, mientras tanto queda en mantenimiento general (así igual le llegan pedidos).
+ */
+export async function resolveTradesTx(tx: Tx, providerId: string, categoryIds: string[], otherTrade?: string | null): Promise<string[]> {
+  const other = (otherTrade ?? "").trim().slice(0, 80);
+  let ids = [...new Set(categoryIds)];
+  if (other.length >= 2) {
+    const inserted = await tx`insert into trade_suggestions (provider_id, text) values (${providerId}, ${other}) on conflict do nothing returning id`;
+    if (inserted.length) {
+      const { notify, staffRecipients } = await import("@/server/notifications");
+      const [p] = await tx<{ display_name: string }[]>`select display_name from providers where id = ${providerId}`;
+      await notify(tx, await staffRecipients(tx), {
+        type: "provider_review", title: `Oficio nuevo sugerido: «${other}»`, body: `${p?.display_name ?? "Un profesional"} no encontró su oficio en la lista. Revisá si conviene sumarlo al catálogo.`,
+        link: `/admin/proveedores/${providerId}`, email: false,
+      });
+    }
+    if (!ids.length) {
+      const [m] = await tx<{ id: string }[]>`select id from categories where slug = 'mantenimiento' and active`;
+      if (m) ids = [m.id];
+    }
+  }
+  if (!ids.length) throw invalid("Elegí al menos un oficio de la lista (o escribí el tuyo si no está).");
+  return ids;
+}
+
+const otherTradeField = z.string().trim().max(80).optional().or(z.literal(""));
+
 export const coverageSchema = z.object({
-  categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos una especialidad."),
+  categoryIds: z.array(z.string().uuid()).default([]),
   primaryCategoryId: z.string().uuid().optional().or(z.literal("")),
+  otherTrade: otherTradeField,
   zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona."),
   baseZoneId: z.string().uuid().optional().or(z.literal("")),
   acceptingJobs: z.boolean(),
@@ -116,10 +145,11 @@ export async function updateCoverage(actor: Actor, providerId: string, input: z.
   const data = coverageSchema.parse(input);
   return systemTx(async (tx) => {
     await assertProviderAdmin(tx, actor, providerId);
-    const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(data.categoryIds)}`;
+    const categoryIds = await resolveTradesTx(tx, providerId, data.categoryIds, data.otherTrade);
+    const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(categoryIds)}`;
     const validZones = await tx<{ id: string }[]>`select id from zones where active and id in ${tx(data.zoneIds)}`;
-    if (validCats.length !== data.categoryIds.length || validZones.length !== data.zoneIds.length) throw invalid("Selección inválida.");
-    await setProviderCategoriesTx(tx, providerId, data.categoryIds, data.primaryCategoryId || null);
+    if (validCats.length !== categoryIds.length || validZones.length !== data.zoneIds.length) throw invalid("Selección inválida.");
+    await setProviderCategoriesTx(tx, providerId, categoryIds, data.primaryCategoryId || null);
     await tx`delete from provider_zones where provider_id = ${providerId}`;
     await tx`delete from provider_availability where provider_id = ${providerId}`;
     for (const z of data.zoneIds) await tx`insert into provider_zones values (${providerId}, ${z})`;
@@ -509,8 +539,9 @@ export const quickStartSchema = z.object({
   contactPhone: z.string().trim().min(6, "Ingresá un celular para avisarte de pedidos.").max(40),
   description: z.string().trim().min(30, "Contá un poco más sobre tu servicio (mínimo 30 caracteres).").max(2000),
   yearsExperience: z.coerce.number().int().min(0).max(80).optional(),
-  categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos un rubro."),
+  categoryIds: z.array(z.string().uuid()).default([]),
   primaryCategoryId: z.string().uuid().optional().or(z.literal("")),
+  otherTrade: otherTradeField,
   zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona."),
   baseZoneId: z.string().uuid().optional().or(z.literal("")),
   availability: z.array(z.object({ weekday: z.number().int().min(0).max(6), startMinute: z.number().int().min(0).max(1439), endMinute: z.number().int().min(1).max(1440) })).default([]),
@@ -528,10 +559,11 @@ export async function quickStartProvider(actor: Actor, input: z.input<typeof qui
     }, origin);
     const [{ n }] = await tx<{ n: number }[]>`select count(*)::int as n from provider_categories where provider_id = ${providerId}`;
     if (n > 0) return providerId; // ya tenía un perfil armado: no pisamos nada
-    const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(d.categoryIds)}`;
+    const categoryIds = await resolveTradesTx(tx, providerId, d.categoryIds, d.otherTrade);
+    const validCats = await tx<{ id: string }[]>`select id from categories where active and id in ${tx(categoryIds)}`;
     const validZones = await tx<{ id: string }[]>`select id from zones where active and id in ${tx(d.zoneIds)}`;
-    if (validCats.length !== new Set(d.categoryIds).size || validZones.length !== new Set(d.zoneIds).size) throw invalid("Selección inválida.");
-    await setProviderCategoriesTx(tx, providerId, d.categoryIds, d.primaryCategoryId || null);
+    if (validCats.length !== categoryIds.length || validZones.length !== new Set(d.zoneIds).size) throw invalid("Selección inválida.");
+    await setProviderCategoriesTx(tx, providerId, categoryIds, d.primaryCategoryId || null);
     for (const z of new Set(d.zoneIds)) await tx`insert into provider_zones values (${providerId}, ${z})`;
     for (const s of d.availability.filter((a) => a.endMinute > a.startMinute))
       await tx`insert into provider_availability (provider_id, weekday, start_minute, end_minute) values (${providerId}, ${s.weekday}, ${s.startMinute}, ${s.endMinute})`;

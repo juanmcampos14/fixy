@@ -3,7 +3,7 @@
  * deja ver todo a operación (app.is_staff), y nada a cualquier otro usuario.
  */
 import "server-only";
-import { asUser, type Tx } from "@/server/db/client";
+import { asUser, sql, type Tx } from "@/server/db/client";
 import { signedFileUrl, publicFileUrl } from "@/server/storage";
 import { timeline, type TimelineEvent } from "./shared";
 import { providerEligibility, onboardingChecklist } from "@/server/modules/providers";
@@ -567,4 +567,11 @@ export async function getReviewDispute(userId: string, id: string) {
       select rating, comment, reason, created_at from review_revisions where review_id = ${d.review_id} order by created_at`;
     return { d, review, job, client, provider, messages, revisions };
   });
+}
+
+/** Oficios que escribieron profesionales porque no estaban en la lista (tabla de sistema, sin datos personales). */
+export async function listTradeSuggestions() {
+  return sql()<{ id: string; text: string; created_at: Date; provider: string; provider_id: string }[]>`
+    select t.id, t.text, t.created_at, p.display_name as provider, p.id as provider_id
+    from trade_suggestions t join providers p on p.id = t.provider_id where t.status = 'open' order by t.created_at desc limit 50`;
 }

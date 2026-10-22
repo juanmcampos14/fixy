@@ -13,7 +13,9 @@ import { registerUser } from "@/server/modules/users";
 import { rateLimit } from "@/server/rate-limit";
 
 const schema = z.object({
-  categoryIds: z.array(z.string().uuid()).min(1, "Elegí al menos un oficio.").max(5, "Elegí hasta 5 oficios."),
+  categoryIds: z.array(z.string().uuid()).max(5, "Elegí hasta 5 oficios.").default([]),
+  primaryCategoryId: z.string().uuid().optional().or(z.literal("")),
+  otherTrade: z.string().trim().max(80).optional().or(z.literal("")),
   zoneIds: z.array(z.string().uuid()).min(1, "Elegí al menos una zona.").max(12, "Elegí hasta 12 zonas."),
   fullName: z.string().trim().min(3, "Escribí tu nombre y apellido.").max(120),
   phone: z.string().trim().min(6, "Escribí tu celular.").max(40),
@@ -41,7 +43,8 @@ export async function guidedSignupAction(payload: GuidedSignupPayload): Promise<
       actor = await systemTx((tx) => loadActor(tx, userId));
     }
     if (!actor) return { error: "No pudimos crear tu cuenta. Probá de nuevo." };
-    const cats = await sql()<{ id: string; name: string }[]>`select id, name from categories where id in ${sql()(d.categoryIds)} and active`;
+    if (!d.categoryIds.length && !d.otherTrade) return { error: "Elegí al menos un oficio." };
+    const cats = d.categoryIds.length ? await sql()<{ id: string; name: string }[]>`select id, name from categories where id in ${sql()(d.categoryIds)} and active` : [{ id: "", name: d.otherTrade ?? "" }];
     const zones = await sql()<{ id: string; name: string }[]>`select id, name from zones where id in ${sql()(d.zoneIds)} and active`;
     let origin: { source?: string; referrerSlug?: string } = { source: "alta-guiada" };
     try {
@@ -52,7 +55,7 @@ export async function guidedSignupAction(payload: GuidedSignupPayload): Promise<
     await quickStartProvider(actor, {
       kind: "individual", displayName: d.fullName, contactPhone: d.phone, description,
       // El primer oficio que tocó es el principal.
-      categoryIds: d.categoryIds, primaryCategoryId: d.categoryIds[0], zoneIds: d.zoneIds, baseZoneId: d.zoneIds[0],
+      categoryIds: d.categoryIds, primaryCategoryId: d.primaryCategoryId || d.categoryIds[0] || "", otherTrade: d.otherTrade, zoneIds: d.zoneIds, baseZoneId: d.zoneIds[0],
       // Horario de arranque: lunes a sábado de 8 a 19. Se cambia después desde el perfil.
       availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startMinute: 8 * 60, endMinute: 19 * 60 })),
       priceRefs: [], aiAssisted: false,

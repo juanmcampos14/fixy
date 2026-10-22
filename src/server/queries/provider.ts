@@ -73,8 +73,8 @@ export async function getOnboardingState(userId: string, providerId: string) {
 
 export async function getProviderSetup(userId: string, providerId: string) {
   return asUser(userId, async (tx) => {
-    const categories = await tx<{ id: string; name: string; icon: string; description: string }[]>`
-      select id, name, icon, description from categories where active order by sort, name`;
+    const categories = await tx<{ id: string; slug: string; name: string; icon: string; description: string }[]>`
+      select id, slug, name, icon, description from categories where active order by sort, name`;
     const zones = await tx<{ id: string; name: string; region: string }[]>`select id, name, region from zones where active order by sort, name`;
     const catRows = await tx<{ category_id: string; is_primary: boolean }[]>`select category_id, is_primary from provider_categories where provider_id = ${providerId}`;
     const selectedCats = catRows.map((r) => r.category_id);

@@ -3,7 +3,7 @@
 import { REGION_LABEL } from "@/lib/regions";
 import { useMemo, useState, useTransition } from "react";
 import { ArrowLeft, Building2, LoaderCircle, Plus, Sparkles, Trash2, User } from "lucide-react";
-import { CategoryIcon } from "@/components/category-icon";
+import { TradePicker } from "./trade-picker";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -12,7 +12,7 @@ import { profileStrength } from "@/lib/profile-strength";
 import { cn } from "@/lib/cn";
 import { draftProfileWithAi, quickStartAction, type QuickDraft } from "@/app/proveedor/alta/actions";
 
-type Cat = { id: string; name: string; icon: string };
+type Cat = { id: string; slug: string; name: string; icon: string };
 type Zone = { id: string; name: string; region: string };
 const REGION = REGION_LABEL;
 const PRESETS: { key: QuickDraft["availability"]; label: string; slots: number }[] = [
@@ -39,6 +39,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
   const [aiUsed, setAiUsed] = useState(false);
   // Rubro principal: el elegido, o el primero que tocó.
   const [primaryPick, setPrimaryPick] = useState("");
+  const [otherTrade, setOtherTrade] = useState("");
   const primary = d.categoryIds.includes(primaryPick) ? primaryPick : (d.categoryIds[0] ?? "");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[] | undefined>>({});
@@ -86,7 +87,7 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
     setFieldErrors({});
     startSave(async () => {
       const r = await quickStartAction({ kind, displayName: d.displayName, contactPhone: phone, description: d.description, yearsExperience: d.yearsExperience,
-        categoryIds: d.categoryIds, primaryCategoryId: primary, zoneIds: d.zoneIds, baseZoneId: d.baseZoneId, availability: d.availability, priceRefs: d.priceRefs, aiAssisted: aiUsed });
+        categoryIds: d.categoryIds, primaryCategoryId: primary, otherTrade, zoneIds: d.zoneIds, baseZoneId: d.baseZoneId, availability: d.availability, priceRefs: d.priceRefs, aiAssisted: aiUsed });
       if (r?.error) { setError(r.error); setFieldErrors(r.fieldErrors ?? {}); }
     });
   }
@@ -153,23 +154,9 @@ export function QuickStart({ categories, zones, aiAvailable, defaultName }: { ca
         <section className="space-y-3">
           <h2 className="text-lg font-bold">¿Qué hacés?</h2>
           {fieldErrors.categoryIds && <p className="text-sm text-danger">{fieldErrors.categoryIds[0]}</p>}
-          <div className="flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <button key={c.id} type="button" aria-pressed={d.categoryIds.includes(c.id)} onClick={() => toggle("categoryIds", c.id)} className={chip(d.categoryIds.includes(c.id))}>
-                <CategoryIcon icon={c.icon} className="h-4 w-4" />{c.name}
-                {primary === c.id && d.categoryIds.length > 1 && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[11px]">Principal</span>}
-              </button>
-            ))}
-          </div>
-          {d.categoryIds.length > 1 && (
-            <div>
-              <label htmlFor="qs-primary" className="mb-1 block text-[15px] font-semibold">¿Cuál es tu rubro principal?</label>
-              <Select id="qs-primary" value={primary} onChange={(e) => setPrimaryPick(e.target.value)} className="sm:max-w-sm">
-                {categories.filter((c) => d.categoryIds.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
-              <p className="mt-1 text-sm text-muted">Es en el que aparecés primero. En los demás también te llegan pedidos, pero más abajo.</p>
-            </div>
-          )}
+          <TradePicker categories={categories} max={10}
+            value={{ ids: d.categoryIds, primaryId: primary || null, other: otherTrade }}
+            onChange={(v) => { setD({ ...d, categoryIds: v.ids }); setPrimaryPick(v.primaryId ?? ""); setOtherTrade(v.other); }} />
         </section>
 
         <section className="space-y-3">

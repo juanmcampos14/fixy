@@ -177,3 +177,46 @@ describe("cuenta de WhatsApp que suma email y clave", () => {
     await expect(setEmailAccess(await actor("ana"), { email: `x.${Date.now()}@test.local`, password: "clave-segura-1" })).rejects.toThrow(/ya tiene un email/);
   });
 });
+
+describe("oficios para tocar (sin escribir)", () => {
+  const primaryOf = async (phone: string) => (await sql()<{ slug: string; is_primary: boolean }[]>`
+    select c.slug, pc.is_primary from users u join provider_members m on m.user_id = u.id join provider_categories pc on pc.provider_id = m.provider_id
+    join categories c on c.id = pc.category_id where u.whatsapp_phone = ${phone} order by pc.is_primary desc, c.slug`);
+
+  it("elige de la lista, suma otro y el primero queda como principal", async () => {
+    const phone = phoneFor(31);
+    await say(phone, "Hola, quiero trabajar con Fixy");
+    await say(phone, "Marta Ruiz");
+    const [list] = await outs(phone, 1);
+    expect(list).toContain("Elegir oficio");
+    expect(list).toContain("trade:electricidad");
+    expect(list).toContain("trade_other");
+    await tap(phone, "trade:electricidad");
+    expect((await outs(phone, 1))[0]).toContain("Agregar otro");
+    await tap(phone, "trade_more");
+    expect((await outs(phone, 1))[0]).not.toContain("trade:electricidad"); // ya elegido: no se repite
+    await tap(phone, "trade:gas");
+    await tap(phone, "trade_done");
+    expect((await state(phone)).step).toBe("pro_zone");
+    await say(phone, "Morón, Buenos Aires");
+    await tap(phone, "pro_accept");
+    expect(await primaryOf(phone)).toEqual([{ slug: "electricidad", is_primary: true }, { slug: "gas", is_primary: false }]);
+  });
+
+  it("si su oficio no está, lo escribe: queda como sugerencia para el equipo y entra en mantenimiento", async () => {
+    const phone = phoneFor(32);
+    await say(phone, "Hola, quiero trabajar con Fixy");
+    await say(phone, "Raúl Gómez");
+    await tap(phone, "trade_other");
+    await say(phone, "vitralista");
+    expect((await state(phone)).step).toBe("pro_trade"); // repregunta una vez, con la lista
+    await say(phone, "vitralista artesanal");
+    expect((await state(phone)).step).toBe("pro_zone");
+    await say(phone, "Morón, Buenos Aires");
+    await tap(phone, "pro_accept");
+    expect(await primaryOf(phone)).toEqual([{ slug: "mantenimiento", is_primary: true }]);
+    const [sug] = await sql()<{ text: string; status: string }[]>`
+      select t.text, t.status from trade_suggestions t join provider_members m on m.provider_id = t.provider_id join users u on u.id = m.user_id where u.whatsapp_phone = ${phone}`;
+    expect(sug).toEqual({ text: "vitralista artesanal", status: "open" });
+  });
+});

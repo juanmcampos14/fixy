@@ -10,6 +10,7 @@ import { loadActor } from "@/server/auth/actor";
 import { audit } from "@/server/audit";
 import { env } from "@/server/env";
 import { normalize, triageByRules } from "@/server/assistant/rules";
+import { TRADE_PERSON, tradeSlugsFromText } from "@/lib/trades";
 import { guessZoneFromText } from "@/lib/zone-match";
 import { nearestZoneCode } from "@/lib/zone-centroids";
 import { acceptProviderTerms, createProvider, updateCoverage } from "@/server/modules/providers";
@@ -17,7 +18,7 @@ import { rematchOpenRequests } from "@/server/modules/requests";
 import { notify, staffRecipients } from "@/server/notifications";
 import type { OutMessage } from "./client";
 
-export type ProDraft = { name?: string; categories?: string[]; tradeText?: string; tradeTries?: number; zoneId?: string; zoneName?: string; zoneTries?: number; ref?: string | null };
+export type ProDraft = { name?: string; categories?: string[]; tradeText?: string; tradeTries?: number; otherTrade?: string; zoneId?: string; zoneName?: string; zoneTries?: number; ref?: string | null };
 export type ProStep = "pro_name" | "pro_trade" | "pro_zone" | "pro_terms";
 type Zone = { id: string; code: string; name: string; region: string; match_names: string[]; province: string | null; catch_all: boolean };
 type In = { text: string; reply: string; location?: { lat: number; lng: number; name?: string; address?: string }; isImage: boolean };
@@ -35,27 +36,9 @@ export const wantsProSignup = (t: string) =>
 /** Código de quien lo invitó, si vino en el mensaje del link ("… (invitación plomeria-sosa-1a2b)"). */
 export const refFromText = (raw: string) => raw.match(/invitaci[oó]n\s+([a-z0-9]+(?:-[a-z0-9]+)*)/i)?.[1]?.toLowerCase() ?? null;
 
-/** Nombres de oficio tal como los dice la gente → rubros del catálogo. */
-const TRADE_WORDS: [RegExp, string][] = [
-  [/\bplomer|\bsanitarist|\bdestapacion/, "plomeria"], [/\belectricist|\belectricidad/, "electricidad"], [/\bgasist|\bgas\b/, "gas"],
-  [/\baires?\b|\bsplit|\brefrigeracion|\bclimatiza/, "climatizacion"], [/\bheladera|\blavarropa|\belectrodomestic/, "electrodomesticos"],
-  [/\bcerrajer/, "cerrajeria"], [/\bpintor|\bpintura|\bpinto\b/, "pintura"], [/\balbanil|\balbanileria|\bmamposter/, "albanileria"],
-  [/\bcarpinter|\bmueble/, "carpinteria"], [/\blimpieza|\blimpio\b/, "limpieza"], [/\binformatic|\bcomputadora|\bredes\b|\bwifi/, "informatica"],
-  [/\bjardiner|\bpaisajis|\bparquista|\bcorto (el )?pasto|\bpoda/, "jardineria"], [/\bpileter|\bpiscin|\bpiletas?\b/, "piletas"],
-  [/\bfumig|\bplagas|\bdesinfecc/, "fumigacion"], [/\bvolquete|\bescombro/, "volquetes"], [/\bflete|\bmudanza/, "mudanzas"],
-  [/\bconstruc|\breforma|\bobras?\b|\bmaestro mayor/, "reformas"], [/\barquitect|\bingenier/, "arquitectura"], [/\bdecorad|\binterioris/, "decoracion"],
-  [/\btechist|\btechos?\b|\bmembrana|\bzinguer/, "techos"], [/\bpisos?\b|\bceramic|\bporcelanato|\bcolocador|\bparquet/, "pisos"],
-  [/\bdurlock|\byeser|\bcielorraso/, "durlock"], [/\bherrer|\bsoldad|\bporton/, "herreria"], [/\bvidrier|\bvidrios?\b|\baberturas?\b|\baluminio/, "vidrieria"],
-  [/\bmarmol|\bmesadas?\b/, "marmoleria"], [/\balarma|\bcamaras?\b|\bportero/, "seguridad"], [/\bsolar/, "energia-solar"],
-  [/\bcortina|\bpersiana|\btoldo/, "cortinas"], [/\btapicer/, "tapiceria"], [/\btelevisor|\btv\b|\baudio\b/, "tv-audio"], [/\bdomotic/, "domotica"],
-  [/\bcalefacc|\bcaldera|\bradiador/, "calefaccion"], [/\bascensor/, "ascensores"],
-  [/\bmantenimiento|\bchangas|\barreglos varios|\bde todo|\bmultioficio|\bhandyman/, "mantenimiento"],
-];
-
 /** Rubros que reconoce en lo que escribió ("soy plomero y gasista", "arreglo aires y heladeras"). Máximo cinco. */
 export function tradesFromText(raw: string): string[] {
-  const t = ` ${normalize(raw)} `;
-  const found = TRADE_WORDS.filter(([re]) => re.test(t)).map(([, slug]) => slug);
+  const found = tradeSlugsFromText(raw);
   if (!found.length) {
     const r = triageByRules(raw);
     if (r.categorySlug && r.categorySlug !== "otro") found.push(r.categorySlug);
@@ -100,10 +83,45 @@ export async function startProSignup(ctx: Ctx, rawText: string): Promise<Result>
   return { step: "pro_name", pro };
 }
 
+/** Oficios que se ofrecen en la lista de WhatsApp (entran 10 filas: 9 oficios + "Otro"). */
+const WA_TRADES = ["electricidad", "plomeria", "gas", "pintura", "albanileria", "climatizacion", "cerrajeria", "jardineria", "carpinteria", "herreria", "mantenimiento"];
+const MAX_WA_TRADES = 3;
+
+/** Lista para tocar el oficio, sin escribir. Si no está, "Otro" pide escribirlo. */
+async function tradeList(pro: ProDraft, ctx: Ctx, text: string) {
+  const chosen = new Set(pro.categories ?? []);
+  const slugs = WA_TRADES.filter((s) => !chosen.has(s)).slice(0, 9);
+  const rows = await sql()<{ slug: string; name: string }[]>`select slug, name from categories where slug in ${sql()(slugs)} and active`;
+  ctx.out.push({
+    kind: "list", text, button: "Elegir oficio",
+    sections: [{
+      title: "Oficios",
+      rows: [
+        ...slugs.map((s) => rows.find((r) => r.slug === s)).filter((r): r is { slug: string; name: string } => !!r)
+          .map((r) => ({ id: `trade:${r.slug}`, title: r.name.slice(0, 24), description: (TRADE_PERSON[r.slug] ?? "").slice(0, 72) })),
+        { id: "trade_other", title: "Otro (lo escribo)", description: "Si tu oficio no está en la lista" },
+      ],
+    }],
+  });
+}
+
 function askTrade(pro: ProDraft, ctx: Ctx): Result | Promise<Result> {
   if (pro.categories?.length) return askZone(pro, ctx);
-  ctx.out.push({ kind: "text", text: `*2 de 3* · ¿Qué trabajo hacés?\nEscribilo como te salga. Por ejemplo: _plomero_, _electricista y gasista_, _pintor_, _jardinero_.` });
-  return { step: "pro_trade", pro };
+  return tradeList(pro, ctx, "*2 de 3* · ¿Qué trabajo hacés?\nTocá *Elegir oficio* y elegí el tuyo. Si no está, elegí *Otro* y escribilo.").then(() => ({ step: "pro_trade" as const, pro }));
+}
+
+/** Después de elegir un oficio: ¿suma otro o sigue? */
+async function afterTrade(pro: ProDraft, ctx: Ctx, picked: string[]): Promise<Result> {
+  const categories = [...new Set([...(pro.categories ?? []), ...picked])].slice(0, MAX_WA_TRADES);
+  const next = { ...pro, categories, tradeTries: 0 };
+  if (categories.length >= MAX_WA_TRADES) return askZone(next, ctx);
+  const names = await categoryNames(categories);
+  ctx.out.push({
+    kind: "buttons",
+    text: `Anoté: *${list(names)}*${categories.length === 1 ? " (tu oficio principal)" : ""}. ¿Hacés algún otro oficio?`,
+    buttons: [{ id: "trade_more", title: "Agregar otro" }, { id: "trade_done", title: "No, seguir" }],
+  });
+  return { step: "pro_trade", pro: next };
 }
 
 function askZone(pro: ProDraft, ctx: Ctx): Result {
@@ -138,17 +156,32 @@ export async function proSignupStep(step: ProStep, pro: ProDraft, input: In, ctx
       return askTrade({ ...pro, name: titleCase(text).slice(0, 80) }, ctx);
     }
     case "pro_trade": {
-      const cats = tradesFromText(text);
-      if (!cats.length) {
-        const tries = (pro.tradeTries ?? 0) + 1;
-        if (tries < 2) {
-          ctx.out.push({ kind: "text", text: "No reconocí ese oficio 🤔 Decímelo con otras palabras. Por ejemplo: _plomero_, _electricista_, _albañil_, _pintor_, _jardinero_, _fletes_." });
-          return { step, pro: { ...pro, tradeTries: tries } };
-        }
-        // No lo trabamos: entra como arreglos generales y el equipo lo ajusta con lo que escribió.
-        return askZone({ ...pro, categories: ["mantenimiento"], tradeText: text.slice(0, 300) }, ctx);
+      // Lo que tocó en la lista.
+      if (input.reply?.startsWith("trade:")) return afterTrade(pro, ctx, [input.reply.slice(6)]);
+      if (input.reply === "trade_done") return pro.categories?.length ? askZone(pro, ctx) : askTrade(pro, ctx);
+      if (input.reply === "trade_more") {
+        await tradeList(pro, ctx, "Elegí el otro oficio. Si no está, elegí *Otro* y escribilo.");
+        return { step, pro };
       }
-      return askZone({ ...pro, categories: cats, tradeText: text.slice(0, 300) }, ctx);
+      if (input.reply === "trade_other") {
+        ctx.out.push({ kind: "text", text: "Escribime tu oficio como lo decís vos. Por ejemplo: _vitralista_, _afilador_, _colocador de alfombras_." });
+        return { step, pro };
+      }
+      // Lo escribió a mano: si lo reconocemos, lo elegimos de la lista.
+      const cats = tradesFromText(text);
+      if (cats.length) {
+        // Escrito puede nombrar varios de una vez ("plomero y gasista"): sigue directo a la zona.
+        const categories = [...new Set([...(pro.categories ?? []), ...cats])].slice(0, 5);
+        return askZone({ ...pro, categories, tradeText: text.slice(0, 300), tradeTries: 0 }, ctx);
+      }
+      const tries = (pro.tradeTries ?? 0) + 1;
+      if (tries < 2) {
+        await tradeList({ ...pro, tradeTries: tries }, ctx, "No reconocí ese oficio 🤔 Fijate si está en la lista; si no, elegí *Otro* y escribilo con otras palabras.");
+        return { step, pro: { ...pro, tradeTries: tries } };
+      }
+      // No lo trabamos: queda como sugerencia para el catálogo y, si no eligió otro, entra en arreglos generales.
+      const withOther = { ...pro, otherTrade: text.slice(0, 80), tradeText: text.slice(0, 300) };
+      return askZone(pro.categories?.length ? withOther : { ...withOther, categories: ["mantenimiento"] }, ctx);
     }
     case "pro_zone": {
       const all = await zones();
@@ -210,7 +243,7 @@ async function finish(pro: ProDraft, ctx: Ctx): Promise<Result> {
   const found = await sql()<{ id: string; slug: string }[]>`select id, slug from categories where slug in ${sql()(pro.categories)} and active`;
   const cats = pro.categories.map((slug) => found.find((c) => c.slug === slug)).filter((c): c is { id: string; slug: string } => !!c);
   await updateCoverage(withProvider, providerId, {
-    categoryIds: cats.map((c) => c.id), primaryCategoryId: cats[0]?.id, zoneIds: [pro.zoneId], baseZoneId: pro.zoneId, acceptingJobs: true, maxActiveJobs: 5,
+    categoryIds: cats.map((c) => c.id), primaryCategoryId: cats[0]?.id, otherTrade: pro.otherTrade ?? "", zoneIds: [pro.zoneId], baseZoneId: pro.zoneId, acceptingJobs: true, maxActiveJobs: 5,
     // Horario de arranque: lunes a sábado de 8 a 19. Lo cambia cuando quiera desde su panel.
     availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startMinute: 8 * 60, endMinute: 19 * 60 })),
   });

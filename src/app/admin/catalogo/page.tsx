@@ -2,7 +2,7 @@ import { REGION_LABEL } from "@/lib/regions";
 import { ChevronDown } from "lucide-react";
 import { requireSection } from "@/server/auth/session";
 import { can } from "@/server/auth/permissions";
-import { getCatalogAdmin } from "@/server/queries/admin";
+import { getCatalogAdmin, listTradeSuggestions } from "@/server/queries/admin";
 import { modeLabel } from "@/server/domain/labels";
 import { PageHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,9 @@ import { ActionForm, ConfirmAction, SubmitButton } from "@/components/ui/form";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/field";
 import { CategoryIcon } from "@/components/category-icon";
 import { DataTable, Section, Td, Th } from "@/components/admin/ui";
-import { formatMoney, minorToInput } from "@/lib/format";
+import { formatDateTime, formatMoney, minorToInput } from "@/lib/format";
 import {
+  resolveTradeSuggestionAction,
   createZoneAction, deleteQuestionAction, saveCategoryAction, saveCategoryCredentialsAction, saveQuestionAction, saveServiceAction, zoneActiveAction,
 } from "../actions";
 
@@ -30,6 +31,7 @@ export default async function CatalogAdmin() {
   const actor = (await requireSection("catalogo")).actor;
   const canEdit = can(actor, "catalogo", "manage");
   const c = await getCatalogAdmin(actor.id);
+  const suggestions = await listTradeSuggestions();
 
   return (
     <>
@@ -40,6 +42,32 @@ export default async function CatalogAdmin() {
       />
 
       <div className="space-y-6">
+        {suggestions.length > 0 && (
+          <Section title="Oficios sugeridos por profesionales" description="Los escribieron porque no estaban en la lista. Mientras tanto quedaron en el rubro más parecido (o mantenimiento general). Si conviene, creá el rubro abajo y marcalo como agregado.">
+            <DataTable caption="Oficios sugeridos" minWidth={640}>
+              <thead><tr><Th>Oficio</Th><Th>Profesional</Th><Th>Fecha</Th>{canEdit && <Th>Acción</Th>}</tr></thead>
+              <tbody>
+                {suggestions.map((t) => (
+                  <tr key={t.id}>
+                    <Td className="font-semibold">{t.text}</Td>
+                    <Td><a className="underline" href={`/admin/proveedores/${t.provider_id}`}>{t.provider}</a></Td>
+                    <Td className="text-sm">{formatDateTime(t.created_at)}</Td>
+                    {canEdit && (
+                      <Td>
+                        <div className="flex flex-wrap gap-2">
+                          <ConfirmAction action={resolveTradeSuggestionAction} label="Ya lo agregué" size="sm" variant="secondary" title="Marcar como agregado"
+                            description="Asigná el rubro nuevo al profesional desde su ficha si hace falta." confirmLabel="Marcar" hidden={{ id: t.id, status: "added" }} />
+                          <ConfirmAction action={resolveTradeSuggestionAction} label="Descartar" size="sm" variant="ghost" title="Descartar la sugerencia"
+                            description="El profesional sigue en el rubro en el que quedó." confirmLabel="Descartar" hidden={{ id: t.id, status: "dismissed" }} />
+                        </div>
+                      </Td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          </Section>
+        )}
         <Section title="Categorías y servicios" description="Desactivar una categoría o servicio no afecta solicitudes ni trabajos existentes: deja de ofrecerse para nuevos pedidos.">
           <ul className="space-y-3">
             {c.categories.map((cat) => (

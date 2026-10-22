@@ -351,3 +351,13 @@ export async function updateReviewSettings(actor: Actor, input: z.input<typeof r
     await audit(tx, actor, "settings.reviews_update", "platform_settings", null, why, values);
   });
 }
+
+/** Oficio sugerido por un profesional: el equipo lo marca como agregado al catálogo o lo descarta. */
+export async function resolveTradeSuggestion(actor: Actor, id: string, status: "added" | "dismissed") {
+  if (!can(actor, "catalogo", "manage")) throw forbidden();
+  return systemTx(async (tx) => {
+    const rows = await tx`update trade_suggestions set status = ${status} where id = ${id} and status = 'open' returning id`;
+    if (!rows.length) throw invalid("Esa sugerencia ya estaba resuelta.");
+    await audit(tx, actor, "catalog.trade_suggestion", "trade_suggestion", id, status);
+  });
+}

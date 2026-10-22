@@ -14,8 +14,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge, StatusBadge, TestModeBadge } from "@/components/ui/badge";
 import { ActionForm, SubmitButton } from "@/components/ui/form";
 import { Checkbox, ChoiceChip, Field, Input, Select } from "@/components/ui/field";
-import { CategoryIcon } from "@/components/category-icon";
-import { PrimaryCategoryPicker } from "./primary-category";
+import { TradePickerField } from "./trade-picker-field";
 import { ButtonLink } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { SOCIAL_NETWORKS } from "@/lib/social";
@@ -94,15 +93,9 @@ export function CoverageSection({ setup, provider, id = "servicios" }: { setup: 
       <CardHeader title={<span id={`${id}-t`}>Servicios, zonas y disponibilidad</span>} description="Te invitamos solo a solicitudes que coinciden con esto." />
       <ActionForm action={updateCoverageAction} className="space-y-6">
         <fieldset>
-          <legend className="mb-2 text-[15px] font-semibold">Especialidades</legend>
-          <div className="flex flex-wrap gap-2">
-            {setup.categories.map((c) => (
-              <ChoiceChip key={c.id} type="checkbox" name="categoryIds" value={c.id} defaultChecked={setup.selectedCats.includes(c.id)}
-                label={<span className="inline-flex items-center gap-1.5"><CategoryIcon icon={c.icon} className="h-4 w-4" />{c.name}</span>} />
-            ))}
-          </div>
-          <p className="mt-2 text-sm text-muted">Algunas especialidades piden una matrícula o credencial vigente. Las ves en Documentación.</p>
-          <PrimaryCategoryPicker categories={setup.categories} initial={setup.primaryCat} />
+          <legend className="mb-2 text-[15px] font-semibold">Tus oficios</legend>
+          <TradePickerField categories={setup.categories} initialIds={setup.selectedCats} initialPrimary={setup.primaryCat} />
+          <p className="mt-3 text-sm text-muted">Algunos oficios piden una matrícula o credencial vigente. Las ves en Documentación.</p>
         </fieldset>
         <fieldset>
           <legend className="mb-2 text-[15px] font-semibold">Zonas donde trabajás</legend>

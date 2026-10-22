@@ -622,3 +622,13 @@ export async function replayOutboxAction(_: ActionState, f: FormData): Promise<A
     return { ok: true, message: "Aviso reprogramado: sale en la próxima vuelta (máximo 5 minutos)." };
   });
 }
+
+export async function resolveTradeSuggestionAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("catalogo", "manage")).actor;
+    const status = str(f, "status") === "added" ? "added" : "dismissed";
+    await admin.resolveTradeSuggestion(actor, str(f, "id"), status);
+    revalidatePath("/admin/catalogo");
+    return { ok: true, message: status === "added" ? "Marcada como agregada." : "Descartada." };
+  });
+}

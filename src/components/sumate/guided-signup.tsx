@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, LocateFixed, MessageCircle } from "lucide-react";
-import { CategoryIcon } from "@/components/category-icon";
+import { TradePicker } from "@/components/provider/trade-picker";
 import { Mascot } from "@/components/brand/mascot";
 import { canLocate, locateMe, LOCATE_ERROR } from "@/components/location/locate";
 import { guidedSignupAction } from "@/app/(public)/sumate/empezar/actions";
 import { cn } from "@/lib/cn";
 
-type Category = { id: string; name: string; icon: string };
+type Category = { id: string; slug: string; name: string; icon: string };
 type Zone = { id: string; code: string; name: string; region: string; province: string | null; catch_all: boolean; match_names: string[] };
-type Data = { categoryIds: string[]; province: string; zoneIds: string[]; fullName: string; phone: string; email: string; password: string; acceptTerms: boolean };
+type Data = { categoryIds: string[]; primaryId: string; otherTrade: string; province: string; zoneIds: string[]; fullName: string; phone: string; email: string; password: string; acceptTerms: boolean };
 
-const EMPTY: Data = { categoryIds: [], province: "", zoneIds: [], fullName: "", phone: "", email: "", password: "", acceptTerms: false };
+const EMPTY: Data = { categoryIds: [], primaryId: "", otherTrade: "", province: "", zoneIds: [], fullName: "", phone: "", email: "", password: "", acceptTerms: false };
 const STORE = "fixy-alta-guiada";
 const MAX_TRADES = 5;
 const field = "block h-14 w-full rounded-2xl border border-control bg-cream px-4 text-lg text-ink placeholder:text-muted/70 focus:border-ivory focus:outline-none";
@@ -55,7 +55,7 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
   };
 
   const problem = (): string | null => {
-    if (step === "oficio" && !d.categoryIds.length) return "Tocá al menos un oficio.";
+    if (step === "oficio" && !d.categoryIds.length && !d.otherTrade) return "Tocá al menos un oficio (o escribí el tuyo si no está).";
     if (step === "zona" && !d.zoneIds.length) return d.province ? "Tocá al menos una zona." : "Elegí tu provincia.";
     if (step === "nombre" && d.fullName.trim().split(/\s+/).length < 2) return "Escribí tu nombre y tu apellido.";
     if (step === "celular" && d.phone.replace(/\D/g, "").length < 8) return "Escribí tu número de celular con el código de área.";
@@ -72,7 +72,7 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
     if (p) return setError(p);
     if (i < steps.length - 1) { setError(null); setI(i + 1); window.scrollTo({ top: 0 }); return; }
     start(async () => {
-      const r = await guidedSignupAction({ categoryIds: d.categoryIds, zoneIds: d.zoneIds, fullName: d.fullName, phone: d.phone, email: d.email, password: d.password, acceptTerms: d.acceptTerms });
+      const r = await guidedSignupAction({ categoryIds: d.categoryIds, primaryCategoryId: d.primaryId, otherTrade: d.otherTrade, zoneIds: d.zoneIds, fullName: d.fullName, phone: d.phone, email: d.email, password: d.password, acceptTerms: d.acceptTerms });
       if (r?.error) setError(r.error);
       else { try { sessionStorage.removeItem(STORE); } catch { /* sin almacenamiento */ } }
     });
@@ -116,26 +116,9 @@ export function GuidedSignup({ categories, zones, signedInName }: { categories: 
 
       <div className="mt-6 flex-1">
         {step === "oficio" && (
-          <>
-          <p className="mb-3 text-[15px] text-ink-2">El primero que tocás es tu <strong className="text-ink">oficio principal</strong>: ahí te llegan más pedidos.</p>
-          <ul className="grid grid-cols-2 gap-2.5">
-            {categories.map((c) => {
-              const on = d.categoryIds.includes(c.id);
-              return (
-                <li key={c.id}>
-                  <button type="button" onClick={() => toggle("categoryIds", c.id, MAX_TRADES)} aria-pressed={on}
-                    className={cn("relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-between gap-2 rounded-2xl p-3.5 text-left text-[15px] leading-tight transition-colors",
-                      on ? "bg-fixy-50 ring-2 ring-fixy-700" : "bg-surface ring-1 ring-line")}>
-                    <CategoryIcon icon={c.icon} className="h-6 w-6" />
-                    <span>{c.name}</span>
-                    {on && d.categoryIds[0] === c.id && d.categoryIds.length > 1 && <span className="rounded-full bg-fixy-700 px-2 py-0.5 text-xs font-semibold text-white">Principal</span>}
-                    {on && <Check className="absolute right-3 top-3 h-5 w-5 text-fixy-800" aria-hidden />}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          </>
+          <TradePicker categories={categories} size="lg" max={MAX_TRADES}
+            value={{ ids: d.categoryIds, primaryId: d.primaryId || null, other: d.otherTrade }}
+            onChange={(v) => set({ categoryIds: v.ids, primaryId: v.primaryId ?? "", otherTrade: v.other })} />
         )}
 
         {step === "zona" && (

@@ -96,6 +96,7 @@ export async function updateCoverageAction(_: ActionState, f: FormData): Promise
     const v = validate(coverageSchema, {
       categoryIds: strs(f, "categoryIds"),
       primaryCategoryId: str(f, "primaryCategoryId"),
+      otherTrade: str(f, "otherTrade"),
       zoneIds: strs(f, "zoneIds"),
       baseZoneId: str(f, "baseZoneId"),
       acceptingJobs: bool(f, "acceptingJobs"),
@@ -223,7 +224,7 @@ export async function draftProfileWithAi(input: { kind: "individual" | "company"
 
 export async function quickStartAction(payload: {
   kind: "individual" | "company"; displayName: string; contactPhone: string; description: string; yearsExperience: string;
-  categoryIds: string[]; primaryCategoryId?: string; zoneIds: string[]; baseZoneId: string; availability: AvailabilityPreset | "";
+  categoryIds: string[]; primaryCategoryId?: string; otherTrade?: string; zoneIds: string[]; baseZoneId: string; availability: AvailabilityPreset | "";
   priceRefs: { categoryId: string; title: string; fromPesos: string }[]; aiAssisted: boolean;
 }): Promise<ActionState> {
   const r = await act(async () => {
@@ -232,7 +233,7 @@ export async function quickStartAction(payload: {
     const v = validate(quickStartSchema, {
       kind: payload.kind, displayName: payload.displayName, contactPhone: payload.contactPhone, description: payload.description,
       yearsExperience: payload.yearsExperience === "" ? undefined : payload.yearsExperience,
-      categoryIds: payload.categoryIds, primaryCategoryId: payload.primaryCategoryId ?? "", zoneIds: payload.zoneIds, baseZoneId: payload.baseZoneId,
+      categoryIds: payload.categoryIds, primaryCategoryId: payload.primaryCategoryId ?? "", otherTrade: payload.otherTrade ?? "", zoneIds: payload.zoneIds, baseZoneId: payload.baseZoneId,
       availability: preset ? preset.days.map((weekday) => ({ weekday, startMinute: preset.start, endMinute: preset.end })) : [],
       priceRefs: payload.priceRefs.filter((p) => p.categoryId && p.title.trim() && Number(p.fromPesos) > 0)
         .map((p) => ({ categoryId: p.categoryId, title: p.title, fromMinor: Math.round(Number(p.fromPesos) * 100) })),

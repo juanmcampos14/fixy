@@ -31,7 +31,7 @@ export default async function AltaPage({ searchParams }: { searchParams: Promise
 
   if (!m) {
     const [categories, zones] = await Promise.all([
-      sql()<{ id: string; name: string; icon: string }[]>`select id, name, icon from categories where active order by sort, name`,
+      sql()<{ id: string; slug: string; name: string; icon: string }[]>`select id, slug, name, icon from categories where active order by sort, name`,
       sql()<{ id: string; name: string; region: string }[]>`select id, name, region from zones where active order by sort, name`,
     ]);
     const ai = profileAssistantAvailable();

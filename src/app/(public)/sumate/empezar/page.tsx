@@ -12,7 +12,7 @@ export default async function StartPage() {
   const actor = await getActor();
   if (actor?.providers.length) redirect("/proveedor");
   const [categories, zones] = await Promise.all([
-    sql()<{ id: string; name: string; icon: string }[]>`select id, name, icon from categories where active and not requires_review order by sort, name`,
+    sql()<{ id: string; slug: string; name: string; icon: string }[]>`select id, slug, name, icon from categories where active and not requires_review order by sort, name`,
     sql()<{ id: string; code: string; name: string; region: string; province: string | null; catch_all: boolean; match_names: string[] }[]>`
       select id, code, name, region, province, catch_all, match_names from zones where active and region <> 'OTRA' order by sort, name`,
   ]);
