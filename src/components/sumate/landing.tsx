@@ -12,11 +12,11 @@ import { formatMoney } from "@/lib/format";
 
 const REGION = REGION_LABEL;
 
-export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | null; refParam?: string }) {
+export async function SumateLanding({ oficio, refParam, utm = {} }: { oficio: Oficio | null; refParam?: string; utm?: Record<string, string> }) {
   const db = sql();
   const actor = await getActor();
   const ownApproved = actor?.providers.find((p) => p.role === "admin" && p.status === "approved");
-  const ref = ownApproved?.slug ?? (refParam && /^[a-z0-9-]{3,60}$/.test(refParam) ? refParam : "");
+  const ref = ownApproved?.slug ?? (refParam && /^[a-z0-9-]{3,60}$/.test(refParam.toLowerCase()) ? refParam.toLowerCase() : "");
 
   const [cat] = oficio?.category
     ? await db<{ id: string; name: string; icon: string }[]>`select id, name, icon from categories where slug = ${oficio.category} and active`
@@ -31,7 +31,8 @@ export async function SumateLanding({ oficio, refParam }: { oficio: Oficio | nul
   const categories = await db<{ slug: string; name: string; icon: string }[]>`select slug, name, icon from categories where active and not requires_review order by sort`;
 
   const origen = `sumate-${oficio?.slug ?? "general"}`;
-  const signupHref = `/sumate/registrarme?origen=${origen}${ref ? `&ref=${ref}` : ""}`;
+  // La campaña (utm) y el oficio viajan al alta: para medir el canal y precargar el oficio.
+  const signupHref = `/sumate/registrarme?${new URLSearchParams({ origen, ...(ref ? { ref } : {}), ...(oficio?.category ? { oficio: oficio.category } : {}), ...utm })}`;
   // Camino simple: el alta se hace charlando por WhatsApp (sin email ni contraseña). El alta web sigue disponible.
   const waHref = `/alta${ref ? `?ref=${ref}` : ""}`;
   const appUrl = (process.env.APP_URL ?? "https://www.fixy.solutions").replace(/\/$/, "");

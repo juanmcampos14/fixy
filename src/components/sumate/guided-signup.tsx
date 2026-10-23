@@ -22,10 +22,10 @@ const field = "block h-14 w-full rounded-2xl border border-control bg-cream px-4
  * Alta guiada de profesionales: una sola pregunta por pantalla, letra grande y botones grandes.
  * Pensada para celulares viejos y para quien no se lleva bien con los formularios.
  */
-export function GuidedSignup({ categories, zones, signedInName }: { categories: Category[]; zones: Zone[]; signedInName: string | null }) {
+export function GuidedSignup({ categories, zones, signedInName, initialTrade = null }: { categories: Category[]; zones: Zone[]; signedInName: string | null; initialTrade?: string | null }) {
   const steps = signedInName ? (["oficio", "zona", "celular"] as const) : (["oficio", "zona", "nombre", "celular", "clave"] as const);
   const [i, setI] = useState(0);
-  const [d, setD] = useState<Data>({ ...EMPTY, fullName: signedInName ?? "" });
+  const [d, setD] = useState<Data>({ ...EMPTY, fullName: signedInName ?? "", ...(initialTrade ? { categoryIds: [initialTrade], primaryId: initialTrade } : {}) });
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   // La clave se ve mientras la escribe (se equivoca menos); la puede ocultar.

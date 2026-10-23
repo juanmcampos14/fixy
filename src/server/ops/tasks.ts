@@ -13,6 +13,7 @@ import { processReviewDisputeDeadlines } from "@/server/modules/review-disputes"
 import { expireDirectBookings, rematchOpenRequests } from "@/server/modules/requests";
 import { runPaymentCommands } from "@/server/modules/payment-commands";
 import { runReconciliation } from "@/server/modules/payment-reconciliation";
+import { refreshLeadStages, syncSupplySheet } from "@/server/modules/supply";
 import { runWatchdog } from "./alerts";
 
 const batch = (name: string, fallback: number) => {
@@ -71,6 +72,8 @@ export const TASKS = {
       expiredQuotes: await step(() => sql().begin((tx) => expireQuotes(tx as never))),
       expiredBookings: await step(() => expireDirectBookings()),
       rematched: await step(() => rematchOpenRequests()),
+      // Etapas de captación (registrado → verificado → activo) al ritmo de las aprobaciones.
+      leadStages: await step(() => refreshLeadStages()),
     }),
   },
   reviews: {
@@ -80,6 +83,10 @@ export const TASKS = {
   "whatsapp-templates": {
     label: "Plantillas de WhatsApp", everyMinutes: 60, maxSeconds: 120, external: "Meta",
     run: async () => ({ templates: await step(() => syncWhatsAppTemplates()) }),
+  },
+  "supply-sync": {
+    label: "Captación (planilla de research)", everyMinutes: 1440, maxSeconds: 120, external: "Google Sheets",
+    run: async () => ({ sheet: await step(() => syncSupplySheet("cron")) }),
   },
   watchdog: {
     label: "Vigilancia (alertas al equipo)", everyMinutes: 10, maxSeconds: 60, external: "—",

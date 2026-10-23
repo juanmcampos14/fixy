@@ -10,6 +10,7 @@ import type { Actor } from "./actor";
 export const ADMIN_SECTIONS = [
   { key: "resumen", label: "Resumen operativo", href: "/admin", manageable: false, hint: "Pendientes y números del día a día." },
   { key: "socios", label: "Panel de socios", href: "/admin/socios", manageable: false, hint: "Evolución del negocio, embudo, oferta, calidad y dinero." },
+  { key: "captacion", label: "Captación", href: "/admin/captacion", manageable: true, hint: "Candidatos, contactos, embudo y métricas de captación de profesionales." },
   { key: "proveedores", label: "Profesionales", href: "/admin/proveedores", manageable: true, hint: "Aprobar altas y revisar documentación." },
   { key: "solicitudes", label: "Solicitudes", href: "/admin/solicitudes", manageable: true, hint: "Derivar pedidos, invitar profesionales, cancelar." },
   { key: "trabajos", label: "Trabajos", href: "/admin/trabajos", manageable: true, hint: "Cambiar estados y cancelar trabajos." },
@@ -35,7 +36,7 @@ export const isSection = (s: string): s is AdminSection => (SECTION_KEYS as stri
 export const OPERATOR_PRESET: Permissions = {
   resumen: "view", socios: "view", proveedores: "manage", solicitudes: "manage", trabajos: "manage", reclamos: "manage",
   resenas: "manage", finanzas: "manage", catalogo: "view", comisiones: "view", arrepentimientos: "manage", whatsapp: "view", auditoria: "view",
-  salud: "manage",
+  salud: "manage", captacion: "manage",
 };
 
 /** Perfil "Socio": ve todo, no modifica nada. */

@@ -50,12 +50,15 @@ function slugify(s: string) {
 }
 
 /** Paso 1-3 del alta: crea el proveedor con el usuario como administrador. */
-export async function createProvider(actor: Actor, input: ProviderProfileInput, origin: { source?: string | null; referrerSlug?: string | null } = {}) {
+/** Origen del alta: canal (origen / whatsapp…), código de invitación o perfil que recomendó, y datos de campaña (utm). */
+export type SignupOrigin = { source?: string | null; referrerSlug?: string | null; utm?: Record<string, string> };
+
+export async function createProvider(actor: Actor, input: ProviderProfileInput, origin: SignupOrigin = {}) {
   const data = providerProfileSchema.parse(input);
   return systemTx((tx) => createProviderTx(tx, actor, data, origin));
 }
 
-async function createProviderTx(tx: Tx, actor: Actor, data: z.infer<typeof providerProfileSchema>, origin: { source?: string | null; referrerSlug?: string | null }) {
+async function createProviderTx(tx: Tx, actor: Actor, data: z.infer<typeof providerProfileSchema>, origin: SignupOrigin) {
   {
     const [existing] = await tx<{ provider_id: string }[]>`
       select provider_id from provider_members where user_id = ${actor.id} and role = 'admin' limit 1`;
@@ -70,7 +73,11 @@ async function createProviderTx(tx: Tx, actor: Actor, data: z.infer<typeof provi
         ${data.yearsExperience ?? null}, ${data.billingInfo || null}, ${actor.id}, ${origin.source?.slice(0, 120) || null}, ${referrer?.id ?? null})
       returning id`;
     await tx`insert into provider_members (provider_id, user_id, role) values (${p.id}, ${actor.id}, 'admin')`;
+    if (origin.utm && Object.keys(origin.utm).length) await tx`update providers set signup_utm = ${tx.json(origin.utm as never)} where id = ${p.id}`;
     await recordEvent(tx, { entityType: "provider", entityId: p.id, action: "created", to: "pending", actorId: actor.id });
+    // Captación: vincula el candidato comercial (código de invitación, teléfono o email) o crea uno con el origen.
+    const { attachLeadOnSignupTx } = await import("./supply");
+    await attachLeadOnSignupTx(tx, { providerId: p.id, userId: actor.id, ref: origin.referrerSlug, source: origin.source, utm: origin.utm });
     return p.id;
   }
 }
@@ -550,7 +557,7 @@ export const quickStartSchema = z.object({
 });
 
 /** Crea el perfil con rubros, zonas, disponibilidad y precios en una sola operación (todo o nada). */
-export async function quickStartProvider(actor: Actor, input: z.input<typeof quickStartSchema>, origin: { source?: string | null; referrerSlug?: string | null } = {}) {
+export async function quickStartProvider(actor: Actor, input: z.input<typeof quickStartSchema>, origin: SignupOrigin = {}) {
   const d = quickStartSchema.parse(input);
   return systemTx(async (tx) => {
     const providerId = await createProviderTx(tx, actor, {

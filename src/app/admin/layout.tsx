@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 const ICON: Record<AdminSection, NavIcon> = {
   resumen: "dashboard", socios: "chart", proveedores: "store", solicitudes: "inbox", trabajos: "briefcase", reclamos: "flag", resenas: "star",
-  finanzas: "wallet", catalogo: "clipboard", comisiones: "coins", arrepentimientos: "flag", whatsapp: "message", auditoria: "scroll", salud: "activity",
+  finanzas: "wallet", catalogo: "clipboard", comisiones: "coins", arrepentimientos: "flag", whatsapp: "message", auditoria: "scroll", salud: "activity", captacion: "search",
 };
 
 /** Nombres para la barra de abajo en celular. */

@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies, headers } from "next/headers";
+import { readSignupCookie } from "@/lib/signup-origin";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { act } from "@/server/action";
@@ -46,11 +47,8 @@ export async function guidedSignupAction(payload: GuidedSignupPayload): Promise<
     if (!d.categoryIds.length && !d.otherTrade) return { error: "Elegí al menos un oficio." };
     const cats = d.categoryIds.length ? await sql()<{ id: string; name: string }[]>`select id, name from categories where id in ${sql()(d.categoryIds)} and active` : [{ id: "", name: d.otherTrade ?? "" }];
     const zones = await sql()<{ id: string; name: string }[]>`select id, name from zones where id in ${sql()(d.zoneIds)} and active`;
-    let origin: { source?: string; referrerSlug?: string } = { source: "alta-guiada" };
-    try {
-      const c = JSON.parse((await cookies()).get("fixy_signup")?.value ?? "{}");
-      origin = { source: typeof c.origen === "string" && c.origen ? c.origen : "alta-guiada", referrerSlug: typeof c.ref === "string" && c.ref ? c.ref : undefined };
-    } catch {}
+    const c = readSignupCookie((await cookies()).get("fixy_signup")?.value);
+    const origin = { ...c, source: c.source || "alta-guiada" };
     const description = `${d.fullName}. ${joinNames(cats.map((c) => c.name))} en ${joinNames(zones.slice(0, 4).map((z) => z.name))}${zones.length > 4 ? " y alrededores" : ""}. Perfil creado en el alta guiada de Fixy.`;
     await quickStartProvider(actor, {
       kind: "individual", displayName: d.fullName, contactPhone: d.phone, description,

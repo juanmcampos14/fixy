@@ -46,6 +46,10 @@ const schema = z.object({
   GOOGLE_MAPS_SERVER_KEY: z.string().optional().default(""),
   // Avisos push de las apps. Android: JSON de la cuenta de servicio de Firebase (tal cual o en base64).
   FIREBASE_SERVICE_ACCOUNT: z.string().optional().default(""),
+  // Planilla de captación (CRM de research) que se sincroniza a diario. Se lee con la cuenta de servicio de arriba
+  // (compartir la planilla con su client_email como lector) o, si está publicada "con el link", sin credenciales.
+  SUPPLY_SHEET_ID: z.string().optional().default("1p5lG431qB6VlBkiaC_modI9b8SWMoMxRAJCjrFamdCg"),
+  SUPPLY_SHEET_TAB: z.string().optional().default("PROVEEDORES"),
   // iOS: clave .p8 de APNs (tal cual o en base64), su identificador y el del equipo de Apple.
   APNS_KEY: z.string().optional().default(""),
   APNS_KEY_ID: z.string().optional().default(""),

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * `?ref=<perfil>` deja anotado quién lo invitó.
  */
 export function GET(req: Request) {
-  const ref = new URL(req.url).searchParams.get("ref") ?? "";
+  // Los códigos de candidatos se reparten en mayúsculas (FX-012): se aceptan igual.
+  const ref = (new URL(req.url).searchParams.get("ref") ?? "").trim().toLowerCase();
   const invite = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(ref) && ref.length <= 80 ? ` (invitación ${ref})` : "";
   return NextResponse.redirect(whatsappUrl(`Hola, quiero trabajar con Fixy${invite}`), 302);
 }

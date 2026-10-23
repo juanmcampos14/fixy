@@ -4,6 +4,7 @@ import { SOCIAL_NETWORKS } from "@/lib/social";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { readSignupCookie } from "@/lib/signup-origin";
 import type { ZodType } from "zod";
 import { act, bool, files, str, strs } from "@/server/action";
 import type { ActionState } from "@/lib/action-state";
@@ -60,11 +61,7 @@ export async function createProviderAction(_: ActionState, f: FormData): Promise
     const v = validate(providerProfileSchema, profileInput(f));
     if ("state" in v) return v.state;
     // Origen de campaña / referido guardado por /sumate/registrarme.
-    let origin: { source?: string; referrerSlug?: string } = {};
-    try {
-      const c = JSON.parse((await cookies()).get("fixy_signup")?.value ?? "{}");
-      origin = { source: typeof c.origen === "string" ? c.origen : undefined, referrerSlug: typeof c.ref === "string" && c.ref ? c.ref : undefined };
-    } catch {}
+    const origin = readSignupCookie((await cookies()).get("fixy_signup")?.value);
     await createProvider(actor, v.data, origin);
     (await cookies()).delete("fixy_signup");
     revalidateProvider();
@@ -240,11 +237,7 @@ export async function quickStartAction(payload: {
       aiAssisted: payload.aiAssisted,
     });
     if ("state" in v) return v.state;
-    let origin: { source?: string; referrerSlug?: string } = {};
-    try {
-      const c = JSON.parse((await cookies()).get("fixy_signup")?.value ?? "{}");
-      origin = { source: typeof c.origen === "string" ? c.origen : undefined, referrerSlug: typeof c.ref === "string" && c.ref ? c.ref : undefined };
-    } catch {}
+    const origin = readSignupCookie((await cookies()).get("fixy_signup")?.value);
     await quickStartProvider(actor, v.data, origin);
     (await cookies()).delete("fixy_signup");
     revalidateProvider();

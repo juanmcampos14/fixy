@@ -76,7 +76,7 @@ export function guessZoneFromText<Z extends MatchZone>(raw: string, zones: Z[]):
 export const ZONE_MATCH_NAMES: Record<string, string[]> = {
   "caba-palermo": ["palermo", "colegiales", "chacarita", "villa crespo"],
   "caba-belgrano": ["belgrano", "nunez", "coghlan"],
-  "caba-recoleta": ["recoleta", "retiro"],
+  "caba-recoleta": ["recoleta", "retiro", "barrio norte"],
   "caba-centro": ["san nicolas", "monserrat", "montserrat", "balvanera", "puerto madero", "san cristobal"],
   "caba-caballito": ["caballito", "almagro", "boedo", "parque chacabuco"],
   "caba-urquiza": ["villa urquiza", "saavedra", "villa pueyrredon", "villa ortuzar", "parque chas", "agronomia", "villa devoto", "villa del parque", "villa general mitre", "villa santa rita", "la paternal", "paternal"],

@@ -4,7 +4,8 @@
  * - iOS: APNs directo con la clave .p8 de la cuenta de Apple (token JWT ES256, HTTP/2).
  * Sin credenciales, la plataforma queda apagada: no se registran dispositivos ni se encolan avisos.
  */
-import { createPrivateKey, createSign, sign as cryptoSign } from "node:crypto";
+import { createPrivateKey, sign as cryptoSign } from "node:crypto";
+import { decodeSecret, googleAccessToken, serviceAccount, type ServiceAccount } from "@/server/integrations/google-auth";
 import { claimOutbox, finishOutbox } from "@/server/outbox/lease";
 import { connect } from "node:http2";
 import { sql } from "@/server/db/client";
@@ -17,19 +18,8 @@ type PushPayload = { title: string; body: string; link: string | null };
 type PushResult = "ok" | "gone" | "failed";
 
 const b64url = (b: Buffer | string) => Buffer.from(b).toString("base64url");
-const decode = (v: string) => (v.trim().startsWith("{") || v.includes("BEGIN") ? v : Buffer.from(v, "base64").toString("utf8"));
+const decode = decodeSecret;
 
-type ServiceAccount = { project_id: string; client_email: string; private_key: string };
-function serviceAccount(): ServiceAccount | null {
-  const raw = env().FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) return null;
-  try {
-    const a = JSON.parse(decode(raw)) as ServiceAccount;
-    return a.project_id && a.client_email && a.private_key ? a : null;
-  } catch {
-    return null;
-  }
-}
 function apnsConfig() {
   const e = env();
   return e.APNS_KEY && e.APNS_KEY_ID && e.APNS_TEAM_ID ? { key: decode(e.APNS_KEY), keyId: e.APNS_KEY_ID, teamId: e.APNS_TEAM_ID } : null;
@@ -40,25 +30,7 @@ export function pushPlatforms(): Record<PushPlatform, boolean> {
 }
 
 // ── Android (FCM) ──
-let fcmToken: { value: string; exp: number } | null = null;
-async function fcmAccessToken(a: ServiceAccount): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  if (fcmToken && fcmToken.exp > now + 60) return fcmToken.value;
-  const unsigned = `${b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64url(JSON.stringify({
-    iss: a.client_email, scope: "https://www.googleapis.com/auth/firebase.messaging", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
-  }))}`;
-  const jwt = `${unsigned}.${b64url(createSign("RSA-SHA256").update(unsigned).sign(a.private_key))}`;
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`Google respondió ${res.status} al pedir el token`);
-  const j = (await res.json()) as { access_token: string; expires_in: number };
-  fcmToken = { value: j.access_token, exp: now + j.expires_in };
-  return j.access_token;
-}
+const fcmAccessToken = (a: ServiceAccount) => googleAccessToken(a, "https://www.googleapis.com/auth/firebase.messaging");
 
 async function sendAndroid(token: string, p: PushPayload): Promise<PushResult> {
   const a = serviceAccount();
