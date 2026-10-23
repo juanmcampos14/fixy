@@ -27,7 +27,7 @@ Registrado → Verificado → Activo salen del perfil real (cron `requests`, cad
 ## Campañas
 
 Los links de campaña llevan `utm_source`, `utm_medium`, `utm_campaign` (y `utm_content` / `utm_term`):
-`https://www.fixy.solutions/sumate/plomero?utm_source=meta&utm_campaign=plomeros-zn`.
+`https://www.fixy.solutions/sumate/plomeros?utm_source=meta&utm_campaign=plomeros-zn`.
 La landing los pasa a `/sumate/registrarme`, que los guarda en la cookie `fixy_signup` junto con el oficio (que llega
 preelegido al alta guiada). Quedan en `providers.signup_utm` y en el candidato. El gasto se carga por canal y mes
 con el mismo nombre que `utm_source`, para ver costo por registrado y por activo.
