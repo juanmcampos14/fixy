@@ -12,6 +12,9 @@ const waOutboxFor = async (userId: string, since: Date) =>
     select payload->>'template' as template, payload->>'requestId' as "requestId" from outbox
     where channel = 'whatsapp' and recipient_user_id = ${userId} and created_at >= ${since} order by created_at`;
 
+// Hora de la base (no de la computadora): el reloj de Docker puede ir unos milisegundos atrasado y dejar afuera avisos recién creados.
+const dbNow = async () => (await sql()<{ t: Date }[]>`select clock_timestamp() as t`)[0].t;
+
 describe("avisos de oportunidades por WhatsApp para profesionales", () => {
   it("se activan con un código enviado desde su WhatsApp, avisan pedidos nuevos y se dan de baja con BAJA", async () => {
     const [ana, roberto] = await Promise.all([actor("ana"), actor("roberto")]);
@@ -21,7 +24,7 @@ describe("avisos de oportunidades por WhatsApp para profesionales", () => {
     try {
       await sql()`update users set whatsapp_phone = null, wa_provider_alerts = false where id = ${roberto.id}`;
       // Sin activar: no hay aviso por WhatsApp
-      const t0 = new Date();
+      const t0 = await dbNow();
       const newReq = async (title: string) => requests.createRequest(ana, {
         propertyId: await propertyOf("ana", "Casa"), categoryId: await catId("plomeria"), title, description: "Gotea la canilla y pierde agua abajo de la mesada.",
         answers: {}, urgency: "normal", preferredWindows: [],
@@ -44,7 +47,7 @@ describe("avisos de oportunidades por WhatsApp para profesionales", () => {
 
       // El emparejamiento rota entre profesionales (y depende de lo que dejaron otras pruebas): si no lo invitó,
       // lo invita operación a mano. El aviso por WhatsApp es el mismo en los dos casos.
-      const t1 = new Date();
+      const t1 = await dbNow();
       const reqId = await newReq("Pedido con avisos");
       if (!(await sql()`select 1 from request_invitations where request_id = ${reqId} and provider_id = ${pid}`).length) {
         await requests.operatorInvite(await actor("operador"), reqId, pid, "Prueba de avisos por WhatsApp");
@@ -58,7 +61,7 @@ describe("avisos de oportunidades por WhatsApp para profesionales", () => {
       // Baja
       await handleInbound(msg(phone, "BAJA"));
       expect((await alertsState(roberto.id)).on).toBe(false);
-      const t2 = new Date();
+      const t2 = await dbNow();
       await newReq("Pedido después de la baja");
       expect(await waOutboxFor(roberto.id, t2)).toHaveLength(0);
     } finally {
