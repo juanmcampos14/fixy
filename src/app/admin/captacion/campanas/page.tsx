@@ -87,6 +87,7 @@ export default async function CampaignsPage() {
         {!readOnly && (
           <Section title="Armar una campaña" description="Toma candidatos que todavía no se registraron, sin «no contactar», sin otra campaña abierta y con el canal elegido. Queda en borrador: la revisás, sacás a quien no corresponda y recién ahí la activás.">
             <CampaignForm action={createCampaignAction} categories={options.categories} zones={options.zones}
+              consented={options.consented}
               regions={options.regions.map((r) => ({ code: r.code, label: REGION_LABEL[r.code] ?? r.code, candidates: r.candidates }))}
               defaults={{ whatsapp: { first: DEFAULT_WHATSAPP_FIRST, followup: DEFAULT_WHATSAPP_FOLLOWUP }, email: { subject: DEFAULT_EMAIL_SUBJECT, first: DEFAULT_EMAIL_FIRST, followup: DEFAULT_EMAIL_FOLLOWUP } }} />
           </Section>

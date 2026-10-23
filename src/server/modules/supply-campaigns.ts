@@ -150,6 +150,8 @@ export const campaignSchema = z.object({
   followupDays: z.coerce.number().int().min(1).max(30).default(4),
   maxAttempts: z.coerce.number().int().min(1).max(3).default(2),
   dailyCap: z.coerce.number().int().min(1).max(100).default(20),
+  /** Solo contactos que dieron consentimiento para recibir WhatsApp de Fixy (bases cargadas con ese dato). */
+  onlyConsented: z.boolean().default(false),
 });
 
 function checkTexts(d: z.infer<typeof campaignSchema>) {
@@ -164,11 +166,12 @@ function checkTexts(d: z.infer<typeof campaignSchema>) {
 const slugify = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "campana";
 
 /** Candidatos que puede tomar una campaña: sin registrarse, sin «no contactar», sin otra campaña abierta y con el canal. */
-async function eligibleLeads(tx: Tx, c: { channel: string; category_ids: string[]; regions: string[]; zone_ids: string[]; size: number; id?: string }) {
+async function eligibleLeads(tx: Tx, c: { channel: string; category_ids: string[]; regions: string[]; zone_ids: string[]; size: number; id?: string; only_consented?: boolean }) {
   return tx<{ id: string }[]>`
     select l.id from supply_leads l
     where l.provider_id is null and not l.do_not_contact and l.stage = 'candidate'
       and ${c.channel === "whatsapp" ? tx`l.whatsapp_e164 is not null` : tx`l.email is not null`}
+      ${c.only_consented ? tx`and l.wa_consent_at is not null` : tx``}
       ${c.category_ids.length ? tx`and l.category_ids && ${c.category_ids}::uuid[]` : tx``}
       ${c.regions.length || c.zone_ids.length
         ? tx`and (${c.regions.length ? tx`l.base_region = any(${c.regions}::text[])` : tx`false`} or ${c.zone_ids.length ? tx`l.base_zone_id = any(${c.zone_ids}::uuid[])` : tx`false`})`
@@ -180,8 +183,8 @@ async function eligibleLeads(tx: Tx, c: { channel: string; category_ids: string[
 }
 
 /** Cuántos candidatos hay disponibles con esos filtros (para elegir el tamaño antes de crear). */
-export async function countEligible(input: { channel: "whatsapp" | "email"; categoryIds: string[]; regions: string[]; zoneIds: string[] }) {
-  return systemTx(async (tx) => (await eligibleLeads(tx, { channel: input.channel, category_ids: input.categoryIds, regions: input.regions, zone_ids: input.zoneIds, size: 500 })).length);
+export async function countEligible(input: { channel: "whatsapp" | "email"; categoryIds: string[]; regions: string[]; zoneIds: string[]; onlyConsented?: boolean }) {
+  return systemTx(async (tx) => (await eligibleLeads(tx, { channel: input.channel, category_ids: input.categoryIds, regions: input.regions, zone_ids: input.zoneIds, size: 500, only_consented: input.onlyConsented })).length);
 }
 
 export async function createCampaign(actor: Actor, input: z.input<typeof campaignSchema>) {
@@ -193,14 +196,16 @@ export async function createCampaign(actor: Actor, input: z.input<typeof campaig
     if ((await tx`select 1 from supply_campaigns where slug = ${slug}`).length) slug = `${slug.slice(0, 40)}-${Date.now().toString(36).slice(-5)}`;
     const [c] = await tx<{ id: string }[]>`
       insert into supply_campaigns (name, slug, channel, category_ids, regions, zone_ids, size, first_message, followup_message, email_subject,
-        followup_days, max_attempts, daily_cap, created_by)
+        followup_days, max_attempts, daily_cap, only_consented, created_by)
       values (${d.name}, ${slug}, ${d.channel}, ${d.categoryIds}, ${d.regions}, ${d.zoneIds}, ${d.size}, ${d.firstMessage}, ${d.followupMessage || null},
-        ${d.emailSubject || null}, ${d.followupDays}, ${d.maxAttempts}, ${d.dailyCap}, ${actor.id})
+        ${d.emailSubject || null}, ${d.followupDays}, ${d.maxAttempts}, ${d.dailyCap}, ${d.onlyConsented}, ${actor.id})
       returning id`;
-    const leads = await eligibleLeads(tx, { channel: d.channel, category_ids: d.categoryIds, regions: d.regions, zone_ids: d.zoneIds, size: d.size, id: c.id });
-    if (!leads.length) throw invalid("No hay candidatos disponibles con esos filtros (sin registrarse, sin otra campaña y con ese canal).");
+    const leads = await eligibleLeads(tx, { channel: d.channel, category_ids: d.categoryIds, regions: d.regions, zone_ids: d.zoneIds, size: d.size, id: c.id, only_consented: d.onlyConsented });
+    if (!leads.length) throw invalid(d.onlyConsented
+      ? "No hay contactos con consentimiento con esos filtros. Cargá la base marcando el consentimiento en «Cargar y sincronizar»."
+      : "No hay candidatos disponibles con esos filtros (sin registrarse, sin otra campaña y con ese canal).");
     await tx`insert into supply_campaign_leads (campaign_id, lead_id) select ${c.id}, unnest(${leads.map((l) => l.id)}::uuid[])`;
-    await audit(tx, actor, "supply.campaign_create", "supply_campaign", c.id, d.name, { channel: d.channel, leads: leads.length });
+    await audit(tx, actor, "supply.campaign_create", "supply_campaign", c.id, d.name, { channel: d.channel, leads: leads.length, onlyConsented: d.onlyConsented });
     return { id: c.id, leads: leads.length };
   });
 }

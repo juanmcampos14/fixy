@@ -91,10 +91,16 @@ export async function uploadLeadsCsvAction(_: ActionState, f: FormData): Promise
     if (!file) throw invalid("Elegí el archivo CSV.");
     if (file.data.length > 5 * 1024 * 1024) throw invalid("El archivo es muy grande (máximo 5 MB).");
     const { inputs, issues } = supply.parseResearchRows(parseCsv(file.data.toString("utf8")));
-    if (!inputs.length) throw invalid(issues[0]?.problem ?? "El archivo no tiene filas con ID (FX-001) y Nombre comercial.");
-    const r = await supply.importLeads(inputs, { source: "research", sourceDetail: `Archivo ${file.name.slice(0, 120)}`, trigger: "upload", actor, preIssues: issues });
+    if (!inputs.length) throw invalid(issues[0]?.problem ?? "El archivo no tiene filas con Nombre.");
+    const consented = bool(f, "consent");
+    const consentSource = str(f, "consentSource").trim();
+    if (consented && consentSource.length < 5) throw invalid("Contá de dónde sale el consentimiento (por ejemplo: «Padrón de matriculados de …, autorizaron recibir comunicaciones»).");
+    const r = await supply.importLeads(inputs, {
+      source: "research", sourceDetail: `Archivo ${file.name.slice(0, 120)}`, trigger: "upload", actor, preIssues: issues,
+      ...(consented ? { consent: { source: consentSource } } : {}),
+    });
     refresh();
-    return { ok: true, message: `Listo: ${r.inserted} nuevos, ${r.updated} actualizados, ${r.unchanged} sin cambios, ${r.skipped} salteados.` };
+    return { ok: true, message: `Listo: ${r.inserted} nuevos, ${r.updated} actualizados, ${r.unchanged} sin cambios, ${r.skipped} salteados.${consented ? " El consentimiento quedó registrado en cada contacto." : ""}` };
   });
 }
 
@@ -121,6 +127,7 @@ export async function createCampaignAction(_: ActionState, f: FormData): Promise
       zoneIds: zoneOrRegion.filter((v) => v.startsWith("zone:")).map((v) => v.slice(5)),
       size: Number(str(f, "size")), firstMessage: str(f, "firstMessage"), followupMessage: str(f, "followupMessage"), emailSubject: str(f, "emailSubject"),
       followupDays: Number(str(f, "followupDays") || 4), maxAttempts: Number(str(f, "maxAttempts") || 2), dailyCap: Number(str(f, "dailyCap") || 20),
+      onlyConsented: bool(f, "onlyConsented"),
     });
     revalidatePath("/admin/captacion/campanas");
     return { ok: true, message: `Campaña creada en borrador con ${r.leads} candidatos. Revisala antes de activarla.`, data: { id: r.id } };

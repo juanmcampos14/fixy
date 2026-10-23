@@ -54,6 +54,17 @@ saca a quien no corresponda y recién ahí se activa.
 - Textos: `{nombre} {negocio} {oficio} {zona} {link} {web} {baja}`. Cada mensaje tiene que tener `{link}` o `{web}`
   (vincula la respuesta) y, en WhatsApp, `{baja}`.
 
+## Bases con consentimiento
+
+Captación › Cargar y sincronizar › «Subir una base»: CSV con Nombre, Oficio, Localidad, Teléfono y Email (el ID es
+opcional; sin ID se asigna un código AL-). Si se marca «dieron su consentimiento para recibir WhatsApp de Fixy», hay que
+decir de dónde sale, y queda registrado en cada contacto (fecha y origen) y en su historial. Volver a subir el mismo
+archivo no duplica. Al armar una campaña se puede elegir «Solo contactos con consentimiento». Guardar aparte el
+respaldo del consentimiento: es lo que se pide ante un reclamo.
+
+El envío por WhatsApp es siempre asistido (la persona aprieta enviar desde WhatsApp Business): automatizar la app
+viola las condiciones de WhatsApp y hace que bloqueen el número.
+
 ## Fuente de cada contacto
 
 Columna **«Fuente»** en la planilla (URL de donde salió el dato). Se guarda en `source_url` solo si estaba vacía:

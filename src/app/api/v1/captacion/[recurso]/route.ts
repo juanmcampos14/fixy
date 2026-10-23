@@ -35,7 +35,7 @@ async function candidates(url: URL) {
       const e = by.get(r.id);
       return {
         codigo: r.code, nombre: r.business_name, oficios: r.categories, oficio_original: r.trades_raw, localidad_base: r.base_locality, zona: r.zone,
-        region: r.base_region, etapa: r.stage, origen: r.source, no_contactar: r.do_not_contact, tiene_whatsapp: !!r.whatsapp_e164, tiene_email: !!e?.has_email,
+        region: r.base_region, etapa: r.stage, origen: r.source, no_contactar: r.do_not_contact, consintio_whatsapp: r.wa_consent, tiene_whatsapp: !!r.whatsapp_e164, tiene_email: !!e?.has_email,
         sitio: e?.website ?? null, fuente: e?.source_url ?? null, tipo_de_fuente: checkSource(e?.source_url, e?.website), alta: r.created_at,
       };
     }),

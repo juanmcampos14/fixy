@@ -7,7 +7,7 @@ import {
 import { PageHeader, Stat } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Checkbox, Field, Input, Select } from "@/components/ui/field";
 import { ActionForm, ConfirmAction, ReadOnly, SubmitButton } from "@/components/ui/form";
 import { DataTable, FilterBar, FilterField, Pagination, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { REGION_LABEL } from "@/lib/regions";
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 const VIEWS = ["candidatos", "metricas", "cargar", "integraciones"] as const;
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)} %` : "—");
 
-type SP = { vista?: string; etapa?: string; origen?: string; oficio?: string; region?: string; q?: string; responsable?: string; pagina?: string };
+type SP = { vista?: string; etapa?: string; origen?: string; oficio?: string; region?: string; q?: string; responsable?: string; pagina?: string; consentimiento?: string };
 
 export default async function SupplyPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -63,7 +63,7 @@ async function Leads({ sp }: { sp: SP }) {
   const page = Math.max(1, Number(sp.pagina) || 1);
   const [facets, owners, list] = await Promise.all([
     leadFacets(), supplyOwners(),
-    listLeads({ stage, source: sp.origen || undefined, category: sp.oficio || undefined, region: sp.region || undefined, q: sp.q, owner: sp.responsable || undefined, page }),
+    listLeads({ stage, source: sp.origen || undefined, category: sp.oficio || undefined, region: sp.region || undefined, q: sp.q, owner: sp.responsable || undefined, consented: sp.consentimiento === "si", page }),
   ]);
   return (
     <>
@@ -99,6 +99,12 @@ async function Leads({ sp }: { sp: SP }) {
             {owners.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
           </Select>
         </FilterField>
+        <FilterField label="Consentimiento" htmlFor="f-cons">
+          <Select id="f-cons" name="consentimiento" defaultValue={sp.consentimiento ?? ""}>
+            <option value="">Todos</option>
+            <option value="si">Con consentimiento para WhatsApp</option>
+          </Select>
+        </FilterField>
         <FilterField label="Buscar" htmlFor="f-q" className="min-w-56">
           <Input id="f-q" name="q" defaultValue={sp.q ?? ""} placeholder="Nombre, FX-012, localidad, teléfono" />
         </FilterField>
@@ -122,6 +128,7 @@ async function Leads({ sp }: { sp: SP }) {
                 <Td>
                   <Badge tone={STAGE_TONE[l.stage]} icon={false}>{LEAD_STAGE_LABEL[l.stage]}</Badge>
                   {l.do_not_contact && <div className="mt-1"><Badge tone="danger" icon={false}>No contactar</Badge></div>}
+                  {l.wa_consent && !l.do_not_contact && <div className="mt-1"><Badge tone="ok" icon={false}>Consintió WhatsApp</Badge></div>}
                 </Td>
                 <Td className="text-sm">{l.owner ?? <span className="text-muted">—</span>}</Td>
                 <Td className="text-sm text-muted">{l.last_event_at ? formatDate(l.last_event_at) : "—"}</Td>
@@ -131,7 +138,7 @@ async function Leads({ sp }: { sp: SP }) {
         </DataTable>
       )}
       <Pagination basePath="/admin/captacion" page={list.page} hasMore={list.hasMore}
-        params={{ etapa: sp.etapa, origen: sp.origen, oficio: sp.oficio, region: sp.region, q: sp.q, responsable: sp.responsable }} />
+        params={{ etapa: sp.etapa, origen: sp.origen, oficio: sp.oficio, region: sp.region, q: sp.q, responsable: sp.responsable, consentimiento: sp.consentimiento }} />
     </>
   );
 }
@@ -291,9 +298,13 @@ async function Load({ readOnly }: { readOnly: boolean }) {
         </Section>
 
         <div className="space-y-6">
-          <Section title="Subir un archivo" description="CSV con las mismas columnas que la planilla (ID FIXY, Nombre comercial, Oficio, Localidad base, Teléfono, Email…). Desde Excel o Google: Archivo › Descargar › CSV.">
+          <Section title="Subir una base" description="CSV con columnas Nombre, Oficio, Localidad, Teléfono y Email (ID es opcional: sin ID se les asigna un código AL-). No duplica: si el teléfono o el email ya están, se saltea. Desde Excel o Google: Archivo › Descargar › CSV.">
             <ActionForm action={uploadLeadsCsvAction} encType="multipart/form-data" className="space-y-3">
               <Field label="Archivo CSV" htmlFor="u-file" required><Input id="u-file" name="file" type="file" accept=".csv,text/csv" required /></Field>
+              <Checkbox name="consent" label="Estos contactos dieron su consentimiento para recibir WhatsApp de Fixy" />
+              <Field label="¿De dónde sale el consentimiento?" htmlFor="u-consent" hint="Queda guardado en cada contacto. Es lo que te pueden pedir si alguien reclama (guardá también el respaldo).">
+                <Input id="u-consent" name="consentSource" maxLength={300} placeholder="Base oficial de …, autorizaron recibir comunicaciones de …" />
+              </Field>
               <SubmitButton>Importar</SubmitButton>
             </ActionForm>
           </Section>

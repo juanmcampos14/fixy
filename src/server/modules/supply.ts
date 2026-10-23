@@ -47,13 +47,14 @@ export function parseResearchRows(rows: string[][]): { inputs: LeadInput[]; issu
     source: col("fuente", "url fuente", "link fuente", "canal", "origen"),
   };
   const issues: SyncIssue[] = [];
-  if (ix.code < 0 || ix.name < 0) return { inputs: [], issues: [{ code: "-", problem: "Faltan las columnas ID y Nombre comercial" }] };
+  // Sin columna ID (por ejemplo, una base externa) se asignan códigos AL- y no se duplica por teléfono o email.
+  if (ix.name < 0) return { inputs: [], issues: [{ code: "-", problem: "Falta la columna Nombre (o Nombre comercial)" }] };
   const get = (r: string[], i: number) => (i >= 0 ? (r[i] ?? "").toString().trim() : "");
   const inputs: LeadInput[] = [];
   for (const r of rows.slice(1)) {
     const code = get(r, ix.code).toUpperCase();
     if (!code && !get(r, ix.name)) continue; // fila vacía
-    if (!LEAD_CODE.test(code)) {
+    if (code && !LEAD_CODE.test(code)) {
       issues.push({ code: code || "(sin ID)", problem: "ID con formato inválido (se espera FX-001)" });
       continue;
     }
@@ -141,7 +142,11 @@ export type SyncResult = { runId: string; inserted: number; updated: number; unc
  */
 export async function importLeads(
   inputs: LeadInput[],
-  opts: { source?: "research" | "manual"; sourceDetail: string; trigger: "cron" | "manual" | "upload" | "initial"; actor?: Actor | null; preIssues?: SyncIssue[] },
+  opts: {
+    source?: "research" | "manual"; sourceDetail: string; trigger: "cron" | "manual" | "upload" | "initial"; actor?: Actor | null; preIssues?: SyncIssue[];
+    /** La base trae consentimiento para recibir WhatsApp de Fixy: de dónde sale (se guarda en cada contacto). */
+    consent?: { source: string };
+  },
 ): Promise<SyncResult> {
   return systemTx(async (tx) => {
     const ctx = await loadCtx(tx);
@@ -149,7 +154,18 @@ export async function importLeads(
     const [run] = await tx<{ id: string }[]>`insert into supply_sync_runs (source, trigger, actor_id) values (${opts.sourceDetail}, ${opts.trigger}, ${opts.actor?.id ?? null}) returning id`;
     let inserted = 0, updated = 0, unchanged = 0, skipped = 0;
     const seen = new Set<string>();
+    // Consentimiento: se registra en el contacto (nuevo, existente o duplicado por teléfono) salvo que haya pedido la baja.
+    const consent = async (leadId: string) => {
+      if (!opts.consent) return;
+      const r = await tx`update supply_leads set wa_consent_at = now(), wa_consent_source = ${opts.consent.source.slice(0, 300)}
+        where id = ${leadId} and wa_consent_at is null and not do_not_contact`;
+      if (r.count) await tx`insert into supply_lead_events (lead_id, kind, detail, actor_id) values (${leadId}, 'consent', ${tx.json({ source: opts.consent.source, run: run.id } as never)}, ${opts.actor?.id ?? null})`;
+    };
     for (const input of inputs) {
+      if (!input.code) {
+        const [{ n }] = await tx<{ n: number }[]>`select nextval('supply_lead_al_seq')::int as n`;
+        input.code = `AL-${String(n).padStart(4, "0")}`;
+      }
       if (seen.has(input.code)) {
         issues.push({ code: input.code, problem: "ID repetido en la fuente" });
         skipped++;
@@ -172,6 +188,7 @@ export async function importLeads(
         if (!existing.base_locality && n.base_locality) Object.assign(patch, { base_locality: n.base_locality, base_zone_id: n.base_zone_id, base_region: n.base_region });
         // Respaldo de la fila: se suman columnas nuevas, pero lo que ya se había levantado no se pisa.
         await tx`update supply_leads set research_data = ${tx.json(n.research_data as never)} || research_data, synced_at = now() where id = ${existing.id}`;
+        await consent(existing.id);
         if (Object.keys(patch).length) {
           await tx`update supply_leads set ${tx(patch as Record<string, unknown>, ...Object.keys(patch))} where id = ${existing.id}`;
           await tx`insert into supply_lead_events (lead_id, kind, detail, actor_id) values (${existing.id}, 'sync_update', ${tx.json({ fields: Object.keys(patch), run: run.id } as never)}, ${opts.actor?.id ?? null})`;
@@ -180,10 +197,11 @@ export async function importLeads(
         continue;
       }
       const [dup] = n.phone_key || n.email
-        ? await tx<{ code: string }[]>`select code from supply_leads where (${n.phone_key}::text is not null and phone_key = ${n.phone_key}) or (${n.email}::text is not null and lower(email) = ${n.email}) limit 1`
+        ? await tx<{ id: string; code: string }[]>`select id, code from supply_leads where (${n.phone_key}::text is not null and phone_key = ${n.phone_key}) or (${n.email}::text is not null and lower(email) = ${n.email}) limit 1`
         : [];
       if (dup) {
-        issues.push({ code: n.code, problem: `Duplicado de ${dup.code} (mismo teléfono o email): no se cargó` });
+        await consent(dup.id);
+        issues.push({ code: n.code, problem: `Duplicado de ${dup.code} (mismo teléfono o email): no se cargó${opts.consent ? "; se registró el consentimiento en el existente" : ""}` });
         skipped++;
         continue;
       }
@@ -196,6 +214,7 @@ export async function importLeads(
           ${n.base_region}, ${tx.json(n.research_data as never)}, now(), ${match?.provider_id ?? null}, ${match?.user_id ?? null},
           ${match ? "registered" : "candidate"}, ${match ? new Date() : null})
         returning id`;
+      await consent(lead.id);
       await tx`insert into supply_lead_events (lead_id, kind, detail, actor_id) values (${lead.id}, 'import', ${tx.json({ run: run.id, source: opts.sourceDetail, linkedProvider: match?.provider_id ?? null } as never)}, ${opts.actor?.id ?? null})`;
       inserted++;
     }
@@ -213,7 +232,10 @@ export async function syncSupplySheet(trigger: "cron" | "manual", actor?: Actor 
   const label = `Planilla ${env().SUPPLY_SHEET_TAB}`;
   try {
     const { rows } = await readSheet();
-    const { inputs, issues } = parseResearchRows(rows);
+    const parsed = parseResearchRows(rows);
+    // En la planilla cada fila lleva su ID (FX-001): sin ID se saltea (si no, se duplicaría en cada sincronización).
+    const inputs = parsed.inputs.filter((i) => i.code);
+    const issues = [...parsed.issues, ...parsed.inputs.filter((i) => !i.code).map((i) => ({ code: "(sin ID)", problem: `«${i.businessName}» no tiene ID en la planilla` }))];
     if (!inputs.length) throw new SheetAccessError(issues[0]?.problem ?? "La planilla no tiene filas.");
     return await importLeads(inputs, { source: "research", sourceDetail: label, trigger, actor, preIssues: issues });
   } catch (e) {

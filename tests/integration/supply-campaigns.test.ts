@@ -98,6 +98,30 @@ describe("campañas por WhatsApp (envío asistido)", () => {
   });
 });
 
+describe("base con consentimiento", () => {
+  it("se carga sin IDs, no duplica, registra el consentimiento y la campaña puede tomar solo a esos contactos", async () => {
+    const admin = await actor("admin");
+    await sql()`update supply_campaigns set status = 'closed' where status <> 'closed'`;
+    const [p1, p2] = [phone(), phone()];
+    const rows = [["Nombre", "Oficio", "Localidad", "Teléfono"], ["Ana Herrera", "herrero", "Tigre", p1], ["Taller Ruiz", "herrería", "Tigre", p2]];
+    const parsed = supply.parseResearchRows(rows);
+    const r1 = await supply.importLeads(parsed.inputs, { sourceDetail: "Base oficial", trigger: "upload", actor: admin, consent: { source: "Padrón de prueba, autorizaron comunicaciones" } });
+    expect(r1.inserted).toBe(2);
+    const leads = await sql()<{ code: string; wa_consent_source: string | null }[]>`select code, wa_consent_source from supply_leads where phone_key in (${p1}, ${p2}) order by code`;
+    expect(leads.map((l) => l.code)).toEqual([expect.stringMatching(/^AL-\d{4,}$/), expect.stringMatching(/^AL-\d{4,}$/)]);
+    expect(leads[0].wa_consent_source).toMatch(/Padrón/);
+    // Volver a subir el mismo archivo no duplica.
+    const r2 = await supply.importLeads(supply.parseResearchRows(rows).inputs, { sourceDetail: "Base oficial", trigger: "upload", actor: admin });
+    expect(r2).toMatchObject({ inserted: 0, skipped: 2 });
+
+    // Uno de la planilla de research (sin consentimiento) del mismo oficio no entra en la campaña «solo con consentimiento».
+    await seedLeads("herrero", 1);
+    const herreria = await catId("herreria");
+    const { leads: n } = await camp.createCampaign(admin, { name: "Herreros con consentimiento", channel: "whatsapp", categoryIds: [herreria], size: 10, firstMessage: WA.first, followupMessage: WA.followup, onlyConsented: true });
+    expect(n).toBe(2);
+  });
+});
+
 describe("campañas por email", () => {
   it("salen solas en horario comercial, con remitente, origen del dato y link de baja que funciona", async () => {
     const admin = await actor("admin");

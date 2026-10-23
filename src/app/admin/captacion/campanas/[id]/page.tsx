@@ -35,7 +35,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     <>
       <BackLink href="/admin/captacion/campanas">Campañas</BackLink>
       <PageHeader eyebrow={`${c.channel === "whatsapp" ? "WhatsApp asistido" : "Email automático"} · utm_campaign=${c.slug}`} title={c.name}
-        description={`${c.categories.join(", ") || "Todos los oficios"} · ${where}. Seguimiento a los ${c.followup_days} días, hasta ${c.max_attempts} ${c.max_attempts === 1 ? "intento" : "intentos"}, máximo ${c.daily_cap} por día.`}
+        description={`${c.categories.join(", ") || "Todos los oficios"} · ${where}${c.only_consented ? " · solo con consentimiento" : ""}. Seguimiento a los ${c.followup_days} días, hasta ${c.max_attempts} ${c.max_attempts === 1 ? "intento" : "intentos"}, máximo ${c.daily_cap} por día.`}
         action={<Badge tone={CAMPAIGN_STATUS[c.status].tone} icon={false}>{CAMPAIGN_STATUS[c.status].label}</Badge>} />
 
       <ReadOnly when={readOnly}>

@@ -6,7 +6,7 @@ import "server-only";
 import { sql } from "@/server/db/client";
 import { LEAD_STAGES, type LeadStage } from "@/server/modules/supply";
 
-export type LeadFilters = { stage?: LeadStage; source?: string; category?: string; region?: string; q?: string; owner?: string; page?: number };
+export type LeadFilters = { stage?: LeadStage; source?: string; category?: string; region?: string; q?: string; owner?: string; consented?: boolean; page?: number };
 const PAGE = 50;
 
 export async function supplyFunnel() {
@@ -24,7 +24,7 @@ export async function supplyFunnel() {
 export type LeadRow = {
   id: string; code: string; source: string; source_detail: string | null; business_name: string; contact_name: string | null; phone_raw: string | null;
   whatsapp_e164: string | null; email: string | null; trades_raw: string | null; categories: string[]; base_locality: string | null; zone: string | null;
-  base_region: string | null; stage: LeadStage; do_not_contact: boolean; owner: string | null; provider_id: string | null; created_at: Date; last_event_at: Date | null;
+  base_region: string | null; stage: LeadStage; do_not_contact: boolean; wa_consent: boolean; owner: string | null; provider_id: string | null; created_at: Date; last_event_at: Date | null;
 };
 
 export async function listLeads(f: LeadFilters) {
@@ -35,7 +35,7 @@ export async function listLeads(f: LeadFilters) {
   const rows = await db<LeadRow[]>`
     select l.id, l.code, l.source, l.source_detail, l.business_name, l.contact_name, l.phone_raw, l.whatsapp_e164, l.email, l.trades_raw,
       coalesce((select array_agg(c.name order by c.id = l.primary_category_id desc, c.sort) from categories c where c.id = any(l.category_ids)), '{}') as categories,
-      l.base_locality, z.name as zone, l.base_region, l.stage, l.do_not_contact, u.full_name as owner, l.provider_id, l.created_at,
+      l.base_locality, z.name as zone, l.base_region, l.stage, l.do_not_contact, l.wa_consent_at is not null as wa_consent, u.full_name as owner, l.provider_id, l.created_at,
       (select max(e.created_at) from supply_lead_events e where e.lead_id = l.id and e.kind in ('contact','note','stage')) as last_event_at
     from supply_leads l left join zones z on z.id = l.base_zone_id left join users u on u.id = l.owner_id
     where true
@@ -43,6 +43,7 @@ export async function listLeads(f: LeadFilters) {
       ${f.source ? db`and l.source = ${f.source}` : db``}
       ${f.category ? db`and exists (select 1 from categories c where c.slug = ${f.category} and c.id = any(l.category_ids))` : db``}
       ${f.region ? db`and l.base_region = ${f.region}` : db``}
+      ${f.consented ? db`and l.wa_consent_at is not null` : db``}
       ${f.owner === "none" ? db`and l.owner_id is null` : f.owner ? db`and l.owner_id = ${f.owner}` : db``}
       ${q ? db`and (lower(l.business_name) like ${q} or lower(l.code) like ${q} or lower(coalesce(l.base_locality,'')) like ${q}
         or lower(coalesce(l.email,'')) like ${q} ${digits.length >= 6 ? db`or l.phone_key like ${`%${digits.slice(-8)}%`}` : db``})` : db``}
@@ -58,8 +59,9 @@ export async function leadDetail(id: string) {
     phone_key: string | null; website: string | null; source_url: string | null; research_data: Record<string, string>; utm: Record<string, string>;
     owner_id: string | null; notes: string | null; discard_reason: string | null; provider_name: string | null; provider_status: string | null;
     contacted_at: Date | null; interested_at: Date | null; registered_at: Date | null; verified_at: Date | null; active_at: Date | null; synced_at: Date | null; opt_out_at: Date | null;
+    wa_consent_at: Date | null; wa_consent_source: string | null;
   })[]>`
-    select l.*, z.name as zone, u.full_name as owner, p.display_name as provider_name, p.status as provider_status,
+    select l.*, l.wa_consent_at is not null as wa_consent, z.name as zone, u.full_name as owner, p.display_name as provider_name, p.status as provider_status,
       coalesce((select array_agg(c.name order by c.id = l.primary_category_id desc, c.sort) from categories c where c.id = any(l.category_ids)), '{}') as categories,
       null::timestamptz as last_event_at
     from supply_leads l left join zones z on z.id = l.base_zone_id left join users u on u.id = l.owner_id left join providers p on p.id = l.provider_id
@@ -194,13 +196,13 @@ const CAMPAIGN_STATS = (db: ReturnType<typeof sql>) => db`
 
 export type CampaignRow = CampaignStats & {
   id: string; name: string; slug: string; channel: "whatsapp" | "email"; status: "draft" | "active" | "paused" | "closed"; size: number;
-  daily_cap: number; followup_days: number; max_attempts: number; created_at: Date; activated_at: Date | null; categories: string[]; regions: string[]; zones: string[];
+  only_consented: boolean; daily_cap: number; followup_days: number; max_attempts: number; created_at: Date; activated_at: Date | null; categories: string[]; regions: string[]; zones: string[];
 };
 
 export async function listCampaigns() {
   const db = sql();
   return db<CampaignRow[]>`
-    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
+    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.only_consented, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
       coalesce((select array_agg(x.name order by x.sort) from categories x where x.id = any(c.category_ids)), '{}') as categories,
       coalesce((select array_agg(z.name order by z.sort) from zones z where z.id = any(c.zone_ids)), '{}') as zones,
       ${CAMPAIGN_STATS(db)}
@@ -211,7 +213,7 @@ export async function listCampaigns() {
 export async function campaignDetail(id: string) {
   const db = sql();
   const [campaign] = await db<(CampaignRow & { first_message: string; followup_message: string | null; email_subject: string | null; created_by: string | null })[]>`
-    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
+    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.only_consented, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
       c.first_message, c.followup_message, c.email_subject, u.full_name as created_by,
       coalesce((select array_agg(x.name order by x.sort) from categories x where x.id = any(c.category_ids)), '{}') as categories,
       coalesce((select array_agg(z.name order by z.sort) from zones z where z.id = any(c.zone_ids)), '{}') as zones,
@@ -231,16 +233,17 @@ export async function campaignDetail(id: string) {
 
 export async function campaignFormOptions() {
   const db = sql();
-  const [categories, zones, regions] = await Promise.all([
+  const [categories, zones, consented, regions] = await Promise.all([
     db<{ id: string; name: string; candidates: number }[]>`
       select c.id, c.name, (select count(*)::int from supply_leads l where c.id = any(l.category_ids) and l.stage = 'candidate' and not l.do_not_contact) as candidates
       from categories c where c.active and c.slug <> 'otro' order by c.sort, c.name`,
     db<{ id: string; name: string; region: string; candidates: number }[]>`
       select z.id, z.name, z.region, (select count(*)::int from supply_leads l where l.base_zone_id = z.id and l.stage = 'candidate' and not l.do_not_contact) as candidates
       from zones z where z.active and not z.catch_all order by z.sort, z.name`,
+    db<{ n: number }[]>`select count(*)::int as n from supply_leads where wa_consent_at is not null and stage = 'candidate' and not do_not_contact and provider_id is null`,
     db<{ code: string; candidates: number }[]>`
       select base_region as code, count(*)::int as candidates from supply_leads where base_region is not null and stage = 'candidate' and not do_not_contact
       group by base_region order by candidates desc`,
   ]);
-  return { categories, zones, regions };
+  return { categories, zones, regions, consented: consented[0].n };
 }

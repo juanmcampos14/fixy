@@ -40,6 +40,7 @@ function eventTitle(kind: string, d: Record<string, unknown>): { title: string; 
       };
       return { title: `${what[s(d.action)] ?? s(d.action)} · ${s(d.name)}`, reason: s(d.reason) || s(d.note) || null };
     }
+    case "consent": return { title: "Consentimiento para recibir WhatsApp registrado", reason: s(d.source) || null };
     case "assign": return { title: d.ownerId ? "Cambió el responsable" : "Quedó sin responsable", reason: null };
     default: return { title: kind, reason: null };
   }
@@ -87,6 +88,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               ...(Object.keys(lead.utm ?? {}).length ? [["Campaña", Object.entries(lead.utm).map(([k, v]) => `${k.replace("utm_", "")}: ${v}`).join(" · ")] as [string, string]] : []),
               ["Perfil en Fixy", registered ? <Link href={`/admin/proveedores/${lead.provider_id}`} className="text-fixy-800 underline">{lead.provider_name ?? "Ver perfil"}</Link> : "Todavía no se registró"],
               ["Responsable", lead.owner ?? "Sin asignar"],
+              ["Consentimiento para WhatsApp", lead.wa_consent_at ? `Sí, desde ${formatDateTime(lead.wa_consent_at)}${lead.wa_consent_source ? ` · ${lead.wa_consent_source}` : ""}` : "No registrado"],
             ]} />
           </Section>
 

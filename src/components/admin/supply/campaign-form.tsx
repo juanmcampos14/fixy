@@ -4,18 +4,20 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { ActionState } from "@/lib/action-state";
 import { Alert } from "@/components/ui/alert";
-import { ChoiceChip, Field, Input, Select, Textarea } from "@/components/ui/field";
+import { Checkbox, ChoiceChip, Field, Input, Select, Textarea } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/form";
 
 type Defaults = { whatsapp: { first: string; followup: string }; email: { subject: string; first: string; followup: string } };
 
 /** Armado de una campaña: canal, oficios, dónde, tamaño, textos y ritmo. Queda en borrador para revisarla. */
-export function CampaignForm({ action, categories, regions, zones, defaults }: {
+export function CampaignForm({ action, categories, regions, zones, defaults, consented }: {
   action: (s: ActionState, f: FormData) => Promise<ActionState>;
   categories: { id: string; name: string; candidates: number }[];
   regions: { code: string; label: string; candidates: number }[];
   zones: { id: string; name: string; candidates: number }[];
   defaults: Defaults;
+  /** Contactos disponibles con consentimiento para WhatsApp. */
+  consented: number;
 }) {
   const [state, formAction] = useActionState(action, {});
   const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
@@ -34,6 +36,10 @@ export function CampaignForm({ action, categories, regions, zones, defaults }: {
           </Select>
         </Field>
       </div>
+
+      {consented > 0 && (
+        <Checkbox name="onlyConsented" defaultChecked label={<>Solo contactos que dieron consentimiento para recibir WhatsApp de Fixy <span className="text-muted">({consented} disponibles)</span></>} />
+      )}
 
       <fieldset>
         <legend className="mb-2 text-[15px] font-semibold">Oficios <span className="font-normal text-muted">(sin elegir = todos)</span></legend>
