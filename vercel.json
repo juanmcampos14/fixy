@@ -8,6 +8,7 @@
     { "path": "/api/cron/reviews", "schedule": "*/30 * * * *" },
     { "path": "/api/cron/whatsapp-templates", "schedule": "17 * * * *" },
     { "path": "/api/cron/watchdog", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/supply-sync", "schedule": "0 10 * * *" }
+    { "path": "/api/cron/supply-sync", "schedule": "0 10 * * *" },
+    { "path": "/api/cron/supply-outreach", "schedule": "23 * * * *" }
   ]
 }

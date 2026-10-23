@@ -32,7 +32,7 @@ export const isLeadCode = (s: string | null | undefined) => !!s && LEAD_CODE.tes
 
 export type LeadInput = {
   code: string; businessName: string; trades: string; locality: string; phone: string; email: string; website: string;
-  contactName?: string; sourceDetail?: string; raw: Record<string, string>;
+  contactName?: string; sourceDetail?: string; sourceUrl?: string; raw: Record<string, string>;
 };
 export type SyncIssue = { code: string; problem: string };
 
@@ -44,7 +44,7 @@ export function parseResearchRows(rows: string[][]): { inputs: LeadInput[]; issu
     code: col("id fixy", "id"), name: col("nombre comercial", "nombre"), trades: col("oficio", "rubro principal", "rubro"),
     locality: col("localidad base", "localidad"), phone: col("teléfono comercial", "telefono comercial", "teléfono", "telefono"),
     email: col("email comercial", "email"), website: col("sitio / perfil", "sitio", "perfil", "web"), contact: col("contacto", "nombre de contacto"),
-    source: col("fuente", "canal", "origen"),
+    source: col("fuente", "url fuente", "link fuente", "canal", "origen"),
   };
   const issues: SyncIssue[] = [];
   if (ix.code < 0 || ix.name < 0) return { inputs: [], issues: [{ code: "-", problem: "Faltan las columnas ID y Nombre comercial" }] };
@@ -59,7 +59,9 @@ export function parseResearchRows(rows: string[][]): { inputs: LeadInput[]; issu
     }
     inputs.push({
       code, businessName: get(r, ix.name), trades: get(r, ix.trades), locality: get(r, ix.locality), phone: get(r, ix.phone),
-      email: get(r, ix.email), website: get(r, ix.website), contactName: get(r, ix.contact) || undefined, sourceDetail: get(r, ix.source) || undefined,
+      email: get(r, ix.email), website: get(r, ix.website), contactName: get(r, ix.contact) || undefined,
+      // «Fuente»: la URL de donde salió el contacto (directorio, sitio, red); si no es URL, es una descripción.
+      ...(cleanUrl(get(r, ix.source)) ? { sourceUrl: get(r, ix.source) } : { sourceDetail: get(r, ix.source) || undefined }),
       raw: Object.fromEntries(header.map((h, i) => [h, (r[i] ?? "").toString()]).filter(([h, v]) => h && v)),
     });
   }
@@ -95,7 +97,7 @@ const cleanUrl = (u: string) => {
 type Normalized = {
   code: string; business_name: string; contact_name: string | null; phone_raw: string | null; phone_key: string | null; whatsapp_e164: string | null;
   email: string | null; website: string | null; trades_raw: string | null; category_ids: string[]; primary_category_id: string | null;
-  base_locality: string | null; base_zone_id: string | null; base_region: string | null; source_detail: string | null; research_data: Record<string, string>;
+  base_locality: string | null; base_zone_id: string | null; base_region: string | null; source_detail: string | null; source_url: string | null; research_data: Record<string, string>;
 };
 
 function normalize(i: LeadInput, ctx: Ctx, issues: SyncIssue[]): Normalized | null {
@@ -114,7 +116,7 @@ function normalize(i: LeadInput, ctx: Ctx, issues: SyncIssue[]): Normalized | nu
     phone_raw: i.phone ? i.phone.slice(0, 60) : null, phone_key: phone?.key ?? null, whatsapp_e164: phone?.whatsapp ?? null,
     email: cleanEmail(i.email), website: cleanUrl(i.website), trades_raw: i.trades ? i.trades.slice(0, 200) : null,
     category_ids: catIds, primary_category_id: catIds[0] ?? null, base_locality: i.locality ? i.locality.slice(0, 120) : null,
-    base_zone_id: base.zoneId, base_region: base.region, source_detail: i.sourceDetail?.slice(0, 200) ?? null, research_data: i.raw,
+    base_zone_id: base.zoneId, base_region: base.region, source_detail: i.sourceDetail?.slice(0, 200) ?? null, source_url: i.sourceUrl ? cleanUrl(i.sourceUrl) : null, research_data: i.raw,
   };
 }
 
@@ -156,8 +158,8 @@ export async function importLeads(
       seen.add(input.code);
       const n = normalize(input, ctx, issues);
       if (!n) { skipped++; continue; }
-      const [existing] = await tx<{ id: string; business_name: string; phone_key: string | null; email: string | null; website: string | null; trades_raw: string | null; category_ids: string[]; base_locality: string | null; contact_name: string | null }[]>`
-        select id, business_name, phone_key, email, website, trades_raw, category_ids, base_locality, contact_name from supply_leads where code = ${n.code} for update`;
+      const [existing] = await tx<{ id: string; business_name: string; phone_key: string | null; email: string | null; website: string | null; trades_raw: string | null; category_ids: string[]; base_locality: string | null; contact_name: string | null; source_url: string | null }[]>`
+        select id, business_name, phone_key, email, website, trades_raw, category_ids, base_locality, contact_name, source_url from supply_leads where code = ${n.code} for update`;
       if (existing) {
         // Solo lo nuevo: completa vacíos; lo que el equipo trabajó no se toca.
         const patch: Partial<Normalized> = {};
@@ -165,9 +167,11 @@ export async function importLeads(
         if (!existing.email && n.email) patch.email = n.email;
         if (!existing.website && n.website) patch.website = n.website;
         if (!existing.contact_name && n.contact_name) patch.contact_name = n.contact_name;
+        if (!existing.source_url && n.source_url) patch.source_url = n.source_url;
         if (!existing.category_ids.length && n.category_ids.length) Object.assign(patch, { category_ids: n.category_ids, primary_category_id: n.primary_category_id, trades_raw: n.trades_raw });
         if (!existing.base_locality && n.base_locality) Object.assign(patch, { base_locality: n.base_locality, base_zone_id: n.base_zone_id, base_region: n.base_region });
-        await tx`update supply_leads set research_data = ${tx.json(n.research_data as never)}, synced_at = now() where id = ${existing.id}`;
+        // Respaldo de la fila: se suman columnas nuevas, pero lo que ya se había levantado no se pisa.
+        await tx`update supply_leads set research_data = ${tx.json(n.research_data as never)} || research_data, synced_at = now() where id = ${existing.id}`;
         if (Object.keys(patch).length) {
           await tx`update supply_leads set ${tx(patch as Record<string, unknown>, ...Object.keys(patch))} where id = ${existing.id}`;
           await tx`insert into supply_lead_events (lead_id, kind, detail, actor_id) values (${existing.id}, 'sync_update', ${tx.json({ fields: Object.keys(patch), run: run.id } as never)}, ${opts.actor?.id ?? null})`;
@@ -185,9 +189,9 @@ export async function importLeads(
       }
       const match = await findProviderFor(tx, n.phone_key, n.email);
       const [lead] = await tx<{ id: string }[]>`
-        insert into supply_leads (code, source, source_detail, business_name, contact_name, phone_raw, phone_key, whatsapp_e164, email, website, trades_raw,
+        insert into supply_leads (code, source, source_detail, source_url, business_name, contact_name, phone_raw, phone_key, whatsapp_e164, email, website, trades_raw,
           category_ids, primary_category_id, base_locality, base_zone_id, base_region, research_data, synced_at, provider_id, user_id, stage, registered_at)
-        values (${n.code}, ${opts.source ?? "research"}, ${n.source_detail ?? opts.sourceDetail}, ${n.business_name}, ${n.contact_name}, ${n.phone_raw}, ${n.phone_key},
+        values (${n.code}, ${opts.source ?? "research"}, ${n.source_detail ?? opts.sourceDetail}, ${n.source_url}, ${n.business_name}, ${n.contact_name}, ${n.phone_raw}, ${n.phone_key},
           ${n.whatsapp_e164}, ${n.email}, ${n.website}, ${n.trades_raw}, ${n.category_ids}, ${n.primary_category_id}, ${n.base_locality}, ${n.base_zone_id},
           ${n.base_region}, ${tx.json(n.research_data as never)}, now(), ${match?.provider_id ?? null}, ${match?.user_id ?? null},
           ${match ? "registered" : "candidate"}, ${match ? new Date() : null})

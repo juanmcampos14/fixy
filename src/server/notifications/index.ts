@@ -87,7 +87,7 @@ export async function staffRecipients(db: Db): Promise<string[]> {
 // ───────── Adaptador de email ─────────
 export interface EmailAdapter {
   name: string;
-  send(msg: { to: string; subject: string; text: string; link: string | null }, opts?: { idempotencyKey?: string }): Promise<void>;
+  send(msg: { to: string; subject: string; text: string; link: string | null; headers?: Record<string, string> }, opts?: { idempotencyKey?: string }): Promise<void>;
 }
 
 const consoleAdapter: EmailAdapter = {
@@ -115,6 +115,7 @@ const resendAdapter: EmailAdapter = {
         to: [msg.to],
         subject: msg.subject,
         text: `${msg.text}${link ? `\n\nVer en Fixy: ${link}` : ""}\n\n— Fixy · fixy.solutions`,
+        ...(msg.headers ? { headers: msg.headers } : {}),
       }),
       signal: AbortSignal.timeout(10_000),
     });

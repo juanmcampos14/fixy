@@ -12,17 +12,16 @@ import { ActionForm, ConfirmAction, ReadOnly, SubmitButton } from "@/components/
 import { DataTable, FilterBar, FilterField, Pagination, Section, Tabs, Td, Th } from "@/components/admin/ui";
 import { REGION_LABEL } from "@/lib/regions";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import { STAGE_TONE } from "./labels";
-import { createManualLeadAction, setMarketingSpendAction, syncSheetNowAction, uploadLeadsCsvAction } from "./actions";
+import { STAGE_TONE, SUPPLY_TABS } from "./labels";
+import { listApiKeys } from "@/server/modules/api-keys";
+import { ApiKeyForm } from "@/components/admin/supply/api-key-form";
+import { env } from "@/server/env";
+import { createApiKeyAction, revokeApiKeyAction, createManualLeadAction, setMarketingSpendAction, syncSheetNowAction, uploadLeadsCsvAction } from "./actions";
 
 export const metadata = { title: "Captación" };
 export const dynamic = "force-dynamic";
 
-const VIEWS = [
-  { key: "candidatos", label: "Candidatos" },
-  { key: "metricas", label: "Métricas" },
-  { key: "cargar", label: "Cargar y sincronizar" },
-] as const;
+const VIEWS = ["candidatos", "metricas", "cargar", "integraciones"] as const;
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)} %` : "—");
 
 type SP = { vista?: string; etapa?: string; origen?: string; oficio?: string; region?: string; q?: string; responsable?: string; pagina?: string };
@@ -30,7 +29,7 @@ type SP = { vista?: string; etapa?: string; origen?: string; oficio?: string; re
 export default async function SupplyPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const { readOnly } = await requireSection("captacion");
-  const view = VIEWS.find((v) => v.key === sp.vista)?.key ?? "candidatos";
+  const view = VIEWS.find((v) => v === sp.vista) ?? "candidatos";
   const funnel = await supplyFunnel();
   const reached = funnel.by.contacted + funnel.by.interested + funnel.by.registered + funnel.by.verified + funnel.by.active;
   const registered = funnel.by.registered + funnel.by.verified + funnel.by.active;
@@ -49,11 +48,12 @@ export default async function SupplyPage({ searchParams }: { searchParams: Promi
         <Stat label="Activos" value={funnel.by.active} hint={`${pct(funnel.by.active, funnel.total)} de conversión`} tone="ok" />
       </div>
 
-      <Tabs current={view} items={VIEWS.map((v) => ({ key: v.key, label: v.label, href: `/admin/captacion?vista=${v.key}` }))} />
+      <Tabs current={view} items={SUPPLY_TABS} />
 
       {view === "candidatos" && <Leads sp={sp} />}
       {view === "metricas" && <Metrics />}
       {view === "cargar" && <Load readOnly={readOnly} />}
+      {view === "integraciones" && <Integrations readOnly={readOnly} />}
     </>
   );
 }
@@ -319,6 +319,51 @@ async function Load({ readOnly }: { readOnly: boolean }) {
           </Section>
         </div>
       </div>
+    </ReadOnly>
+  );
+}
+
+async function Integrations({ readOnly }: { readOnly: boolean }) {
+  const keys = await listApiKeys();
+  const base = env().APP_URL.replace(/\/$/, "");
+  return (
+    <ReadOnly when={readOnly}>
+      <Section className="mb-6" title="API de solo lectura"
+        description="Para que ChatGPT, Claude o una planilla consulten los datos de captación sin exportar archivos. Solo lee: no puede cambiar nada. No entrega teléfonos ni emails de los candidatos. Cada consulta queda registrada y la clave se puede revocar.">
+        <ol className="mb-5 list-decimal space-y-1.5 pl-5 text-[15px] text-ink-2">
+          <li>Creá una clave acá abajo y copiala (se muestra una sola vez).</li>
+          <li><strong>ChatGPT:</strong> en un GPT personalizado › Configurar › Acciones › Importar desde URL: <code className="break-all">{base}/api/v1/openapi.json</code>. En Autenticación elegí «Clave de API», tipo «Bearer», y pegá la clave.</li>
+          <li><strong>Claude u otras herramientas:</strong> las mismas direcciones, con el encabezado <code>Authorization: Bearer &lt;clave&gt;</code>.</li>
+          <li>Qué se puede consultar: resumen y embudo, oficios (oferta y demanda), zonas y cobertura, localidades, canales, campañas, candidatos y «¿ya lo tenemos?» para no duplicar el research.</li>
+        </ol>
+        {!readOnly && <ApiKeyForm action={createApiKeyAction} />}
+      </Section>
+      <Section title="Claves">
+        {keys.length === 0 ? <EmptyState title="Todavía no hay claves" description="Creá una para conectar ChatGPT o Claude." /> : (
+          <DataTable caption="Claves de la API" minWidth={760}>
+            <thead><tr><Th>Nombre</Th><Th>Clave</Th><Th>Creada</Th><Th>Vence</Th><Th>Último uso</Th><Th>Consultas 7 días</Th><Th>Estado</Th></tr></thead>
+            <tbody>
+              {keys.map((k) => (
+                <tr key={k.id}>
+                  <Td className="font-semibold">{k.name}<div className="text-xs font-normal text-muted">{k.created_by ?? "—"}</div></Td>
+                  <Td><code className="text-sm">{k.prefix}…</code></Td>
+                  <Td className="text-sm">{formatDate(k.created_at)}</Td>
+                  <Td className="text-sm">{k.expires_at ? formatDate(k.expires_at) : "Nunca"}</Td>
+                  <Td className="text-sm">{k.last_used_at ? formatDateTime(k.last_used_at) : "Nunca"}</Td>
+                  <Td className="tabular">{k.requests7d}</Td>
+                  <Td>
+                    {k.revoked_at ? <Badge tone="neutral" icon={false}>Revocada</Badge>
+                      : k.expires_at && k.expires_at < new Date() ? <Badge tone="warn" icon={false}>Vencida</Badge>
+                      : !readOnly ? <ConfirmAction action={revokeApiKeyAction} label="Revocar" size="sm" variant="danger" title={`Revocar «${k.name}»`}
+                          description="Deja de funcionar en el momento. Lo que la use va a tener que configurarse con una clave nueva." confirmLabel="Revocar" hidden={{ keyId: k.id }} />
+                      : <Badge tone="ok" icon={false}>Activa</Badge>}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </Section>
     </ReadOnly>
   );
 }

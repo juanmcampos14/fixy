@@ -32,6 +32,46 @@ La landing los pasa a `/sumate/registrarme`, que los guarda en la cookie `fixy_s
 preelegido al alta guiada). Quedan en `providers.signup_utm` y en el candidato. El gasto se carga por canal y mes
 con el mismo nombre que `utm_source`, para ver costo por registrado y por activo.
 
+## Campañas (/admin/captacion/campanas)
+
+Una campaña toma candidatos del mismo backend (no hay un CRM aparte): oficio, región o zonas puntuales, canal y
+tamaño. Solo entran candidatos sin registrarse, sin «no contactar», sin otra campaña abierta (ni enviada en los
+últimos 60 días) y con el canal (celular o email). Se arma en **borrador**: se revisa el texto («Así le llega»), se
+saca a quien no corresponda y recién ahí se activa.
+
+- **No se activa sin requisitos** (Campañas › Requisitos): número de WhatsApp comercial, inscripción de la base ante
+  la AAIP y revisión de políticas (WhatsApp y/o email). Para email, además, Resend configurado.
+- **WhatsApp asistido.** La cola muestra un candidato por vez con el mensaje armado. «1. Abrir WhatsApp» abre el
+  chat (desde el número comercial del teléfono o la computadora de quien envía); recién después se habilita
+  «2. Ya lo mandé». Tope diario por campaña (20 por defecto): un número nuevo que manda mucho de golpe se bloquea.
+- **Email automático.** Lunes a sábado de 9 a 19 (tarea `supply-outreach`, cada hora), con tope diario. Cada
+  email lleva quién escribe (FLIPS S.R.L.), por qué tenemos el dato, link de baja y encabezado List-Unsubscribe.
+  La baja pide confirmar con un botón (/captacion/baja) para que los lectores de links no den de baja a nadie.
+- **Seguimiento.** A los N días sin respuesta vuelve a la cola con el mensaje de seguimiento, hasta el máximo de
+  intentos; después queda «sin respuesta».
+- **Respuestas.** Las respuestas llegan al número comercial: se anotan en la campaña (le interesa / no le interesa
+  / pidió BAJA). Los clics en el link (`/alta?ref=`, `/sumate/registrarme?ref=`) y los registros se detectan solos.
+- Textos: `{nombre} {negocio} {oficio} {zona} {link} {web} {baja}`. Cada mensaje tiene que tener `{link}` o `{web}`
+  (vincula la respuesta) y, en WhatsApp, `{baja}`.
+
+## Fuente de cada contacto
+
+Columna **«Fuente»** en la planilla (URL de donde salió el dato). Se guarda en `source_url` solo si estaba vacía:
+nada de lo ya levantado se pisa, y el respaldo de la fila (`research_data`) suma columnas nuevas sin cambiar las
+anteriores. La ficha la clasifica: su propio sitio, directorio o red, u otra página (`src/lib/lead-source.ts`).
+
+## API de solo lectura (ChatGPT / Claude)
+
+Claves en Captación › API e integraciones (se muestran una vez; se guarda el hash; vencimiento; revocables; piden
+el segundo factor reciente). Límite: 120 consultas por minuto. Cada consulta queda en `api_key_requests` (180 días).
+No entrega teléfonos ni emails de los candidatos.
+
+- Especificación: `GET /api/v1/openapi.json` (para un GPT personalizado: Acciones › Importar desde URL; autenticación
+  «Clave de API», tipo Bearer).
+- `GET /api/v1/captacion/{resumen|oficios|zonas|localidades|canales|campanas|candidatos}`
+- `POST /api/v1/captacion/verificar` con `{ "items": [{ "telefono", "email", "web" }] }`: ¿ya lo tenemos? (para
+  no duplicar el research).
+
 ## Contacto (políticas)
 
 - **El primer contacto lo hace una persona**, desde un WhatsApp Business comercial separado o por llamada. Nunca desde

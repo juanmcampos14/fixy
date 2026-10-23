@@ -14,6 +14,7 @@ import { buttonClass } from "@/components/ui/button";
 import { REGION_LABEL } from "@/lib/regions";
 import { formatDateTime } from "@/lib/format";
 import { CONTACT_CHANNELS, STAGE_TONE } from "../labels";
+import { checkSource, domainOf, SOURCE_CHECK_LABEL } from "@/lib/lead-source";
 import { addLeadNoteAction, assignLeadOwnerAction, doNotContactAction, recordContactAction, setLeadStageAction } from "../actions";
 
 export const metadata = { title: "Candidato" };
@@ -31,6 +32,14 @@ function eventTitle(kind: string, d: Record<string, unknown>): { title: string; 
     case "note": return { title: "Nota", reason: s(d.note) || null };
     case "link": return { title: "Se registró en Fixy", reason: `Vinculado por ${s(d.by) || "—"}${d.source ? ` · origen ${s(d.source)}` : ""}` };
     case "opt_out": return { title: "Pidió no ser contactado", reason: s(d.reason) || null };
+    case "click": return { title: `Abrió el link de invitación (${s(d.via) === "web" ? "web" : "WhatsApp"})`, reason: null };
+    case "campaign": {
+      const what: Record<string, string> = {
+        sent: `Invitación enviada${Number(d.attempt) > 1 ? ` (seguimiento ${Number(d.attempt) - 1})` : ""}`, skipped: "Salteado en la campaña",
+        replied_interested: "Respondió: le interesa", replied_not_interested: "Respondió: no le interesa", opted_out: "Pidió la baja en la campaña",
+      };
+      return { title: `${what[s(d.action)] ?? s(d.action)} · ${s(d.name)}`, reason: s(d.reason) || s(d.note) || null };
+    }
     case "assign": return { title: d.ownerId ? "Cambió el responsable" : "Quedó sin responsable", reason: null };
     default: return { title: kind, reason: null };
   }
@@ -47,6 +56,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const wa = lead.whatsapp_e164 && !lead.do_not_contact ? `https://wa.me/${lead.whatsapp_e164}?text=${encodeURIComponent(invitationText(lead))}` : null;
   const items: EventItem[] = events.map((e) => ({ id: e.id, created_at: e.created_at, actor_name: e.actor_name, actor_role: e.actor_role, ...eventTitle(e.kind, e.detail) }));
   const raw = Object.entries(lead.research_data ?? {}).filter(([, v]) => v);
+  const sourceCheck = checkSource(lead.source_url, lead.website);
 
   return (
     <>
@@ -70,6 +80,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               ["Web o red", lead.website ? <a href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer nofollow" className="text-fixy-800 underline break-all">{lead.website}</a> : "—"],
               ["Localidad base", `${lead.zone ?? lead.base_locality ?? "—"}${lead.base_region ? ` · ${REGION_LABEL[lead.base_region] ?? lead.base_region}` : ""}`],
               ["Origen", `${LEAD_SOURCE_LABEL[lead.source] ?? lead.source}${lead.source_detail ? ` · ${lead.source_detail}` : ""}`],
+              ["Fuente del dato", lead.source_url ? <span key="src">
+                <a href={lead.source_url} target="_blank" rel="noopener noreferrer nofollow" className="break-all text-fixy-800 underline">{domainOf(lead.source_url) ?? lead.source_url}</a>
+                {sourceCheck && <span className="ml-2 text-xs text-muted">({SOURCE_CHECK_LABEL[sourceCheck]})</span>}
+              </span> : "Sin registrar (sumá la columna «Fuente» en la planilla)"],
               ...(Object.keys(lead.utm ?? {}).length ? [["Campaña", Object.entries(lead.utm).map(([k, v]) => `${k.replace("utm_", "")}: ${v}`).join(" · ")] as [string, string]] : []),
               ["Perfil en Fixy", registered ? <Link href={`/admin/proveedores/${lead.provider_id}`} className="text-fixy-800 underline">{lead.provider_name ?? "Ver perfil"}</Link> : "Todavía no se registró"],
               ["Responsable", lead.owner ?? "Sin asignar"],

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActor } from "@/server/auth/session";
 import { pickUtm } from "@/lib/signup-origin";
+import { recordInviteClick } from "@/server/modules/supply-campaigns";
 
 export const SIGNUP_COOKIE = "fixy_signup";
 
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
   const utm = pickUtm(url.searchParams);
   const oficio = clean(url.searchParams.get("oficio"));
   const zona = clean(url.searchParams.get("zona"));
+  await recordInviteClick(ref, "web");
   const actor = await getActor();
   // Alta guiada (una pregunta por pantalla). Quien ya tiene perfil va a su alta; el formulario completo sigue en /registro?tipo=proveedor.
   const target = actor?.providers.length ? "/proveedor/alta" : "/sumate/empezar";

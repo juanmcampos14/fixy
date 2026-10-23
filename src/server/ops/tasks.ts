@@ -14,6 +14,8 @@ import { expireDirectBookings, rematchOpenRequests } from "@/server/modules/requ
 import { runPaymentCommands } from "@/server/modules/payment-commands";
 import { runReconciliation } from "@/server/modules/payment-reconciliation";
 import { refreshLeadStages, syncSupplySheet } from "@/server/modules/supply";
+import { runSupplyOutreach } from "@/server/modules/supply-campaigns";
+import { pruneApiRequests } from "@/server/modules/api-keys";
 import { runWatchdog } from "./alerts";
 
 const batch = (name: string, fallback: number) => {
@@ -87,6 +89,13 @@ export const TASKS = {
   "supply-sync": {
     label: "Captación (planilla de research)", everyMinutes: 1440, maxSeconds: 120, external: "Google Sheets",
     run: async () => ({ sheet: await step(() => syncSupplySheet("cron")) }),
+  },
+  "supply-outreach": {
+    label: "Captación (emails de campañas y seguimientos)", everyMinutes: 60, maxSeconds: 240, external: "Resend",
+    run: async () => ({
+      outreach: await step(() => runSupplyOutreach(batch("BATCH_SUPPLY_EMAIL", 50))),
+      apiLogPruned: await step(() => pruneApiRequests()),
+    }),
   },
   watchdog: {
     label: "Vigilancia (alertas al equipo)", everyMinutes: 10, maxSeconds: 60, external: "—",

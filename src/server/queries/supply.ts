@@ -170,3 +170,77 @@ export async function supplySyncRuns(limit = 10) {
     select r.id, r.source, r.trigger, r.started_at, r.finished_at, r.ok, r.inserted, r.updated, r.unchanged, r.skipped, r.issues, u.full_name as actor
     from supply_sync_runs r left join users u on u.id = r.actor_id order by r.started_at desc limit ${limit}`;
 }
+
+// ───────── Campañas ─────────
+
+export type CampaignStats = {
+  total: number; queued: number; sent: number; followups_due: number; clicked: number; replied: number; interested: number;
+  registered: number; active: number; opted_out: number; no_response: number; skipped: number;
+};
+
+const CAMPAIGN_STATS = (db: ReturnType<typeof sql>) => db`
+  count(cl.*)::int as total,
+  count(cl.*) filter (where cl.status = 'queued')::int as queued,
+  count(cl.*) filter (where cl.attempts > 0)::int as sent,
+  count(cl.*) filter (where cl.status = 'sent' and cl.attempts < c.max_attempts and cl.next_followup_at <= now())::int as followups_due,
+  count(cl.*) filter (where cl.clicked_at is not null)::int as clicked,
+  count(cl.*) filter (where cl.status = 'replied')::int as replied,
+  count(cl.*) filter (where l.stage = 'interested')::int as interested,
+  count(cl.*) filter (where l.provider_id is not null)::int as registered,
+  count(cl.*) filter (where l.stage = 'active')::int as active,
+  count(cl.*) filter (where cl.status = 'opted_out')::int as opted_out,
+  count(cl.*) filter (where cl.status = 'no_response')::int as no_response,
+  count(cl.*) filter (where cl.status = 'skipped')::int as skipped`;
+
+export type CampaignRow = CampaignStats & {
+  id: string; name: string; slug: string; channel: "whatsapp" | "email"; status: "draft" | "active" | "paused" | "closed"; size: number;
+  daily_cap: number; followup_days: number; max_attempts: number; created_at: Date; activated_at: Date | null; categories: string[]; regions: string[]; zones: string[];
+};
+
+export async function listCampaigns() {
+  const db = sql();
+  return db<CampaignRow[]>`
+    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
+      coalesce((select array_agg(x.name order by x.sort) from categories x where x.id = any(c.category_ids)), '{}') as categories,
+      coalesce((select array_agg(z.name order by z.sort) from zones z where z.id = any(c.zone_ids)), '{}') as zones,
+      ${CAMPAIGN_STATS(db)}
+    from supply_campaigns c left join supply_campaign_leads cl on cl.campaign_id = c.id left join supply_leads l on l.id = cl.lead_id
+    group by c.id order by (c.status = 'closed'), c.created_at desc`;
+}
+
+export async function campaignDetail(id: string) {
+  const db = sql();
+  const [campaign] = await db<(CampaignRow & { first_message: string; followup_message: string | null; email_subject: string | null; created_by: string | null })[]>`
+    select c.id, c.name, c.slug, c.channel, c.status, c.size, c.daily_cap, c.followup_days, c.max_attempts, c.created_at, c.activated_at, c.regions,
+      c.first_message, c.followup_message, c.email_subject, u.full_name as created_by,
+      coalesce((select array_agg(x.name order by x.sort) from categories x where x.id = any(c.category_ids)), '{}') as categories,
+      coalesce((select array_agg(z.name order by z.sort) from zones z where z.id = any(c.zone_ids)), '{}') as zones,
+      ${CAMPAIGN_STATS(db)}
+    from supply_campaigns c left join users u on u.id = c.created_by left join supply_campaign_leads cl on cl.campaign_id = c.id left join supply_leads l on l.id = cl.lead_id
+    where c.id = ${id} group by c.id, u.full_name`;
+  if (!campaign) return null;
+  const leads = await db<{ id: string; lead_id: string; code: string; business_name: string; trade: string | null; place: string | null; status: string; attempts: number;
+    last_sent_at: Date | null; next_followup_at: Date | null; clicked_at: Date | null; stage: LeadStage; registered: boolean; skip_reason: string | null; last_error: string | null }[]>`
+    select cl.id, l.id as lead_id, l.code, l.business_name, (select c.name from categories c where c.id = l.primary_category_id) as trade,
+      coalesce(z.name, l.base_locality) as place, cl.status, cl.attempts, cl.last_sent_at, cl.next_followup_at, cl.clicked_at, l.stage,
+      l.provider_id is not null as registered, cl.skip_reason, cl.last_error
+    from supply_campaign_leads cl join supply_leads l on l.id = cl.lead_id left join zones z on z.id = l.base_zone_id
+    where cl.campaign_id = ${id} order by l.code`;
+  return { campaign, leads };
+}
+
+export async function campaignFormOptions() {
+  const db = sql();
+  const [categories, zones, regions] = await Promise.all([
+    db<{ id: string; name: string; candidates: number }[]>`
+      select c.id, c.name, (select count(*)::int from supply_leads l where c.id = any(l.category_ids) and l.stage = 'candidate' and not l.do_not_contact) as candidates
+      from categories c where c.active and c.slug <> 'otro' order by c.sort, c.name`,
+    db<{ id: string; name: string; region: string; candidates: number }[]>`
+      select z.id, z.name, z.region, (select count(*)::int from supply_leads l where l.base_zone_id = z.id and l.stage = 'candidate' and not l.do_not_contact) as candidates
+      from zones z where z.active and not z.catch_all order by z.sort, z.name`,
+    db<{ code: string; candidates: number }[]>`
+      select base_region as code, count(*)::int as candidates from supply_leads where base_region is not null and stage = 'candidate' and not do_not_contact
+      group by base_region order by candidates desc`,
+  ]);
+  return { categories, zones, regions };
+}
