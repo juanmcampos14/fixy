@@ -61,6 +61,9 @@ jobs:
       - name: Dependencias de producción sin vulnerabilidades altas
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Dependencias de la app móvil (Capacitor) sin vulnerabilidades moderadas o más
+        run: npm audit --prefix mobile --audit-level=moderate
+
       - name: Secretos en el repositorio
         uses: gitleaks/gitleaks-action@v2
         env:
