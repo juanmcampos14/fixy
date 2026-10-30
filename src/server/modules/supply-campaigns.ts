@@ -19,8 +19,8 @@ import { env } from "@/server/env";
 import { emailAdapter, type EmailAdapter } from "@/server/notifications";
 import { getSetting } from "./catalog";
 import { waParam } from "@/server/whatsapp/templates";
-import { sendSupplyTemplate, SUPPLY_FOOTER, SUPPLY_TEMPLATES, supplyNumberConfigured, supplyNumberStatus, supplyTemplatesStatus } from "@/server/whatsapp/supply-number";
-import { kommoConfigured, kommoOutcomes, markRegisteredInKommo, registerInvitation } from "@/server/integrations/kommo";
+import { createSupplyTemplates, sendSupplyTemplate, SUPPLY_FOOTER, SUPPLY_TEMPLATES, supplyNumberConfigured, supplyNumberStatus, supplyTemplatesStatus } from "@/server/whatsapp/supply-number";
+import { kommoConfigured, kommoOutcomes, markRegisteredInKommo, registerInvitation, setupKommoPipeline } from "@/server/integrations/kommo";
 
 /** whatsapp: envío asistido (lo manda una persona); whatsapp_api: automático por la API de Meta, con Kommo como bandeja; email: automático. */
 export type Channel = "whatsapp" | "whatsapp_api" | "email";
@@ -431,6 +431,9 @@ export async function recordInviteClick(ref: string | null | undefined, via: "wh
 export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emailAdapter(), now = new Date()) {
   let sent = 0, failed = 0;
   const notes: string[] = [];
+  // Deja listo lo que falte en Meta (plantillas) y en Kommo (embudo), sin que nadie tenga que entrar al panel.
+  const setup = await ensureSupplySetup().catch((e: Error) => [`Preparación: ${e.message.slice(0, 200)}`]);
+  notes.push(...setup);
   // Primero lo que el equipo movió en Kommo (respondió, interesado, baja): corta recordatorios antes de mandar.
   const kommo = await syncKommo().catch((e: Error) => { notes.push(`Kommo: ${e.message.slice(0, 200)}`); return null; });
   // Solo en horario comercial (lunes a sábado, 9 a 19 de Argentina).
@@ -516,6 +519,28 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
     update supply_campaign_leads cl set status = 'no_response', next_followup_at = null
     from supply_campaigns c where c.id = cl.campaign_id and cl.status = 'sent' and cl.attempts >= c.max_attempts and cl.next_followup_at <= now()`;
   return { sent, failed, noResponse: closed.count, kommo, notes };
+}
+
+/**
+ * Con el número comercial y Kommo conectados: manda a revisión de Meta las plantillas que falten y arma el embudo
+ * «Captación Fixy» si no existe. Como mucho una vez por hora (lo que ya está, no se toca).
+ */
+export async function ensureSupplySetup(): Promise<string[]> {
+  const out: string[] = [];
+  const [last] = await sql()<{ at: string }[]>`select value->>'at' as at from platform_settings where key = 'supply.setup'`;
+  if (last?.at && Date.now() - new Date(last.at).getTime() < 55 * 60_000) return out;
+  if (supplyNumberConfigured()) {
+    const st = await supplyTemplatesStatus();
+    if (!st) out.push("Meta: no se pudo consultar la cuenta (revisar SUPPLY_WHATSAPP_WABA_ID y que el token tenga asignada esa cuenta)");
+    else if (Object.values(st).includes("NO_CREADA")) out.push(...(await createSupplyTemplates()).map((r) => `Meta: ${r}`));
+    else out.push(`Meta: plantillas ${Object.values(st).join(" / ")}`);
+  }
+  if (kommoConfigured()) out.push(...(await setupKommoPipeline()).map((r) => `Kommo: ${r}`));
+  if (out.length) {
+    await sql()`insert into platform_settings (key, value) values ('supply.setup', ${sql().json({ at: new Date().toISOString(), results: out } as never)})
+      on conflict (key) do update set value = excluded.value, updated_at = now()`;
+  }
+  return out;
 }
 
 /** Parámetros de las plantillas de invitación: nombre, oficio, zona. */

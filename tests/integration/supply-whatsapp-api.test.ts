@@ -24,7 +24,7 @@ const phone = () => `11${String(Math.floor(Math.random() * 1e8)).padStart(8, "0"
 
 type Call = { url: string; method: string; body: unknown };
 const calls: Call[] = [];
-const state = { quality: "GREEN", nextLead: 9000, kommoLeads: [] as { id: number; status_id: number }[], noWhatsApp: new Set<string>() };
+const state = { templatesCreated: false, pipelineCreated: false, quality: "GREEN", nextLead: 9000, kommoLeads: [] as { id: number; status_id: number }[], noWhatsApp: new Set<string>() };
 const STATUSES = ["Invitado", "Recordatorio", "Respondió", "Interesado", "Se registró", "No le interesa / Baja"].map((name, i) => ({ id: 100 + i, name }));
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 
@@ -35,6 +35,8 @@ beforeAll(() => {
     const body = init.body ? JSON.parse(String(init.body)) : null;
     calls.push({ url, method, body });
     if (url.includes("graph.facebook.com")) {
+      if (url.includes("/222/message_templates") && method === "POST") { state.templatesCreated = true; return json({ id: "tpl" }); }
+      if (url.includes("/222/message_templates") && !state.templatesCreated) return json({ data: [] });
       if (url.includes("/222/message_templates")) return json({ data: [{ name: "fixy_invitacion_profesional_v1", language: "es_AR", status: "APPROVED" }, { name: "fixy_invitacion_recordatorio_v1", language: "es_AR", status: "APPROVED" }] });
       if (url.includes("/111?fields")) return json({ display_phone_number: "+54 9 11 6600-6676", verified_name: "Fixy", quality_rating: state.quality, messaging_limit_tier: "TIER_250" });
       if (url.includes("/111/messages")) {
@@ -44,6 +46,8 @@ beforeAll(() => {
       }
     }
     if (url.includes("fixytest.kommo.com")) {
+      if (url.endsWith("/leads/pipelines") && method === "POST") { state.pipelineCreated = true; return json({}); }
+      if (url.endsWith("/leads/pipelines") && !state.pipelineCreated) return json({ _embedded: { pipelines: [] } });
       if (url.endsWith("/leads/pipelines")) return json({ _embedded: { pipelines: [{ id: 50, name: "Captación Fixy", _embedded: { statuses: STATUSES } }] } });
       if (url.endsWith("/leads/complex")) return json([{ id: state.nextLead++ }]);
       if (url.includes("/notes") || method === "PATCH") return json({});
@@ -58,6 +62,15 @@ const leadOf = (code: string) => sql()<{ id: string; stage: string; do_not_conta
   select id, stage, do_not_contact, kommo_lead_id from supply_leads where code = ${code}`.then((r) => r[0]);
 
 describe("WhatsApp automático (Meta + Kommo)", () => {
+  it("la tarea crea sola las plantillas en Meta y el embudo en Kommo que falten", async () => {
+    await sql()`delete from platform_settings where key = 'supply.setup'`;
+    const out = await camp.ensureSupplySetup();
+    expect(out.join(" | ")).toMatch(/fixy_invitacion_profesional_v1: enviada a revisión.*fixy_invitacion_recordatorio_v1: enviada a revisión.*Creé el embudo/);
+    const posts = calls.filter((c) => c.method === "POST" && c.url.includes("/222/message_templates")).map((c) => c.body as { name: string; category: string });
+    expect(posts.map((p) => [p.name, p.category])).toEqual([["fixy_invitacion_profesional_v1", "MARKETING"], ["fixy_invitacion_recordatorio_v1", "MARKETING"]]);
+    expect(await camp.ensureSupplySetup()).toEqual([]); // como mucho una vez por hora
+  });
+
   it("manda la plantilla con los datos del candidato, respeta el tope, registra en Kommo y aplica lo que el equipo mueve ahí", async () => {
     const admin = await actor("admin");
     await sql()`update supply_campaigns set status = 'closed' where status <> 'closed'`;
