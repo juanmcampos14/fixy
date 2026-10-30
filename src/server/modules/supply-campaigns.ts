@@ -447,8 +447,8 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
   let waReady = false;
   if (campaigns.some((c) => c.channel === "whatsapp_api") && !complianceGaps(compliance, "whatsapp_api").length) {
     const [templates, number] = await Promise.all([supplyTemplatesStatus(), supplyNumberStatus()]);
-    waReady = templates?.first === "APPROVED" && (!number?.quality || number.quality === "GREEN" || number.quality === "UNKNOWN");
-    if (!waReady) notes.push(`WhatsApp frenado: plantilla ${templates?.first ?? "?"}, calidad del número ${number?.quality ?? "?"}`);
+    waReady = templates?.first === "APPROVED" && (!number?.quality || number.quality === "GREEN" || number.quality === "UNKNOWN") && number?.canSend !== "BLOCKED";
+    if (!waReady) notes.push(`WhatsApp frenado: plantilla ${templates?.first ?? "?"}, calidad del número ${number?.quality ?? "?"}, envío ${number?.canSend ?? "?"}${number?.problems.length ? ` · ${number.problems.join(" · ")}` : ""}`);
   }
   for (const { id, channel } of campaigns) {
     if (channel === "email" && complianceGaps(compliance, "email", adapter.name !== "console").length) continue;
@@ -538,7 +538,8 @@ export async function ensureSupplySetup(): Promise<string[]> {
       else if (Object.values(st).includes("NO_CREADA")) out.push(...(await createSupplyTemplates()).map((r) => `Meta: ${r}`));
       else out.push(`Meta: plantillas ${Object.values(st).join(" / ")}`);
       const n = await supplyNumberStatus();
-      out.push(n ? `Meta: número ${n.display} · ${n.name ?? "sin nombre"} · calidad ${n.quality ?? "—"} · límite ${n.tier ?? "—"}` : "Meta: no se pudo leer el número (revisar SUPPLY_WHATSAPP_PHONE_NUMBER_ID)");
+      out.push(n ? `Meta: número ${n.display} · ${n.name ?? "sin nombre"} · calidad ${n.quality ?? "—"} · límite ${n.tier ?? "—"} · estado ${n.status ?? "—"} · modo ${n.mode ?? "—"} · envío ${n.canSend ?? "—"}` : "Meta: no se pudo leer el número (revisar SUPPLY_WHATSAPP_PHONE_NUMBER_ID)");
+      for (const p of n?.problems ?? []) out.push(`Meta: problema — ${p}`);
     } catch (e) {
       out.push(`Meta: ${(e as Error).message.slice(0, 200)}`);
     }

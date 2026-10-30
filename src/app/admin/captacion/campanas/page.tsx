@@ -49,7 +49,7 @@ export default async function CampaignsPage() {
           <div className="mb-5 rounded-2xl bg-cream-2 p-4 text-[15px]">
             <p className="font-semibold">WhatsApp automático (API de Meta + Kommo)</p>
             <ul className="mt-2 space-y-1 text-sm">
-              <li>Número: {number ? <>{number.display} · {number.name ?? "sin nombre visible"} · calidad <strong>{number.quality ?? "—"}</strong> · límite {number.tier ?? "—"}</> : "sin conectar (cargar SUPPLY_WHATSAPP_PHONE_NUMBER_ID, SUPPLY_WHATSAPP_WABA_ID y el token en Vercel)"}</li>
+              <li>Número: {number ? <>{number.display} · {number.name ?? "sin nombre visible"} · calidad <strong>{number.quality ?? "—"}</strong> · límite {number.tier ?? "—"} · envío <strong>{number.canSend ?? "—"}</strong>{number.problems.map((p) => <span key={p} className="block text-danger">{p}</span>)}</> : "sin conectar (cargar SUPPLY_WHATSAPP_PHONE_NUMBER_ID, SUPPLY_WHATSAPP_WABA_ID y el token en Vercel)"}</li>
               <li>Plantillas: {templates ? Object.entries(templates).map(([k, v]) => `${k === "first" ? "invitación" : "recordatorio"} ${v}`).join(" · ") : "—"}</li>
               <li>Kommo: {kommoConfigured() ? "conectado" : "sin conectar (cargar KOMMO_TOKEN y KOMMO_SUBDOMINIO en Vercel)"}</li>
             </ul>

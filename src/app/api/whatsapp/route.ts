@@ -7,6 +7,7 @@ import { after, NextResponse } from "next/server";
 import { env } from "@/server/env";
 import { verifySignature } from "@/server/whatsapp/client";
 import { handleInbound, parseWebhook } from "@/server/whatsapp/bot";
+import { parseStatuses, recordStatuses } from "@/server/whatsapp/statuses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,6 +39,16 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error("[whatsapp] error procesando mensaje", e instanceof Error ? e.message : "desconocido");
         }
+      }
+    });
+  }
+  const statuses = parseStatuses(body);
+  if (statuses.length) {
+    after(async () => {
+      try {
+        await recordStatuses(statuses);
+      } catch (e) {
+        console.error("[whatsapp] error guardando estados", e instanceof Error ? e.message : "desconocido");
       }
     });
   }

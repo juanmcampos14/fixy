@@ -94,15 +94,28 @@ export async function createSupplyTemplates(): Promise<string[]> {
   return out;
 }
 
-export type NumberStatus = { display: string | null; name: string | null; quality: string | null; tier: string | null };
+export type NumberStatus = {
+  display: string | null; name: string | null; quality: string | null; tier: string | null;
+  /** AVAILABLE, LIMITED o BLOCKED según Meta (health_status), con los motivos que informa (p. ej. sin medio de pago). */
+  canSend: string | null; problems: string[]; mode: string | null; status: string | null;
+};
 
-/** Número, nombre visible, calidad (GREEN / YELLOW / RED) y límite de conversaciones por día. */
+type HealthEntity = { entity_type?: string; can_send_message?: string; errors?: { error_code?: number; error_description?: string; possible_solution?: string }[] };
+
+/** Calidad, límite y salud del número comercial (null si no está configurado o Meta no responde). */
 export async function supplyNumberStatus(): Promise<NumberStatus | null> {
   if (!supplyNumberConfigured()) return null;
-  const j = await graph<{ display_phone_number?: string; verified_name?: string; quality_rating?: string; messaging_limit_tier?: string }>(
-    `${env().SUPPLY_WHATSAPP_PHONE_NUMBER_ID}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`,
-  ).catch(() => null);
-  return j ? { display: j.display_phone_number ?? null, name: j.verified_name ?? null, quality: j.quality_rating ?? null, tier: j.messaging_limit_tier ?? null } : null;
+  const j = await graph<{
+    display_phone_number?: string; verified_name?: string; quality_rating?: string; messaging_limit_tier?: string;
+    account_mode?: string; status?: string; health_status?: { can_send_message?: string; entities?: HealthEntity[] };
+  }>(`${env().SUPPLY_WHATSAPP_PHONE_NUMBER_ID}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier,account_mode,status,health_status`).catch(() => null);
+  if (!j) return null;
+  const problems = (j.health_status?.entities ?? []).flatMap((e) =>
+    (e.errors ?? []).map((x) => `${e.entity_type ?? "?"} ${x.error_code ?? ""}: ${x.error_description ?? ""}${x.possible_solution ? ` (${x.possible_solution})` : ""}`.slice(0, 300)));
+  return {
+    display: j.display_phone_number ?? null, name: j.verified_name ?? null, quality: j.quality_rating ?? null, tier: j.messaging_limit_tier ?? null,
+    canSend: j.health_status?.can_send_message ?? null, problems, mode: j.account_mode ?? null, status: j.status ?? null,
+  };
 }
 
 export type SendResult = { ok: true; id: string | null } | { ok: false; error: string; permanent: boolean };
