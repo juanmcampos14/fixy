@@ -13,7 +13,7 @@ import { QueueCard } from "@/components/admin/supply/queue-card";
 import { REGION_LABEL } from "@/lib/regions";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { CAMPAIGN_LEAD_STATUS, CAMPAIGN_STATUS, STAGE_TONE } from "../../labels";
-import { removeFromCampaignAction, resolveQueueItemAction, setCampaignStatusAction } from "../../actions";
+import { removeFromCampaignAction, resolveQueueItemAction, sendCampaignNowAction, setCampaignStatusAction } from "../../actions";
 
 export const metadata = { title: "Campaña" };
 export const dynamic = "force-dynamic";
@@ -47,6 +47,11 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                   : c.channel === "whatsapp_api" ? `Los WhatsApp salen solos desde el número comercial, en horario comercial (lunes a sábado de 9 a 19), hasta ${c.daily_cap} por día. Cada uno queda como lead en Kommo, donde llegan las respuestas.`
                   : "Aparece la cola para mandar las invitaciones desde el WhatsApp comercial."}
                 confirmLabel="Activar" hidden={{ campaignId: c.id, to: "active" }} />
+            )}
+            {c.status === "active" && c.channel !== "whatsapp" && (
+              <ConfirmAction action={sendCampaignNowAction} label="Enviar ahora" title="Enviar ahora"
+                description="Manda ya los pendientes de esta campaña, aunque sea fuera del horario comercial. Respeta el tope diario."
+                confirmLabel="Enviar" hidden={{ campaignId: c.id }} />
             )}
             {c.status === "active" && <ConfirmAction action={setCampaignStatusAction} label="Pausar" variant="secondary" title="Pausar la campaña" description="No sale nada más hasta reanudarla." confirmLabel="Pausar" hidden={{ campaignId: c.id, to: "paused" }} />}
             <ConfirmAction action={setCampaignStatusAction} label="Cerrar" variant="ghost" title="Cerrar la campaña"

@@ -229,3 +229,14 @@ export async function setupKommoAction(): Promise<ActionState> {
     return { ok: true, message: done.join(" ") };
   });
 }
+
+export async function sendCampaignNowAction(_: ActionState, f: FormData): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("captacion", "manage")).actor;
+    const id = str(f, "campaignId");
+    const r = await campaigns.sendCampaignNow(actor, id);
+    revalidatePath(`/admin/captacion/campanas/${id}`);
+    const extra = r.notes.filter((n) => n.startsWith("WhatsApp frenado")).join(" ");
+    return { ok: true, message: `Enviados: ${r.sent}. Con error: ${r.failed}.${extra ? ` ${extra}` : ""}` };
+  });
+}

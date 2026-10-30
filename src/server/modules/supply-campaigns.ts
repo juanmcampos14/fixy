@@ -428,7 +428,10 @@ export async function recordInviteClick(ref: string | null | undefined, via: "wh
 // ───────── Tarea programada: emails y vencimientos ─────────
 
 /** Envía los emails de campañas activas (tope diario por campaña) y cierra los seguimientos agotados. */
-export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emailAdapter(), now = new Date()) {
+export async function runSupplyOutreach(
+  limit = 50, adapter: EmailAdapter = emailAdapter(), now = new Date(),
+  only: { campaignId?: string; anyHour?: boolean } = {},
+) {
   let sent = 0, failed = 0;
   const notes: string[] = [];
   // Deja listo lo que falte en Meta (plantillas) y en Kommo (embudo), sin que nadie tenga que entrar al panel.
@@ -438,9 +441,10 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
   const kommo = await syncKommo().catch((e: Error) => { notes.push(`Kommo: ${e.message.slice(0, 200)}`); return null; });
   // Solo en horario comercial (lunes a sábado, 9 a 19 de Argentina).
   const ar = new Date(now.getTime() - 3 * 3600_000);
-  const businessHours = ar.getUTCDay() !== 0 && ar.getUTCHours() >= 9 && ar.getUTCHours() < 19;
+  const businessHours = only.anyHour || (ar.getUTCDay() !== 0 && ar.getUTCHours() >= 9 && ar.getUTCHours() < 19);
   const campaigns = businessHours
-    ? await sql()<{ id: string; channel: Channel }[]>`select id, channel from supply_campaigns where status = 'active' and channel in ('email','whatsapp_api') order by activated_at`
+    ? await sql()<{ id: string; channel: Channel }[]>`select id, channel from supply_campaigns
+        where status = 'active' and channel in ('email','whatsapp_api') ${only.campaignId ? sql()`and id = ${only.campaignId}` : sql()``} order by activated_at`
     : [];
   const compliance = await getCompliance();
   // WhatsApp automático: plantilla aprobada y número en buena calidad (si Meta lo marca en amarillo o rojo, se frena).
@@ -519,6 +523,20 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
     update supply_campaign_leads cl set status = 'no_response', next_followup_at = null
     from supply_campaigns c where c.id = cl.campaign_id and cl.status = 'sent' and cl.attempts >= c.max_attempts and cl.next_followup_at <= now()`;
   return { sent, failed, noResponse: closed.count, kommo, notes };
+}
+
+/**
+ * «Enviar ahora» desde el panel: corre el envío de una campaña automática sin esperar la tarea de cada hora ni el
+ * horario comercial (lo decide quien aprieta). Respeta el tope diario, los requisitos y la salud del número.
+ */
+export async function sendCampaignNow(actor: Actor, campaignId: string) {
+  const [c] = await sql()<{ name: string; status: string; channel: Channel }[]>`select name, status, channel from supply_campaigns where id = ${campaignId}`;
+  if (!c) throw invalid("No existe la campaña.");
+  if (c.status !== "active") throw invalid("La campaña tiene que estar activa.");
+  if (c.channel === "whatsapp") throw invalid("El WhatsApp asistido se manda desde la cola.");
+  const r = await runSupplyOutreach(50, emailAdapter(), new Date(), { campaignId, anyHour: true });
+  await audit(sql(), actor, "supply.campaign_send_now", "supply_campaign", campaignId, c.name, { sent: r.sent, failed: r.failed });
+  return r;
 }
 
 /**
