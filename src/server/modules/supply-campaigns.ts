@@ -42,7 +42,7 @@ export async function getCompliance(): Promise<Compliance> {
 /** Qué falta para activar una campaña por ese canal (vacío = se puede). */
 export function complianceGaps(c: Compliance, channel: "whatsapp" | "email", emailConfigured = env().EMAIL_ADAPTER === "resend"): string[] {
   const gaps: string[] = [];
-  if (!c.aaipRegistration.trim()) gaps.push("Inscripción de la base de datos ante la AAIP");
+  // La inscripción ante la AAIP es recomendada (ver docs/captacion.md), pero la decide el dueño: no bloquea.
   if (channel === "whatsapp") {
     if (!c.commercialNumber.trim()) gaps.push("Número de WhatsApp comercial (separado del bot)");
     if (!c.metaPolicyReviewed) gaps.push("Revisión de las políticas de WhatsApp Business");

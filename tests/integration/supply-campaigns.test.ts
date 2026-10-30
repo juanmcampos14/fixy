@@ -43,7 +43,7 @@ describe("campañas por WhatsApp (envío asistido)", () => {
     expect(leads).toBe(3);
 
     await sql()`delete from platform_settings where key = 'supply.compliance'`;
-    await expect(camp.setCampaignStatus(admin, id, "active")).rejects.toThrow(/AAIP/);
+    await expect(camp.setCampaignStatus(admin, id, "active")).rejects.toThrow(/WhatsApp comercial/);
     await camp.setCompliance(admin, { commercialNumber: "+54 9 11 5555-0000", aaipRegistration: "RNBD 123", metaPolicyReviewed: true, emailPolicyReviewed: true });
     await camp.setCampaignStatus(admin, id, "active");
 

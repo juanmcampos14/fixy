@@ -39,8 +39,9 @@ tamaño. Solo entran candidatos sin registrarse, sin «no contactar», sin otra 
 últimos 60 días) y con el canal (celular o email). Se arma en **borrador**: se revisa el texto («Así le llega»), se
 saca a quien no corresponda y recién ahí se activa.
 
-- **No se activa sin requisitos** (Campañas › Requisitos): número de WhatsApp comercial, inscripción de la base ante
-  la AAIP y revisión de políticas (WhatsApp y/o email). Para email, además, Resend configurado.
+- **No se activa sin requisitos** (Campañas › Requisitos): número de WhatsApp comercial y revisión de políticas
+  (WhatsApp y/o email). Para email, además, Resend configurado. La inscripción de la base ante la AAIP es
+  recomendada pero no bloquea: desde el 30-10-2026 el dueño decidió operar sin ella y asume esa responsabilidad.
 - **WhatsApp asistido.** La cola muestra un candidato por vez con el mensaje armado. «1. Abrir WhatsApp» abre el
   chat (desde el número comercial del teléfono o la computadora de quien envía); recién después se habilita
   «2. Ya lo mandé». Tope diario por campaña (20 por defecto): un número nuevo que manda mucho de golpe se bloquea.

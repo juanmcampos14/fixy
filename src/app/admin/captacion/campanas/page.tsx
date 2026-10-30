@@ -45,7 +45,7 @@ export default async function CampaignsPage() {
               <Field label="WhatsApp comercial" htmlFor="cm-num" hint="El número desde el que se mandan las invitaciones. Tiene que ser distinto del bot.">
                 <Input id="cm-num" name="commercialNumber" type="tel" defaultValue={compliance.commercialNumber} placeholder="+54 9 11 5555-5555" maxLength={30} />
               </Field>
-              <Field label="Inscripción de la base ante la AAIP" htmlFor="cm-aaip" hint="Número o constancia del Registro Nacional de Bases de Datos.">
+              <Field label="Inscripción de la base ante la AAIP (recomendada)" htmlFor="cm-aaip" hint="Número o constancia del Registro Nacional de Bases de Datos. No es obligatorio para activar.">
                 <Input id="cm-aaip" name="aaipRegistration" defaultValue={compliance.aaipRegistration} maxLength={120} />
               </Field>
             </div>
