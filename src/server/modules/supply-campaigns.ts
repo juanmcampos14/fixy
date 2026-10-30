@@ -529,13 +529,30 @@ export async function ensureSupplySetup(): Promise<string[]> {
   const out: string[] = [];
   const [last] = await sql()<{ at: string }[]>`select value->>'at' as at from platform_settings where key = 'supply.setup'`;
   if (last?.at && Date.now() - new Date(last.at).getTime() < 55 * 60_000) return out;
-  if (supplyNumberConfigured()) {
-    const st = await supplyTemplatesStatus();
-    if (!st) out.push("Meta: no se pudo consultar la cuenta (revisar SUPPLY_WHATSAPP_WABA_ID y que el token tenga asignada esa cuenta)");
-    else if (Object.values(st).includes("NO_CREADA")) out.push(...(await createSupplyTemplates()).map((r) => `Meta: ${r}`));
-    else out.push(`Meta: plantillas ${Object.values(st).join(" / ")}`);
+  // Cada paso por separado: si uno falla, el otro igual se hace y queda anotado.
+  if (!supplyNumberConfigured()) out.push("Meta: número comercial sin configurar (SUPPLY_WHATSAPP_PHONE_NUMBER_ID y token)");
+  else {
+    try {
+      const st = await supplyTemplatesStatus();
+      if (!st) out.push("Meta: no se pudo consultar la cuenta (revisar SUPPLY_WHATSAPP_WABA_ID y que el token tenga asignada esa cuenta)");
+      else if (Object.values(st).includes("NO_CREADA")) out.push(...(await createSupplyTemplates()).map((r) => `Meta: ${r}`));
+      else out.push(`Meta: plantillas ${Object.values(st).join(" / ")}`);
+      const n = await supplyNumberStatus();
+      out.push(n ? `Meta: número ${n.display} · ${n.name ?? "sin nombre"} · calidad ${n.quality ?? "—"} · límite ${n.tier ?? "—"}` : "Meta: no se pudo leer el número (revisar SUPPLY_WHATSAPP_PHONE_NUMBER_ID)");
+    } catch (e) {
+      out.push(`Meta: ${(e as Error).message.slice(0, 200)}`);
+    }
   }
-  if (kommoConfigured()) out.push(...(await setupKommoPipeline()).map((r) => `Kommo: ${r}`));
+  if (!kommoConfigured()) out.push("Kommo: sin configurar (KOMMO_TOKEN y KOMMO_SUBDOMINIO)");
+  else {
+    try {
+      out.push(...(await setupKommoPipeline()).map((r) => `Kommo: ${r}`));
+    } catch (e) {
+      out.push(`Kommo: ${(e as Error).message.slice(0, 200)}`);
+    }
+  }
+  // Si algo falló, se reintenta en la próxima vuelta (no se guarda la marca de «hecho»).
+  if (out.some((r) => /no se pudo|sin configurar|Kommo \d{3}|Meta \d{3}|rechaz|error/i.test(r))) return out;
   if (out.length) {
     await sql()`insert into platform_settings (key, value) values ('supply.setup', ${sql().json({ at: new Date().toISOString(), results: out } as never)})
       on conflict (key) do update set value = excluded.value, updated_at = now()`;

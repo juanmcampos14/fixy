@@ -28,13 +28,13 @@ async function kommo<T = Record<string, unknown>>(path: string, init: { method?:
 }
 
 export const PIPELINE = "Captación Fixy";
-/** Etapas del embudo y qué significan para Fixy. */
+/** Etapas del embudo y qué significan para Fixy. Los colores tienen que ser de la paleta de Kommo (si no, rechaza el embudo). */
 export const STAGES = [
   { name: "Invitado", color: "#c1e0ff", meaning: null },
   { name: "Recordatorio", color: "#ffdc7f", meaning: null },
   { name: "Respondió", color: "#87f2c0", meaning: "replied" },
   { name: "Interesado", color: "#deff81", meaning: "interested" },
-  { name: "Se registró", color: "#99ccff", meaning: null },
+  { name: "Se registró", color: "#98cbff", meaning: null },
   { name: "No le interesa / Baja", color: "#ffc8c8", meaning: "opt_out" },
 ] as const;
 export type StageMeaning = "replied" | "interested" | "opt_out";
