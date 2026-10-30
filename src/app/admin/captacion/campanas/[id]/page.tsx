@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSection } from "@/server/auth/session";
-import { complianceGaps, getCompliance, nextInQueue, previewCampaign } from "@/server/modules/supply-campaigns";
+import { CHANNEL_LABEL, complianceGaps, getCompliance, nextInQueue, previewCampaign } from "@/server/modules/supply-campaigns";
 import { campaignDetail } from "@/server/queries/supply";
 import { LEAD_STAGE_LABEL } from "@/server/modules/supply";
 import { PageHeader, Stat } from "@/components/ui/card";
@@ -34,7 +34,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <BackLink href="/admin/captacion/campanas">Campañas</BackLink>
-      <PageHeader eyebrow={`${c.channel === "whatsapp" ? "WhatsApp asistido" : "Email automático"} · utm_campaign=${c.slug}`} title={c.name}
+      <PageHeader eyebrow={`${CHANNEL_LABEL[c.channel]} · utm_campaign=${c.slug}`} title={c.name}
         description={`${c.categories.join(", ") || "Todos los oficios"} · ${where}${c.only_consented ? " · solo con consentimiento" : ""}. Seguimiento a los ${c.followup_days} días, hasta ${c.max_attempts} ${c.max_attempts === 1 ? "intento" : "intentos"}, máximo ${c.daily_cap} por día.`}
         action={<Badge tone={CAMPAIGN_STATUS[c.status].tone} icon={false}>{CAMPAIGN_STATUS[c.status].label}</Badge>} />
 
@@ -43,7 +43,9 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           <div className="mb-6 flex flex-wrap gap-2">
             {(c.status === "draft" || c.status === "paused") && (
               <ConfirmAction action={setCampaignStatusAction} label={c.status === "draft" ? "Activar campaña" : "Reanudar"} title="Activar la campaña"
-                description={c.channel === "email" ? `Los emails empiezan a salir solos en horario comercial, hasta ${c.daily_cap} por día.` : "Aparece la cola para mandar las invitaciones desde el WhatsApp comercial."}
+                description={c.channel === "email" ? `Los emails empiezan a salir solos en horario comercial, hasta ${c.daily_cap} por día.`
+                  : c.channel === "whatsapp_api" ? `Los WhatsApp salen solos desde el número comercial, en horario comercial (lunes a sábado de 9 a 19), hasta ${c.daily_cap} por día. Cada uno queda como lead en Kommo, donde llegan las respuestas.`
+                  : "Aparece la cola para mandar las invitaciones desde el WhatsApp comercial."}
                 confirmLabel="Activar" hidden={{ campaignId: c.id, to: "active" }} />
             )}
             {c.status === "active" && <ConfirmAction action={setCampaignStatusAction} label="Pausar" variant="secondary" title="Pausar la campaña" description="No sale nada más hasta reanudarla." confirmLabel="Pausar" hidden={{ campaignId: c.id, to: "paused" }} />}

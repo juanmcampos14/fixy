@@ -39,6 +39,14 @@ const schema = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().optional().default(""),
   WHATSAPP_API_VERSION: z.string().default("v23.0"),
   WHATSAPP_DISPLAY_NUMBER: z.string().optional().default(""),
+  // Captación por WhatsApp automático: número comercial (distinto del bot) en la API oficial de Meta. El token es el del
+  // usuario del sistema con acceso a esa cuenta (si se deja vacío, se usa WHATSAPP_ACCESS_TOKEN).
+  SUPPLY_WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
+  SUPPLY_WHATSAPP_WABA_ID: z.string().optional().default(""),
+  SUPPLY_WHATSAPP_TOKEN: z.string().optional().default(""),
+  // Kommo (bandeja de las respuestas de captación): integración privada con token de larga duración.
+  KOMMO_TOKEN: z.string().optional().default(""),
+  KOMMO_SUBDOMINIO: z.string().optional().default(""),
   // Ingreso con Google (OAuth). Sin estas variables el botón no aparece.
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),

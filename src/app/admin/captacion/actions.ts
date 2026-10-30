@@ -8,6 +8,8 @@ import { invalid } from "@/server/domain/errors";
 import { parseArsToMinor } from "@/server/domain/money";
 import { parseCsv } from "@/lib/csv";
 import * as supply from "@/server/modules/supply";
+import { audit } from "@/server/audit";
+import { sql } from "@/server/db/client";
 import * as campaigns from "@/server/modules/supply-campaigns";
 import { createApiKey, revokeApiKey } from "@/server/modules/api-keys";
 
@@ -121,7 +123,7 @@ export async function createCampaignAction(_: ActionState, f: FormData): Promise
     const actor = (await requireSection("captacion", "manage")).actor;
     const zoneOrRegion = strs(f, "where");
     const r = await campaigns.createCampaign(actor, {
-      name: str(f, "name"), channel: str(f, "channel") === "email" ? "email" : "whatsapp",
+      name: str(f, "name"), channel: (["email", "whatsapp_api"].includes(str(f, "channel")) ? str(f, "channel") : "whatsapp") as "whatsapp" | "whatsapp_api" | "email",
       categoryIds: strs(f, "categoryIds"),
       regions: zoneOrRegion.filter((v) => v.startsWith("region:")).map((v) => v.slice(7)),
       zoneIds: zoneOrRegion.filter((v) => v.startsWith("zone:")).map((v) => v.slice(5)),
@@ -200,5 +202,30 @@ export async function revokeApiKeyAction(_: ActionState, f: FormData): Promise<A
     await revokeApiKey(actor, str(f, "keyId"));
     revalidatePath("/admin/captacion");
     return { ok: true, message: "Clave revocada: deja de funcionar ya." };
+  });
+}
+
+// ───────── WhatsApp automático (Meta + Kommo) ─────────
+
+export async function createSupplyTemplatesAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("captacion", "manage")).actor;
+    const { createSupplyTemplates } = await import("@/server/whatsapp/supply-number");
+    const results = await createSupplyTemplates();
+    await audit(sql(), actor, "supply.templates_create", "platform_settings", null, "Plantillas de captación", { results });
+    revalidatePath("/admin/captacion/campanas");
+    return { ok: true, message: results.join(" · ") };
+  });
+}
+
+export async function setupKommoAction(): Promise<ActionState> {
+  return act(async () => {
+    const actor = (await requireSection("captacion", "manage")).actor;
+    const { kommoConfigured, setupKommoPipeline } = await import("@/server/integrations/kommo");
+    if (!kommoConfigured()) throw invalid("Falta conectar Kommo: cargá KOMMO_TOKEN y KOMMO_SUBDOMINIO en Vercel.");
+    const done = await setupKommoPipeline();
+    await audit(sql(), actor, "supply.kommo_setup", "platform_settings", null, "Embudo Captación Fixy", { done });
+    revalidatePath("/admin/captacion/campanas");
+    return { ok: true, message: done.join(" ") };
   });
 }

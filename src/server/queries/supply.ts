@@ -195,7 +195,7 @@ const CAMPAIGN_STATS = (db: ReturnType<typeof sql>) => db`
   count(cl.*) filter (where cl.status = 'skipped')::int as skipped`;
 
 export type CampaignRow = CampaignStats & {
-  id: string; name: string; slug: string; channel: "whatsapp" | "email"; status: "draft" | "active" | "paused" | "closed"; size: number;
+  id: string; name: string; slug: string; channel: "whatsapp" | "whatsapp_api" | "email"; status: "draft" | "active" | "paused" | "closed"; size: number;
   only_consented: boolean; daily_cap: number; followup_days: number; max_attempts: number; created_at: Date; activated_at: Date | null; categories: string[]; regions: string[]; zones: string[];
 };
 

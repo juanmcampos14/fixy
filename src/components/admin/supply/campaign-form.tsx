@@ -10,18 +10,21 @@ import { SubmitButton } from "@/components/ui/form";
 type Defaults = { whatsapp: { first: string; followup: string }; email: { subject: string; first: string; followup: string } };
 
 /** Armado de una campaña: canal, oficios, dónde, tamaño, textos y ritmo. Queda en borrador para revisarla. */
-export function CampaignForm({ action, categories, regions, zones, defaults, consented }: {
+export function CampaignForm({ action, categories, regions, zones, defaults, consented, templates }: {
   action: (s: ActionState, f: FormData) => Promise<ActionState>;
   categories: { id: string; name: string; candidates: number }[];
   regions: { code: string; label: string; candidates: number }[];
   zones: { id: string; name: string; candidates: number }[];
   defaults: Defaults;
+  /** Textos de las plantillas de Meta (canal automático). */
+  templates: { first: string; followup: string };
   /** Contactos disponibles con consentimiento para WhatsApp. */
   consented: number;
 }) {
   const [state, formAction] = useActionState(action, {});
-  const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
-  const d = channel === "whatsapp" ? defaults.whatsapp : defaults.email;
+  const [channel, setChannel] = useState<"whatsapp" | "whatsapp_api" | "email">("whatsapp");
+  const d = channel === "email" ? defaults.email : defaults.whatsapp;
+  const auto = channel === "whatsapp_api";
   const id = typeof state.data?.id === "string" ? state.data.id : null;
   return (
     <form action={formAction} className="space-y-5">
@@ -29,9 +32,10 @@ export function CampaignForm({ action, categories, regions, zones, defaults, con
       {state.ok && <Alert tone="ok">{state.message} {id && <Link href={`/admin/captacion/campanas/${id}`} className="font-semibold underline">Abrir la campaña</Link>}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nombre" htmlFor="c-name" required hint="Ej.: «Piloto plomeros Zona Norte». También es el nombre de la campaña en las métricas."><Input id="c-name" name="name" required minLength={3} maxLength={120} /></Field>
-        <Field label="Canal" htmlFor="c-channel" required hint={channel === "whatsapp" ? "Lo manda una persona desde el número comercial, uno por uno." : "Sale solo, en horario comercial, con link de baja."}>
-          <Select id="c-channel" name="channel" value={channel} onChange={(e) => setChannel(e.target.value as "whatsapp" | "email")}>
+        <Field label="Canal" htmlFor="c-channel" required hint={channel === "whatsapp" ? "Lo manda una persona desde el número comercial, uno por uno." : auto ? "Sale solo desde el número comercial (plantilla aprobada por Meta), en horario comercial. Las respuestas llegan a Kommo." : "Sale solo, en horario comercial, con link de baja."}>
+          <Select id="c-channel" name="channel" value={channel} onChange={(e) => setChannel(e.target.value as "whatsapp" | "whatsapp_api" | "email")}>
             <option value="whatsapp">WhatsApp (envío asistido)</option>
+            <option value="whatsapp_api">WhatsApp automático (Meta + Kommo)</option>
             <option value="email">Email (automático)</option>
           </Select>
         </Field>
@@ -71,12 +75,21 @@ export function CampaignForm({ action, categories, regions, zones, defaults, con
       </div>
 
       {channel === "email" && <Field label="Asunto" htmlFor="c-subject" required><Input key="subject" id="c-subject" name="emailSubject" defaultValue={defaults.email.subject} maxLength={150} required /></Field>}
+      {auto ? (
+        <div className="rounded-2xl bg-cream-2 p-4 text-[15px]">
+          <p className="font-semibold">Mensaje: la plantilla aprobada por Meta</p>
+          <p className="mt-1 whitespace-pre-wrap text-ink-2">{templates.first}</p>
+          <p className="mt-2 text-sm text-muted">Con los botones «Quiero sumarme» (link de alta con su código) y «No me interesa». El recordatorio usa la segunda plantilla. Meta no permite cambiar el texto campaña por campaña.</p>
+          <input type="hidden" name="firstMessage" value={templates.first} />
+        </div>
+      ) : (<>
       <Field label="Primer mensaje" htmlFor="c-first" required hint="Se completa solo con: {nombre} {negocio} {oficio} {zona} {link} (alta por WhatsApp) {web} (alta en la web) {baja}.">
         <Textarea key={`first-${channel}`} id="c-first" name="firstMessage" rows={8} defaultValue={d.first} required minLength={40} maxLength={1500} />
       </Field>
       <Field label="Mensaje de seguimiento" htmlFor="c-follow">
         <Textarea key={`follow-${channel}`} id="c-follow" name="followupMessage" rows={5} defaultValue={d.followup} maxLength={1500} />
       </Field>
+      </>)}
       {channel === "email" && <p className="text-sm text-muted">Al pie de cada email se agrega quién escribe (FLIPS S.R.L.), por qué tenemos el dato y el link para darse de baja.</p>}
       <SubmitButton>Armar campaña (queda en borrador)</SubmitButton>
     </form>

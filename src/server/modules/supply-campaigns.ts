@@ -18,6 +18,13 @@ import { forbidden, invalid, notFound } from "@/server/domain/errors";
 import { env } from "@/server/env";
 import { emailAdapter, type EmailAdapter } from "@/server/notifications";
 import { getSetting } from "./catalog";
+import { waParam } from "@/server/whatsapp/templates";
+import { sendSupplyTemplate, SUPPLY_FOOTER, SUPPLY_TEMPLATES, supplyNumberConfigured, supplyNumberStatus, supplyTemplatesStatus } from "@/server/whatsapp/supply-number";
+import { kommoConfigured, kommoOutcomes, markRegisteredInKommo, registerInvitation } from "@/server/integrations/kommo";
+
+/** whatsapp: envío asistido (lo manda una persona); whatsapp_api: automático por la API de Meta, con Kommo como bandeja; email: automático. */
+export type Channel = "whatsapp" | "whatsapp_api" | "email";
+export const CHANNEL_LABEL: Record<Channel, string> = { whatsapp: "WhatsApp asistido", whatsapp_api: "WhatsApp automático", email: "Email automático" };
 
 const assertManage = (actor: Actor) => {
   if (!can(actor, "captacion", "manage")) throw forbidden();
@@ -40,10 +47,16 @@ export async function getCompliance(): Promise<Compliance> {
 }
 
 /** Qué falta para activar una campaña por ese canal (vacío = se puede). */
-export function complianceGaps(c: Compliance, channel: "whatsapp" | "email", emailConfigured = env().EMAIL_ADAPTER === "resend"): string[] {
+export function complianceGaps(
+  c: Compliance, channel: Channel, emailConfigured = env().EMAIL_ADAPTER === "resend", api = { number: supplyNumberConfigured(), kommo: kommoConfigured() },
+): string[] {
   const gaps: string[] = [];
   // La inscripción ante la AAIP es recomendada (ver docs/captacion.md), pero la decide el dueño: no bloquea.
-  if (channel === "whatsapp") {
+  if (channel === "whatsapp_api") {
+    if (!api.number) gaps.push("Número comercial conectado a la API de WhatsApp (SUPPLY_WHATSAPP_PHONE_NUMBER_ID y token)");
+    if (!api.kommo) gaps.push("Kommo conectado (KOMMO_TOKEN y KOMMO_SUBDOMINIO): ahí llegan las respuestas");
+    if (!c.metaPolicyReviewed) gaps.push("Revisión de las políticas de WhatsApp Business");
+  } else if (channel === "whatsapp") {
     if (!c.commercialNumber.trim()) gaps.push("Número de WhatsApp comercial (separado del bot)");
     if (!c.metaPolicyReviewed) gaps.push("Revisión de las políticas de WhatsApp Business");
   } else {
@@ -112,7 +125,7 @@ export function verifyOptOutToken(token: string): string | null {
   return a.length === b.length && timingSafeEqual(a, b) ? id : null;
 }
 
-export function renderMessage(template: string, lead: RenderLead, campaign: { slug: string; channel: "whatsapp" | "email" }) {
+export function renderMessage(template: string, lead: RenderLead, campaign: { slug: string; channel: Channel }) {
   const ref = lead.code.toLowerCase();
   // Con nombre de contacto, el nombre de pila; si no, el del negocio completo ("Hola Plomeros Norte!").
   const first = lead.contact_name ? lead.contact_name.split(/\s+/)[0] : lead.business_name.split(/\s+[—–|-]\s+/)[0].slice(0, 60);
@@ -139,7 +152,7 @@ export function emailFooter(leadId: string) {
 
 export const campaignSchema = z.object({
   name: z.string().trim().min(3, "Poné un nombre.").max(120),
-  channel: z.enum(["whatsapp", "email"]),
+  channel: z.enum(["whatsapp", "whatsapp_api", "email"]),
   categoryIds: z.array(z.string().uuid()).max(20).default([]),
   regions: z.array(z.string().regex(/^[A-Z_]{2,20}$/)).max(10).default([]),
   zoneIds: z.array(z.string().uuid()).max(40).default([]),
@@ -170,7 +183,7 @@ async function eligibleLeads(tx: Tx, c: { channel: string; category_ids: string[
   return tx<{ id: string }[]>`
     select l.id from supply_leads l
     where l.provider_id is null and not l.do_not_contact and l.stage = 'candidate'
-      and ${c.channel === "whatsapp" ? tx`l.whatsapp_e164 is not null` : tx`l.email is not null`}
+      and ${c.channel === "email" ? tx`l.email is not null` : tx`l.whatsapp_e164 is not null`}
       ${c.only_consented ? tx`and l.wa_consent_at is not null` : tx``}
       ${c.category_ids.length ? tx`and l.category_ids && ${c.category_ids}::uuid[]` : tx``}
       ${c.regions.length || c.zone_ids.length
@@ -183,14 +196,17 @@ async function eligibleLeads(tx: Tx, c: { channel: string; category_ids: string[
 }
 
 /** Cuántos candidatos hay disponibles con esos filtros (para elegir el tamaño antes de crear). */
-export async function countEligible(input: { channel: "whatsapp" | "email"; categoryIds: string[]; regions: string[]; zoneIds: string[]; onlyConsented?: boolean }) {
+export async function countEligible(input: { channel: Channel; categoryIds: string[]; regions: string[]; zoneIds: string[]; onlyConsented?: boolean }) {
   return systemTx(async (tx) => (await eligibleLeads(tx, { channel: input.channel, category_ids: input.categoryIds, regions: input.regions, zone_ids: input.zoneIds, size: 500, only_consented: input.onlyConsented })).length);
 }
 
 export async function createCampaign(actor: Actor, input: z.input<typeof campaignSchema>) {
   assertManage(actor);
   const d = campaignSchema.parse(input);
-  checkTexts(d);
+  if (d.channel === "whatsapp_api") {
+    // Los textos son las plantillas aprobadas por Meta: no se cambian campaña por campaña.
+    Object.assign(d, { firstMessage: SUPPLY_TEMPLATES.first.body, followupMessage: d.maxAttempts > 1 ? SUPPLY_TEMPLATES.followup.body : "", emailSubject: "" });
+  } else checkTexts(d);
   return systemTx(async (tx) => {
     let slug = slugify(d.name);
     if ((await tx`select 1 from supply_campaigns where slug = ${slug}`).length) slug = `${slug.slice(0, 40)}-${Date.now().toString(36).slice(-5)}`;
@@ -211,7 +227,7 @@ export async function createCampaign(actor: Actor, input: z.input<typeof campaig
 }
 
 async function lockCampaign(tx: Tx, id: string) {
-  const [c] = await tx<{ id: string; name: string; status: string; channel: "whatsapp" | "email" }[]>`select id, name, status, channel from supply_campaigns where id = ${id} for update`;
+  const [c] = await tx<{ id: string; name: string; status: string; channel: Channel }[]>`select id, name, status, channel from supply_campaigns where id = ${id} for update`;
   if (!c) throw notFound("Campaña inexistente.");
   return c;
 }
@@ -231,12 +247,16 @@ export async function removeFromCampaign(actor: Actor, campaignLeadId: string) {
 export async function setCampaignStatus(actor: Actor, id: string, to: "active" | "paused" | "closed") {
   assertManage(actor);
   const compliance = to === "active" ? await getCompliance() : null;
+  // La consulta a Meta va antes de abrir la transacción (nunca una llamada externa con la base bloqueada).
+  const [pre] = await sql()<{ channel: Channel }[]>`select channel from supply_campaigns where id = ${id}`;
+  const templates = to === "active" && pre?.channel === "whatsapp_api" ? await supplyTemplatesStatus() : null;
   return systemTx(async (tx) => {
     const c = await lockCampaign(tx, id);
     const allowed: Record<string, string[]> = { draft: ["active", "closed"], active: ["paused", "closed"], paused: ["active", "closed"], closed: [] };
     if (!allowed[c.status].includes(to)) throw invalid("Ese cambio no corresponde al estado de la campaña.");
     if (to === "active") {
       const gaps = complianceGaps(compliance!, c.channel);
+      if (c.channel === "whatsapp_api" && templates?.first !== "APPROVED") gaps.push("Plantilla de invitación aprobada por Meta (Requisitos › Crear plantillas)");
       if (gaps.length) throw invalid(`Antes de activar falta: ${gaps.join("; ")}.`);
     }
     await tx`update supply_campaigns set status = ${to}, activated_at = case when ${to} = 'active' then coalesce(activated_at, now()) else activated_at end,
@@ -248,7 +268,7 @@ export async function setCampaignStatus(actor: Actor, id: string, to: "active" |
 // ───────── Cola de WhatsApp (envío asistido) ─────────
 
 async function campaignRow(tx: Tx, id: string) {
-  const [c] = await tx<{ id: string; slug: string; name: string; status: string; channel: "whatsapp" | "email"; first_message: string; followup_message: string | null;
+  const [c] = await tx<{ id: string; slug: string; name: string; status: string; channel: Channel; first_message: string; followup_message: string | null;
     email_subject: string | null; followup_days: number; max_attempts: number; daily_cap: number }[]>`
     select id, slug, name, status, channel, first_message, followup_message, email_subject, followup_days, max_attempts, daily_cap from supply_campaigns where id = ${id}`;
   if (!c) throw notFound("Campaña inexistente.");
@@ -334,7 +354,7 @@ export async function resolveQueueItem(actor: Actor, campaignLeadId: string, out
       tx`insert into supply_lead_events (lead_id, kind, detail, actor_id) values (${cl.lead_id}, 'campaign', ${tx.json({ campaign: c.id, name: c.name, action, ...extra } as never)}, ${actor.id})`;
     if (outcome === "sent") {
       if (c.status !== "active") throw invalid("La campaña no está activa.");
-      if (c.channel !== "whatsapp") throw invalid("Los emails salen solos.");
+      if (c.channel !== "whatsapp") throw invalid("Esta campaña manda sola: no hay que marcar envíos.");
       if (!["queued", "sent"].includes(cl.status)) throw invalid("Este candidato ya no está en la cola.");
       if ((await sentToday(tx, c.id)) >= c.daily_cap) throw invalid(`Ya se mandaron los ${c.daily_cap} del día. Seguí mañana: mandar muchos seguidos desde un número nuevo hace que WhatsApp lo bloquee.`);
       const [dnc] = await tx<{ do_not_contact: boolean }[]>`select do_not_contact from supply_leads where id = ${cl.lead_id}`;
@@ -410,13 +430,26 @@ export async function recordInviteClick(ref: string | null | undefined, via: "wh
 /** Envía los emails de campañas activas (tope diario por campaña) y cierra los seguimientos agotados. */
 export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emailAdapter(), now = new Date()) {
   let sent = 0, failed = 0;
-  // Emails solo en horario comercial (lunes a sábado, 9 a 19 de Argentina).
+  const notes: string[] = [];
+  // Primero lo que el equipo movió en Kommo (respondió, interesado, baja): corta recordatorios antes de mandar.
+  const kommo = await syncKommo().catch((e: Error) => { notes.push(`Kommo: ${e.message.slice(0, 200)}`); return null; });
+  // Solo en horario comercial (lunes a sábado, 9 a 19 de Argentina).
   const ar = new Date(now.getTime() - 3 * 3600_000);
   const businessHours = ar.getUTCDay() !== 0 && ar.getUTCHours() >= 9 && ar.getUTCHours() < 19;
-  const campaigns = businessHours ? await sql()<{ id: string }[]>`select id from supply_campaigns where status = 'active' and channel = 'email'` : [];
+  const campaigns = businessHours
+    ? await sql()<{ id: string; channel: Channel }[]>`select id, channel from supply_campaigns where status = 'active' and channel in ('email','whatsapp_api') order by activated_at`
+    : [];
   const compliance = await getCompliance();
-  for (const { id } of campaigns) {
-    if (complianceGaps(compliance, "email", adapter.name !== "console").length) break;
+  // WhatsApp automático: plantilla aprobada y número en buena calidad (si Meta lo marca en amarillo o rojo, se frena).
+  let waReady = false;
+  if (campaigns.some((c) => c.channel === "whatsapp_api") && !complianceGaps(compliance, "whatsapp_api").length) {
+    const [templates, number] = await Promise.all([supplyTemplatesStatus(), supplyNumberStatus()]);
+    waReady = templates?.first === "APPROVED" && (!number?.quality || number.quality === "GREEN" || number.quality === "UNKNOWN");
+    if (!waReady) notes.push(`WhatsApp frenado: plantilla ${templates?.first ?? "?"}, calidad del número ${number?.quality ?? "?"}`);
+  }
+  for (const { id, channel } of campaigns) {
+    if (channel === "email" && complianceGaps(compliance, "email", adapter.name !== "console").length) continue;
+    if (channel === "whatsapp_api" && !waReady) continue;
     const c = await systemTx((tx) => campaignRow(tx, id));
     const room = Math.min(limit - sent - failed, c.daily_cap - (await sentToday(sql(), id)));
     if (room <= 0) continue;
@@ -424,26 +457,57 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
       update supply_campaign_leads set lease_until = now() + interval '5 minutes'
       where id in (
         select cl.id from supply_campaign_leads cl join supply_leads l on l.id = cl.lead_id
-        where cl.campaign_id = ${id} and not l.do_not_contact and l.provider_id is null and l.email is not null
+        where cl.campaign_id = ${id} and not l.do_not_contact and l.provider_id is null
+          and ${channel === "email" ? sql()`l.email is not null` : sql()`l.whatsapp_e164 is not null`}
           and (cl.lease_until is null or cl.lease_until < now())
           and (cl.status = 'queued' or (cl.status = 'sent' and cl.attempts < ${c.max_attempts} and cl.next_followup_at <= now()))
-        order by cl.created_at limit ${room} for update of cl skip locked)
+        order by (cl.status = 'sent') desc, cl.created_at limit ${room} for update of cl skip locked)
       returning id, lead_id, attempts`;
     for (const cl of claimed) {
       const lead = await systemTx((tx) => leadForRender(tx, cl.lead_id));
       const followup = cl.attempts > 0;
-      try {
-        // Envío sin transacción abierta; la clave idempotente evita duplicados si se reintenta.
-        await adapter.send({
-          to: lead.email!, subject: renderMessage(c.email_subject ?? DEFAULT_EMAIL_SUBJECT, lead, c),
-          text: renderMessage(followup ? c.followup_message ?? c.first_message : c.first_message, lead, c) + emailFooter(lead.id), link: null,
-          headers: { "List-Unsubscribe": `<${baseUrl()}/captacion/baja?t=${optOutToken(lead.id)}>` },
-        }, { idempotencyKey: `supply-${cl.id}-${cl.attempts + 1}` });
-        await systemTx((tx) => recordSendTx(tx, c, cl, null));
-        sent++;
-      } catch (e) {
-        await sql()`update supply_campaign_leads set lease_until = null, last_error = ${(e instanceof Error ? e.message : "error").slice(0, 300)} where id = ${cl.id}`;
+      // Envío sin transacción abierta.
+      let error: string | null = null, permanent = false, messageId: string | null = null;
+      if (channel === "email") {
+        try {
+          await adapter.send({
+            to: lead.email!, subject: renderMessage(c.email_subject ?? DEFAULT_EMAIL_SUBJECT, lead, c),
+            text: renderMessage(followup ? c.followup_message ?? c.first_message : c.first_message, lead, c) + emailFooter(lead.id), link: null,
+            headers: { "List-Unsubscribe": `<${baseUrl()}/captacion/baja?t=${optOutToken(lead.id)}>` },
+          }, { idempotencyKey: `supply-${cl.id}-${cl.attempts + 1}` });
+        } catch (e) {
+          error = (e instanceof Error ? e.message : "error").slice(0, 300);
+        }
+      } else {
+        const r = await sendSupplyTemplate(lead.whatsapp_e164!, followup ? "followup" : "first", templateParams(lead), lead.code.toLowerCase());
+        if (r.ok) messageId = r.id;
+        else ({ error, permanent } = r);
+      }
+      if (error) {
+        // Rechazos definitivos (no tiene WhatsApp, no acepta marketing): se saltea; el resto se reintenta en la próxima vuelta.
+        await sql()`update supply_campaign_leads set lease_until = null, last_error = ${error},
+          status = case when ${permanent} then 'skipped' else status end, skip_reason = case when ${permanent} then ${error.slice(0, 200)} else skip_reason end
+          where id = ${cl.id}`;
         failed++;
+        continue;
+      }
+      await systemTx(async (tx) => {
+        await recordSendTx(tx, c, cl, null);
+        if (messageId) await tx`update supply_campaign_leads set last_message_id = ${messageId} where id = ${cl.id}`;
+      });
+      sent++;
+      if (channel === "whatsapp_api" && kommoConfigured()) {
+        // Kommo es la bandeja: si falla, el envío ya salió; queda anotado y se reintenta en el próximo mensaje.
+        try {
+          const [{ kommo_lead_id }] = await sql()<{ kommo_lead_id: number | null }[]>`select kommo_lead_id from supply_leads where id = ${lead.id}`;
+          const kommoId = await registerInvitation({
+            kommoLeadId: kommo_lead_id, code: lead.code, name: templateParams(lead)[0], phoneE164: lead.whatsapp_e164!, trade: lead.trade, place: lead.place,
+            followup, text: fillTemplate(SUPPLY_TEMPLATES[followup ? "followup" : "first"].body, templateParams(lead)),
+          });
+          if (kommoId !== kommo_lead_id) await sql()`update supply_leads set kommo_lead_id = ${kommoId} where id = ${lead.id}`;
+        } catch (e) {
+          await sql()`update supply_campaign_leads set last_error = ${`Kommo: ${(e as Error).message}`.slice(0, 300)} where id = ${cl.id}`;
+        }
       }
     }
   }
@@ -451,7 +515,55 @@ export async function runSupplyOutreach(limit = 50, adapter: EmailAdapter = emai
   const closed = await sql()`
     update supply_campaign_leads cl set status = 'no_response', next_followup_at = null
     from supply_campaigns c where c.id = cl.campaign_id and cl.status = 'sent' and cl.attempts >= c.max_attempts and cl.next_followup_at <= now()`;
-  return { sent, failed, noResponse: closed.count };
+  return { sent, failed, noResponse: closed.count, kommo, notes };
+}
+
+/** Parámetros de las plantillas de invitación: nombre, oficio, zona. */
+export function templateParams(lead: RenderLead) {
+  const name = lead.contact_name ? lead.contact_name.split(/\s+/)[0] : lead.business_name.split(/\s+[—–|-]\s+/)[0];
+  return [waParam(name, 40), waParam((lead.trade ?? "tu oficio").toLowerCase(), 40), waParam(lead.place ?? "tu zona", 40)];
+}
+const fillTemplate = (body: string, params: string[]) => body.replace(/\{\{(\d)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
+
+/**
+ * Lee de Kommo lo que el equipo hizo con cada respuesta y lo aplica en Fixy: «Respondió» o «Interesado» cortan los
+ * recordatorios (e «Interesado» pasa la etapa); «No le interesa / Baja» lo marca para no volver a contactarlo.
+ * Además mueve a «Se registró» en Kommo a quienes ya crearon su perfil.
+ */
+export async function syncKommo() {
+  if (!kommoConfigured()) return null;
+  const outcomes = await kommoOutcomes();
+  let replied = 0, optedOut = 0;
+  for (const o of outcomes) {
+    const changed = await systemTx(async (tx) => {
+      const [l] = await tx<{ id: string; stage: string; provider_id: string | null; do_not_contact: boolean }[]>`
+        select id, stage, provider_id, do_not_contact from supply_leads where kommo_lead_id = ${o.leadId} for update`;
+      if (!l) return null;
+      if (o.meaning === "opt_out") {
+        if (l.do_not_contact) return null;
+        await optOutTx(tx, l.id, "Pidió no recibir más mensajes (Kommo)", null);
+        return "opt_out";
+      }
+      const r = await tx`update supply_campaign_leads set status = 'replied', replied_at = coalesce(replied_at, now()), next_followup_at = null
+        where lead_id = ${l.id} and status in ('queued','sent','no_response')`;
+      if (o.meaning === "interested" && !l.provider_id && !["interested", "discarded"].includes(l.stage)) {
+        await tx`update supply_leads set stage = 'interested', interested_at = coalesce(interested_at, now()) where id = ${l.id}`;
+        await tx`insert into supply_lead_events (lead_id, kind, detail) values (${l.id}, 'stage', ${tx.json({ from: l.stage, to: "interested", via: "kommo" } as never)})`;
+      }
+      return r.count ? "replied" : null;
+    });
+    if (changed === "opt_out") optedOut++;
+    else if (changed === "replied") replied++;
+  }
+  // Registrados que todavía no figuran así en Kommo.
+  const registered = await sql()<{ id: string; kommo_lead_id: number }[]>`
+    select l.id, l.kommo_lead_id from supply_leads l where l.kommo_lead_id is not null and l.provider_id is not null
+      and not exists (select 1 from supply_lead_events e where e.lead_id = l.id and e.kind = 'campaign' and e.detail->>'action' = 'kommo_registered')`;
+  if (registered.length) {
+    await markRegisteredInKommo(registered.map((r) => r.kommo_lead_id));
+    await sql()`insert into supply_lead_events (lead_id, kind, detail) select unnest(${registered.map((r) => r.id)}::uuid[]), 'campaign', '{"action":"kommo_registered"}'::jsonb`;
+  }
+  return { replied, optedOut, registered: registered.length };
 }
 
 /** Cómo le llega el mensaje al primer candidato de la tanda (para revisar antes de activar). */
@@ -461,6 +573,14 @@ export async function previewCampaign(campaignId: string) {
     const [first] = await tx<{ lead_id: string }[]>`select lead_id from supply_campaign_leads where campaign_id = ${campaignId} order by created_at limit 1`;
     if (!first) return null;
     const lead = await leadForRender(tx, first.lead_id);
+    if (c.channel === "whatsapp_api") {
+      const extra = `\n\n${SUPPLY_FOOTER}\n[Quiero sumarme] [No me interesa]`;
+      return {
+        to: lead.business_name, subject: null,
+        first: fillTemplate(SUPPLY_TEMPLATES.first.body, templateParams(lead)) + extra,
+        followup: c.followup_message ? fillTemplate(SUPPLY_TEMPLATES.followup.body, templateParams(lead)) + extra : null,
+      };
+    }
     return {
       to: lead.business_name,
       subject: c.channel === "email" ? renderMessage(c.email_subject ?? DEFAULT_EMAIL_SUBJECT, lead, c) : null,

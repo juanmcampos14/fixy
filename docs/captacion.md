@@ -55,6 +55,27 @@ saca a quien no corresponda y recién ahí se activa.
 - Textos: `{nombre} {negocio} {oficio} {zona} {link} {web} {baja}`. Cada mensaje tiene que tener `{link}` o `{web}`
   (vincula la respuesta) y, en WhatsApp, `{baja}`.
 
+## WhatsApp automático (API de Meta + Kommo)
+
+Mismo esquema que Aikestar (`aikestar-metricas`): Fixy manda desde el número comercial (+54 9 11 6600-6676, conectado
+a Kommo por la vía oficial) las plantillas de marketing aprobadas por Meta, y Kommo es la bandeja de las respuestas.
+
+- **Configuración (Vercel → Fixy → Environment Variables):** `SUPPLY_WHATSAPP_PHONE_NUMBER_ID` (ID del número en la
+  API; en Aikestar › Seguimiento hay un listado de los números de la cuenta), `SUPPLY_WHATSAPP_WABA_ID` (cuenta de
+  WhatsApp Business del número), `SUPPLY_WHATSAPP_TOKEN` (token del usuario del sistema del portfolio, el mismo que usa
+  Aikestar si el número está en ese portfolio), `KOMMO_TOKEN` y `KOMMO_SUBDOMINIO` (integración privada de Kommo).
+- **Una vez:** Campañas › Requisitos › «Crear plantillas en Meta» (`fixy_invitacion_profesional_v1` y
+  `fixy_invitacion_recordatorio_v1`, con botones «Quiero sumarme» → `/alta?ref=<código>` y «No me interesa») y
+  «Armar embudo en Kommo» («Captación Fixy»: Invitado, Recordatorio, Respondió, Interesado, Se registró, No le interesa / Baja).
+- **Envío:** tarea `supply-outreach`, cada hora, lunes a sábado de 9 a 19, hasta el tope diario de la campaña. Cada
+  envío crea (o mueve) el lead en Kommo con una nota del mensaje. Recordatorio a los N días con la segunda plantilla.
+- **Respuestas:** llegan a Kommo. El equipo mueve el lead: «Respondió» o «Interesado» cortan los recordatorios
+  (Interesado pasa la etapa en Fixy); «No le interesa / Baja» lo marca «no contactar» para siempre. Quien se registra
+  pasa solo a «Se registró».
+- **Frenos:** no sale nada si la plantilla no está aprobada o si Meta marca el número en calidad amarilla o roja;
+  los números sin WhatsApp (131026) o que no aceptan marketing (131050) se saltean.
+- Se puede enviar sin consentimiento previo: decisión del dueño (30-10-2026), con pocos mensajes diarios.
+
 ## Bases con consentimiento
 
 Captación › Cargar y sincronizar › «Subir una base»: CSV con Nombre, Oficio, Localidad, Teléfono y Email (el ID es
