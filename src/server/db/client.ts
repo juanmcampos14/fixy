@@ -27,13 +27,30 @@ export type Db = Sql | Tx;
 
 const globalForDb = globalThis as unknown as { __fixySql?: Sql; __fixySqlUrl?: string };
 
-export function createSql(url: string): Sql {
-  // Pooler de Supabase en modo transacción (puerto 6543) no admite prepared statements.
+/**
+ * Pooler de Supabase (Supavisor): por defecto se usa el modo sesión (puerto 5432 del mismo host). En modo transacción
+ * (6543) postgres.js a veces deja consultas colgadas a mitad del protocolo (la base queda "active · ClientRead" y la
+ * página no termina de cargar; porsager/postgres#970). DATABASE_POOL_MODE=transaction vuelve al modo anterior.
+ */
+export function resolveDbUrl(url: string, mode = process.env.DATABASE_POOL_MODE ?? "session") {
+  if (mode !== "session" || !/\.pooler\.supabase\.com:6543\b/.test(url)) return url;
+  const u = new URL(url);
+  u.port = "5432";
+  u.searchParams.delete("pgbouncer");
+  return u.toString();
+}
+
+export function createSql(rawUrl: string): Sql {
+  const url = resolveDbUrl(rawUrl);
+  // En modo transacción (6543) no hay prepared statements.
   const transactionPooler = /:6543\b/.test(url) || /pgbouncer=true/.test(url);
   return postgres(url, {
-    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+    // En modo sesión cada conexión ocupa un lugar del pooler: pocas por instancia y se liberan rápido.
+    max: Number(process.env.DATABASE_POOL_MAX ?? 5),
     prepare: !transactionPooler,
-    idle_timeout: 20,
+    idle_timeout: 10,
+    max_lifetime: 60 * 5,
+    connect_timeout: 10,
     onnotice: () => {},
     types: { bigint: bigintAsNumber, date: dateAsString },
   }) as unknown as Sql;
